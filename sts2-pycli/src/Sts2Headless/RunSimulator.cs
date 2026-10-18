@@ -2084,6 +2084,17 @@ public class RunSimulator
                 Thread.Sleep(1);
             }
 
+            // sts2-agent fork: in agent mode never cancel and re-run the turn (the
+            // re-run can execute the enemy turn twice); report the stuck turn instead.
+            if (_agentMode && CombatManager.Instance.IsInProgress && !IsPlayPhase()
+                && !player.Creature.IsDead && !_cardSelector.HasPending)
+            {
+                Log("EndTurn stuck (agent mode): reporting a failure instead of cancel + re-run");
+                return Failure("timeout", "started",
+                    "end_turn did not reach the next player turn or a choice; upstream would cancel and re-run it",
+                    "next player turn");
+            }
+
             // If STILL stuck, the WaitUntilQueue TCS is likely deadlocked.
             // Cancel the ActionExecutor to break out, then re-trigger EndTurn.
             if (CombatManager.Instance.IsInProgress && !IsPlayPhase()
@@ -2558,7 +2569,12 @@ public class RunSimulator
             _cardSelector.ResolvePendingByIndices(indices);
             _syncCtx.Pump();
             if (combatResolve && _agentMode)
-                WaitUntilCombatSettlesOrAsks("select_cards");
+            {
+                if (!WaitUntilCombatSettlesOrAsks("select_cards"))
+                    return Failure("timeout", "started",
+                        "the selection was applied but combat did not settle or ask for another choice",
+                        "next decision after select_cards");
+            }
             else
                 WaitForActionExecutor();
 
@@ -2614,7 +2630,12 @@ public class RunSimulator
             // sts2-agent fork: in agent mode wait for a follow-on selection (or for
             // combat to settle) the same way DoSelectCards does.
             if (_agentMode && CombatManager.Instance.IsInProgress)
-                WaitUntilCombatSettlesOrAsks("skip_select");
+            {
+                if (!WaitUntilCombatSettlesOrAsks("skip_select"))
+                    return Failure("timeout", "started",
+                        "the empty selection was applied but combat did not settle or ask for another choice",
+                        "next decision after skip_select");
+            }
             else
                 WaitForActionExecutor();
 
@@ -4926,31 +4947,69 @@ public class RunSimulator
     /// work; start-of-turn powers such as Tools of the Trade), and that work can open
     /// another selection. Pump until the next player choice is pending, or combat has
     /// settled (play phase with the executor idle, combat over, or the player dead).
+    /// Returns false if neither happened within the cap: the caller must report a
+    /// failure, not a decision.
     /// </summary>
-    private void WaitUntilCombatSettlesOrAsks(string reason)
+    private bool WaitUntilCombatSettlesOrAsks(string reason)
     {
         const int idleStreakRequired = 50;  // pumps of play phase + idle executor
-        const int capMs = 15000;            // deadlock guard, not the expected exit
         var executor = RunManager.Instance.ActionExecutor;
         var player = _runState?.Players[0];
         var sw = System.Diagnostics.Stopwatch.StartNew();
         int idleStreak = 0;
-        while (sw.ElapsedMilliseconds < capMs)
+        do
         {
             _syncCtx.Pump();
-            if (AnySelectionPending()) return;
-            if (!CombatManager.Instance.IsInProgress || player?.Creature == null || player.Creature.IsDead) return;
+            if (AnySelectionPending()) return true;
+            if (!CombatManager.Instance.IsInProgress || player?.Creature == null || player.Creature.IsDead) return true;
             if (IsPlayPhase() && !executor.IsRunning)
             {
-                if (++idleStreak >= idleStreakRequired) return;
+                if (++idleStreak >= idleStreakRequired) return true;
             }
             else
             {
                 idleStreak = 0;
             }
             Thread.Sleep(1);
-        }
-        Log($"WaitUntilCombatSettlesOrAsks: '{reason}' did not settle within {capMs}ms");
+        } while (sw.ElapsedMilliseconds < SettleCapMs);
+        Log($"WaitUntilCombatSettlesOrAsks: '{reason}' did not settle within {SettleCapMs}ms");
+        return false;
+    }
+
+    /// <summary>
+    /// Deadlock guard for <see cref="WaitUntilCombatSettlesOrAsks"/>, not the expected
+    /// exit. <c>STS2_SETTLE_CAP_MS</c> overrides it, for tests of the timeout path only.
+    /// </summary>
+    private static readonly int SettleCapMs =
+        int.TryParse(Environment.GetEnvironmentVariable("STS2_SETTLE_CAP_MS"), out var ms) ? ms : 15000;
+
+    /// <summary>
+    /// sts2-agent fork: a failure the client can act on. Still <c>type: "error"</c> for
+    /// existing clients; <c>kind</c> is <c>timeout</c> or <c>error</c>, and
+    /// <c>execution</c> says how far the action got (<c>not_started</c>,
+    /// <c>started</c>, <c>completed</c>, <c>unknown</c>). After anything but
+    /// <c>not_started</c> the client must re-read state before acting again.
+    /// </summary>
+    private Dictionary<string, object?> Failure(string kind, string execution, string message, string waitingFor)
+    {
+        var pcs = _runState?.Players[0].PlayerCombatState;
+        return new Dictionary<string, object?>
+        {
+            ["type"] = "error",
+            ["kind"] = kind,
+            ["execution"] = execution,
+            ["message"] = message,
+            ["diag"] = new Dictionary<string, object?>
+            {
+                ["waiting_for"] = waitingFor,
+                ["combat_in_progress"] = CombatManager.Instance.IsInProgress,
+                ["play_phase"] = IsPlayPhase(),
+                ["turn_phase"] = pcs?.Phase.ToString(),
+                ["executor_running"] = RunManager.Instance.ActionExecutor.IsRunning,
+                ["selection_pending"] = AnySelectionPending(),
+                ["room"] = _runState?.CurrentRoom?.GetType().Name,
+            },
+        };
     }
 
     /// <summary>
