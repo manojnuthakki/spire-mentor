@@ -2961,7 +2961,7 @@ public partial class RunSimulator
     {
         Log("Leaving room");
         try { RunManager.Instance.ProceedFromTerminalRewardsScreen().GetAwaiter().GetResult(); }
-        catch { }
+        catch (Exception ex) { LogException("Leave room proceed", ex); }
         _syncCtx.Pump();
         WaitForActionExecutor();
 
@@ -3170,6 +3170,16 @@ public partial class RunSimulator
             // With Task.Yield() patched, combat init should be synchronous
             _syncCtx.Pump();
             WaitForActionExecutor();
+
+            // sts2-agent fork: the play phase alone doesn't mean the last action is done
+            // (a card play can still be running). Wait, bounded, for an idle executor, a
+            // pending choice or the end of combat; never present a busy combat as a decision.
+            if (_agentMode && CombatManager.Instance.IsInProgress && !AnySelectionPending()
+                && RunManager.Instance.ActionExecutor.IsRunning
+                && !WaitUntilCombatSettlesOrAsks("decision point"))
+                return Failure("timeout", "started",
+                    "combat did not settle: the action executor is still running and no choice is pending",
+                    "an idle executor in the play phase, a choice, or the end of combat", "combat_not_settled");
 
             // Re-check for pending card selections AFTER pump (BUG-024: start-of-turn effects
             // like Tools of Trade create card selections during Pump, AFTER the initial HasPending check)
@@ -4503,7 +4513,7 @@ public partial class RunSimulator
         {
             Log($"Event {localEvent.GetType().Name} has no options, auto-skipping");
             try { RunManager.Instance.EnterRoom(new MapRoom()).GetAwaiter().GetResult(); _syncCtx.Pump(); }
-            catch { }
+            catch (Exception ex) { LogException("Option-less event to map", ex); }
             return MapSelectState();
         }
 

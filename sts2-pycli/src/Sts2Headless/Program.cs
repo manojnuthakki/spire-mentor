@@ -135,7 +135,10 @@ class Program
                     {
                         actionArgs[prop.Name] = prop.Value.ValueKind switch
                         {
-                            JsonValueKind.Number => prop.Value.GetInt32(),
+                            // sts2-agent fork: a number that isn't an Int32 (1.5, 2^31)
+                            // stays text, so validation can refuse it instead of throwing here.
+                            JsonValueKind.Number => prop.Value.TryGetInt32(out var n) ? n : prop.Value.GetRawText(),
+                            JsonValueKind.Null => null,
                             JsonValueKind.String => prop.Value.GetString(),
                             JsonValueKind.True => true,
                             JsonValueKind.False => false,

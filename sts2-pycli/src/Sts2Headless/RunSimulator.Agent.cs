@@ -45,7 +45,9 @@ public partial class RunSimulator
         ["combat_play"] = new[] { "play_card", "end_turn", "use_potion", "discard_potion" },
         ["card_select"] = new[] { "select_cards", "skip_select" },
         ["card_reward"] = new[] { "select_card_reward", "skip_card_reward", "use_potion", "discard_potion" },
-        ["event_choice"] = new[] { "choose_option", "proceed", "leave_room", "use_potion", "discard_potion" },
+        // proceed only when no option is available (checked below); leave_room would skip
+        // the event's decision (at Neow, the whole opening choice).
+        ["event_choice"] = new[] { "choose_option", "proceed", "use_potion", "discard_potion" },
         ["bundle_select"] = new[] { "select_bundle" },
         ["rest_site"] = new[] { "choose_option", "leave_room", "proceed", "use_potion", "discard_potion" },
         ["shop"] = new[] { "buy_card", "buy_relic", "buy_potion", "remove_card", "leave_room", "proceed", "use_potion", "discard_potion" },
@@ -146,6 +148,14 @@ public partial class RunSimulator
         var decision = _lastDecision.GetValueOrDefault("decision") as string ?? "";
         if (ActionsByDecision.TryGetValue(decision, out var allowed) && !allowed.Contains(action))
             return Reject("wrong_decision", $"{action} is not an action at {decision}");
+        if (args != null)
+            foreach (var key in IntArgs)
+                if (args.TryGetValue(key, out var raw) && raw != null && !TryGetInt(args, key, out _))
+                    return Reject("invalid_argument", $"'{key}' must be an integer, got {raw}");
+        if (action == "proceed" && decision == "event_choice"
+            && _lastDecision.GetValueOrDefault("options") is List<Dictionary<string, object?>> eventOptions
+            && eventOptions.Any(o => o.GetValueOrDefault("is_locked") is not true))
+            return Reject("wrong_decision", "the event has an option to choose; proceed would skip it");
 
         switch (action)
         {
@@ -161,6 +171,10 @@ public partial class RunSimulator
             default: return null;
         }
     }
+
+    /// <summary>Integer arguments of any action (a present but malformed one is refused).</summary>
+    private static readonly string[] IntArgs =
+        { "option_index", "col", "row", "card_index", "target_index", "potion_index", "relic_index", "bundle_index" };
 
     private static bool TryGetInt(Dictionary<string, object?>? args, string key, out int value)
     {
