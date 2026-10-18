@@ -112,6 +112,12 @@ public partial class RunSimulator
             ["index"] = i,
             ["option_id"] = opt.OptionId,
             ["name"] = opt.GetType().Name,
+            // What the button shows: its title, and its description as a template with the
+            // values the game filled in (Heal's amount includes Regal Pillow and the like).
+            ["title"] = LocText(opt.Title),
+            ["description"] = LocText(opt.Description),
+            ["vars"] = LocVars(opt.Description),
+            ["preview"] = RestPreview(opt, player),
             ["is_enabled"] = opt.IsEnabled,
             ["reason"] = opt.IsEnabled ? null : opt.OptionId switch
             {
@@ -129,6 +135,64 @@ public partial class RunSimulator
             ["can_proceed"] = _restSiteChoiceMade,
             ["player"] = PlayerSummary(player),
         };
+    }
+
+    private string? LocText(MegaCrit.Sts2.Core.Localization.LocString? loc)
+    {
+        if (loc == null) return null;
+        try { return _loc.Bilingual(loc.LocTable, loc.LocEntryKey); }
+        catch { return loc.LocEntryKey; }
+    }
+
+    /// <summary>A LocString's variables as plain values (numbers, text, flags).</summary>
+    private Dictionary<string, object?>? LocVars(MegaCrit.Sts2.Core.Localization.LocString? loc)
+    {
+        if (loc == null) return null;
+        var vars = new Dictionary<string, object?>();
+        try
+        {
+            foreach (var (name, value) in loc.Variables)
+            {
+                vars[name] = value switch
+                {
+                    MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar dv => (object)(int)dv.BaseValue,
+                    decimal d when d == Math.Floor(d) => (int)d,
+                    decimal d => (double)d,
+                    MegaCrit.Sts2.Core.Localization.LocString nested => LocText(nested),
+                    // Text the game already formatted: under the host's loc stub it is
+                    // loc keys (Regal Pillow's "+{Heal} HP" line); look them up.
+                    string text => string.Join("\n", text.Split('\n').Select(_loc.BilingualFromKey)),
+                    bool or int => value,
+                    _ => value?.ToString(),
+                };
+            }
+        }
+        catch (Exception ex) { Log($"Rest option vars unreadable: {ex.Message}"); }
+        return vars.Count > 0 ? vars : null;
+    }
+
+    /// <summary>
+    /// What choosing an option would do, as the game computes it: HEAL's full heal
+    /// (HealRestSiteOption.GetHealAmount, with Regal Pillow and other modifiers), which
+    /// the description shows split into the base amount and extra lines.
+    /// </summary>
+    private Dictionary<string, object?>? RestPreview(MegaCrit.Sts2.Core.Entities.RestSite.RestSiteOption opt, Player player)
+    {
+        if (opt is not MegaCrit.Sts2.Core.Entities.RestSite.HealRestSiteOption) return null;
+        try
+        {
+            var method = HarmonyLib.AccessTools.Method(typeof(MegaCrit.Sts2.Core.Entities.RestSite.HealRestSiteOption), "GetHealAmount");
+            var p = method.GetParameters();
+            object?[] args = p.Select(pi => pi.ParameterType.IsInstanceOfType(player) ? player
+                : pi.ParameterType.IsInstanceOfType(player.Creature) ? (object?)player.Creature : null).ToArray();
+            var amount = method.Invoke(method.IsStatic ? null : opt, args);
+            return new() { ["heal"] = Convert.ToInt32(amount) };
+        }
+        catch (Exception ex)
+        {
+            Log($"Rest heal preview unavailable: {ex.GetType().Name}: {ex.Message}");
+            return null;
+        }
     }
 
     private Dictionary<string, object?> DoAgentRestOption(int optionIndex)
@@ -168,10 +232,13 @@ public partial class RunSimulator
             _syncCtx.Pump();
             try
             {
-                var gold = treasureRoom.DoNormalRewards().GetAwaiter().GetResult();
+                var before = player.Gold;
+                var rolled = treasureRoom.DoNormalRewards().GetAwaiter().GetResult();
                 _syncCtx.Pump();
-                Log($"Treasure room: {gold} gold");
-                _agentForced.Add(new() { ["kind"] = "open_chest", ["gold"] = gold });
+                // What the player actually gained (gold modifiers such as Bowler Hat apply).
+                var gained = player.Gold - before;
+                Log($"Treasure room: {rolled} gold rolled, {gained} gained");
+                _agentForced.Add(new() { ["kind"] = "open_chest", ["gold"] = gained });
             }
             catch (Exception ex) { LogException("Treasure gold", ex); }
             _agentTreasureTask = Task.Run(() =>

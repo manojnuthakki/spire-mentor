@@ -70,8 +70,7 @@ public partial class RunSimulator
         _agentForced.Clear();
 
         var result = work();
-        if (_agentForced.Count > 0 && IsType(result, "decision"))
-            result["forced"] = _agentForced.ToList();
+        var forced = _agentForced.ToList();
         _agentForced.Clear();
         var errors = EngineErrors.Drain().Distinct().ToList();
         if (IsType(result, "error") && !result.ContainsKey("kind"))
@@ -93,6 +92,14 @@ public partial class RunSimulator
                         ["decision_after"] = result.GetValueOrDefault("decision"),
                     });
             }
+        }
+
+        // Steps the host took on its own happened whatever followed: on the decision they
+        // led to, or in a failure's diag (e.g. the chest opened, then its extras threw).
+        if (forced.Count > 0)
+        {
+            if (IsType(result, "decision")) result["forced"] = forced;
+            else if (result.GetValueOrDefault("diag") is Dictionary<string, object?> fdiag) fdiag["forced"] = forced;
         }
 
         if (IsType(result, "decision"))
