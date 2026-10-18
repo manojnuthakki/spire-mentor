@@ -1002,6 +1002,7 @@ public partial class RunSimulator
             {
                 _rewardsProcessed = false;
                 ResetAgentRewards();
+                ResetAgentRestTreasure();
             }
             RunManager.Instance.EnterRoom(room).GetAwaiter().GetResult();
             _syncCtx.Pump();
@@ -1898,7 +1899,14 @@ public partial class RunSimulator
                     // sts2-agent fork: leaving the rewards screen (RunSimulator.Rewards.cs).
                     if (_agentMode && _lastDecision?.GetValueOrDefault("decision") as string == "rewards")
                         return ProceedFromAgentRewards();
+                    // sts2-agent fork: leaving the rest site or the treasure room (RunSimulator.RestTreasure.cs).
+                    if (_agentMode && _lastDecision?.GetValueOrDefault("decision") as string == "rest_site")
+                        return ProceedFromRestSite();
+                    if (_agentMode && _lastDecision?.GetValueOrDefault("decision") as string == "treasure")
+                        return ProceedFromTreasure();
                     return DoProceed(player);
+                case "take_relic" when _agentMode:
+                    return DoTakeRelic(player, args);
                 case "claim_reward" when _agentMode:
                     return DoClaimReward(player, args);
                 case "choose_card_reward_alternative" when _agentMode:
@@ -1932,6 +1940,7 @@ public partial class RunSimulator
         // Reset tracking for new room
         _rewardsProcessed = false;
         ResetAgentRewards();
+        ResetAgentRestTreasure();
         _pendingCardReward = null;
         _eventOptionChosen = false;
         ResetEventAdvanceTracking();
@@ -2649,7 +2658,7 @@ public partial class RunSimulator
 
             // Await the stashed ChooseLocalOption task so the upgrade is fully
             // applied before we force-transition to the map.
-            if (_runState?.CurrentRoom is RestSiteRoom)
+            if (!_agentMode && _runState?.CurrentRoom is RestSiteRoom)
             {
                 var restSiteTask = _pendingRestSiteTask;
                 _pendingRestSiteTask = null;
@@ -2830,6 +2839,10 @@ public partial class RunSimulator
         Log($"Choosing option {optionIndex}");
 
         // Dispatch based on ROOM TYPE (not event state) to avoid cross-contamination
+        // sts2-agent fork: no forced map after the option (RunSimulator.RestTreasure.cs).
+        if (_agentMode && _runState?.CurrentRoom is RestSiteRoom)
+            return DoAgentRestOption(optionIndex);
+
         if (_runState?.CurrentRoom is RestSiteRoom restSiteRoom)
         {
             Log($"Rest site: choosing option {optionIndex}");
@@ -3040,6 +3053,10 @@ public partial class RunSimulator
             return Error("No run in progress");
 
         var player = _runState.Players[0];
+
+        // sts2-agent fork: a rest-site option or treasure-room step that was waiting on
+        // an answered prompt continues first (RunSimulator.RestTreasure.cs).
+        if (_agentMode) DriveAgentRoomTasks();
 
         // Check game over (death). A WON run also ends with dead players:
         // RunManager.WinRun → OnEnded(isVictory: true) → GuaranteeKillAllPlayers.
@@ -4740,6 +4757,8 @@ public partial class RunSimulator
     {
         var options = restRoom.Options;
         var player = _runState!.Players[0];
+        // sts2-agent fork: the room's own decision, Proceed included (RunSimulator.RestTreasure.cs).
+        if (_agentMode) return AgentRestSiteState(restRoom, player);
 
         if (options == null || options.Count == 0)
         {
@@ -4842,6 +4861,9 @@ public partial class RunSimulator
 
     private Dictionary<string, object?> TreasureState(TreasureRoom treasureRoom)
     {
+        // sts2-agent fork: the chest's relic is a decision (RunSimulator.RestTreasure.cs).
+        if (_agentMode) return AgentTreasureState(treasureRoom, _runState!.Players[0]);
+
         // Treasure rooms give relics via TreasureRoomRelicSynchronizer
         Log("Treasure room — collecting rewards");
 

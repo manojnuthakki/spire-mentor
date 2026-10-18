@@ -50,7 +50,9 @@ public partial class RunSimulator
         // the event's decision (at Neow, the whole opening choice).
         ["event_choice"] = new[] { "choose_option", "proceed", "use_potion", "discard_potion" },
         ["bundle_select"] = new[] { "select_bundle" },
-        ["rest_site"] = new[] { "choose_option", "leave_room", "proceed", "use_potion", "discard_potion" },
+        // leave_room would skip the rest site's choice; proceed needs a chosen option (below).
+        ["rest_site"] = new[] { "choose_option", "proceed", "use_potion", "discard_potion" },
+        ["treasure"] = new[] { "take_relic", "proceed", "use_potion", "discard_potion" },
         ["shop"] = new[] { "buy_card", "buy_relic", "buy_potion", "remove_card", "leave_room", "proceed", "use_potion", "discard_potion" },
         ["game_over"] = Array.Empty<string>(),
     };
@@ -65,8 +67,12 @@ public partial class RunSimulator
         if (!_agentMode) return work();
         foreach (var stray in EngineErrors.Drain())
             Log($"[WARN] engine error between commands (not reported): {stray}");
+        _agentForced.Clear();
 
         var result = work();
+        if (_agentForced.Count > 0 && IsType(result, "decision"))
+            result["forced"] = _agentForced.ToList();
+        _agentForced.Clear();
         var errors = EngineErrors.Drain().Distinct().ToList();
         if (IsType(result, "error") && !result.ContainsKey("kind"))
             result = Failure("error", "unknown", result.GetValueOrDefault("message") as string ?? "host error",
@@ -167,6 +173,8 @@ public partial class RunSimulator
             case "choose_card_reward_alternative": return ValidateCardRewardAlternative(args);
             case "claim_reward": return ValidateClaimReward(args);
             case "proceed" when decision == "rewards": return ValidateProceedFromRewards();
+            case "proceed" when decision == "rest_site": return ValidateProceedFromRestSite();
+            case "take_relic": return ValidateTakeRelic(args);
             case "choose_option": return ValidateChooseOption(args);
             case "select_map_node": return ValidateMapNode(args);
             case "play_card": return ValidatePlayCard(args, player);
@@ -222,7 +230,9 @@ public partial class RunSimulator
     {
         if (!_cardSelector.HasPending)
             return Reject("no_pending_selection", "no card selection is pending");
-        if (_cardSelector.PendingMinSelect > 0)
+        // A cancelable prompt (Smith, Cook) can be closed without a choice, as with the
+        // game's cancel button; the option that opened it then fails.
+        if (_cardSelector.PendingMinSelect > 0 && _cardSelector.PendingCancelable != true)
             return Reject("skip_not_allowed",
                 $"this prompt requires at least {_cardSelector.PendingMinSelect} card(s); choosing none is not allowed");
         return null;
@@ -261,6 +271,8 @@ public partial class RunSimulator
             return Reject("missing_argument", "choose_option requires 'option_index'");
         if (_lastDecision!.GetValueOrDefault("options") is not List<Dictionary<string, object?>> options)
             return null;
+        if (options.Count == 0)
+            return Reject("invalid_option", "no option is offered");
         if (index < 0 || index >= options.Count)
             return Reject("invalid_option", $"option index {index} is outside 0..{options.Count - 1}");
         var option = options[index];
