@@ -53,6 +53,7 @@ public partial class RunSimulator
         // leave_room would skip the rest site's choice; proceed needs a chosen option (below).
         ["rest_site"] = new[] { "choose_option", "proceed", "use_potion", "discard_potion" },
         ["treasure"] = new[] { "take_relic", "proceed", "use_potion", "discard_potion" },
+        ["crystal_sphere"] = new[] { "divine" },
         ["shop"] = new[] { "buy_card", "buy_relic", "buy_potion", "remove_card", "leave_room", "proceed", "use_potion", "discard_potion" },
         ["game_over"] = Array.Empty<string>(),
     };
@@ -182,6 +183,7 @@ public partial class RunSimulator
             case "proceed" when decision == "rewards": return ValidateProceedFromRewards();
             case "proceed" when decision == "rest_site": return ValidateProceedFromRestSite();
             case "take_relic": return ValidateTakeRelic(args);
+            case "divine": return ValidateDivine(args);
             case "choose_option": return ValidateChooseOption(args);
             case "select_map_node": return ValidateMapNode(args);
             case "play_card": return ValidatePlayCard(args, player);
@@ -193,7 +195,7 @@ public partial class RunSimulator
 
     /// <summary>Integer arguments of any action (a present but malformed one is refused).</summary>
     private static readonly string[] IntArgs =
-        { "option_index", "col", "row", "card_index", "target_index", "potion_index", "relic_index", "bundle_index", "reward_index" };
+        { "option_index", "col", "row", "card_index", "target_index", "potion_index", "relic_index", "bundle_index", "reward_index", "x", "y" };
 
     private static bool TryGetInt(Dictionary<string, object?>? args, string key, out int value)
     {

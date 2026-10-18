@@ -326,6 +326,8 @@ public partial class RunSimulator
         _gameThread.Submit(() =>
         {
             _agentMode = agentMode;
+            AgentModeActive = agentMode;
+            PendingCrystalSphere = null;
             _cardSelector.WaitForever = agentMode;
             AgentCustomRewardsOffer = agentMode ? OfferCustomRewardsToClient : null;
             _lastDecision = null;
@@ -1905,6 +1907,8 @@ public partial class RunSimulator
                     if (_agentMode && _lastDecision?.GetValueOrDefault("decision") as string == "treasure")
                         return ProceedFromTreasure();
                     return DoProceed(player);
+                case "divine" when _agentMode:
+                    return DoDivine(args);
                 case "take_relic" when _agentMode:
                     return DoTakeRelic(player, args);
                 case "claim_reward" when _agentMode:
@@ -3197,6 +3201,10 @@ public partial class RunSimulator
                 ["combat"] = InCombatBoard(player),
             };
         }
+
+        // sts2-agent fork: the Crystal Sphere minigame waiting for a move.
+        if (_agentMode && CrystalSpherePending)
+            return CrystalSphereState(PendingCrystalSphere!, player);
 
         // sts2-agent fork: rewards offered by an event or relic, innermost set first.
         if (_agentMode && CustomRewardsState(player) is { } customRewards)
@@ -5075,7 +5083,8 @@ public partial class RunSimulator
     /// suspended event-option task can make further progress.</summary>
     private bool AnySelectionPending() =>
         _cardSelector.HasPending || _cardSelector.HasPendingReward || _pendingBundles != null
-        || CustomRewardsPending;  // sts2-agent fork: rewards offered by an event or relic
+        || CustomRewardsPending  // sts2-agent fork: rewards offered by an event or relic
+        || CrystalSpherePending;  // sts2-agent fork: the Crystal Sphere waiting for a move
 
     /// <summary>
     /// sts2-agent fork. After a combat selection resolves, the game resumes whatever
@@ -6864,6 +6873,11 @@ public partial class RunSimulator
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             CrystalSphereOwnerField = gameType.GetField("_owner",
                 System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            // sts2-agent fork: agent mode waits on it as the game's screen does.
+            CrystalSphereCompletionField = gameType.GetField("_completionSource",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            if (CrystalSphereCompletionField == null)
+                Console.Error.WriteLine("[WARN] Could not find CrystalSphereMinigame._completionSource - agent mode auto-plays it");
             if (m == null || prefix == null)
             {
                 Console.Error.WriteLine("[WARN] Could not find CrystalSphereMinigame.PlayMinigame - event left throwing");
@@ -6916,6 +6930,15 @@ public partial class RunSimulator
             return;
         }
         if (!MegaCrit.Sts2.Core.Context.LocalContext.IsMe(owner)) return;
+
+        // sts2-agent fork: in agent mode the client makes the moves, as the player does on
+        // the game's screen (RunSimulator.CrystalSphere.cs); then the game completes it.
+        if (AgentModeActive && CrystalSphereCompletionField != null)
+        {
+            await WaitForClientCrystalSphere(game);
+            if (CrystalSphereCompleteMinigame!.Invoke(game, null) is Task done) await done;
+            return;
+        }
 
         game.SetTool(MegaCrit.Sts2.Core.Events.Custom.CrystalSphereEvent
             .CrystalSphereMinigame.CrystalSphereToolType.Big);
@@ -8188,6 +8211,10 @@ public partial class RunSimulator
             MegaCrit.Sts2.Core.Entities.Players.Player player,
             ref Task __result)
         {
+            // sts2-agent fork: in agent mode the game's own hook runs, and its
+            // CardSelectCmd.FromHand (TransformSelectionPrompt, exactly Amount cards)
+            // reaches the client as an in-combat card_select.
+            if (RunSimulator.AgentModeActive) return true;
             __result = EntropyAfterPlayerTurnStartSafe(__instance, player);
             return false;
         }
