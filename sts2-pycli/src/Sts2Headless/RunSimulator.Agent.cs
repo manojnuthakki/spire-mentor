@@ -44,7 +44,8 @@ public partial class RunSimulator
         ["map_select"] = new[] { "select_map_node", "use_potion", "discard_potion" },
         ["combat_play"] = new[] { "play_card", "end_turn", "use_potion", "discard_potion" },
         ["card_select"] = new[] { "select_cards", "skip_select" },
-        ["card_reward"] = new[] { "select_card_reward", "skip_card_reward", "use_potion", "discard_potion" },
+        ["card_reward"] = new[] { "select_card_reward", "skip_card_reward", "choose_card_reward_alternative", "use_potion", "discard_potion" },
+        ["rewards"] = new[] { "claim_reward", "proceed", "use_potion", "discard_potion" },
         // proceed only when no option is available (checked below); leave_room would skip
         // the event's decision (at Neow, the whole opening choice).
         ["event_choice"] = new[] { "choose_option", "proceed", "use_potion", "discard_potion" },
@@ -163,6 +164,8 @@ public partial class RunSimulator
             case "skip_select": return ValidateSkipSelect();
             case "select_card_reward": return ValidateSelectCardReward(args);
             case "skip_card_reward": return ValidateSkipCardReward();
+            case "choose_card_reward_alternative": return ValidateCardRewardAlternative(args);
+            case "claim_reward": return ValidateClaimReward(args);
             case "choose_option": return ValidateChooseOption(args);
             case "select_map_node": return ValidateMapNode(args);
             case "play_card": return ValidatePlayCard(args, player);
@@ -174,7 +177,7 @@ public partial class RunSimulator
 
     /// <summary>Integer arguments of any action (a present but malformed one is refused).</summary>
     private static readonly string[] IntArgs =
-        { "option_index", "col", "row", "card_index", "target_index", "potion_index", "relic_index", "bundle_index" };
+        { "option_index", "col", "row", "card_index", "target_index", "potion_index", "relic_index", "bundle_index", "reward_index" };
 
     private static bool TryGetInt(Dictionary<string, object?>? args, string key, out int value)
     {
@@ -239,7 +242,11 @@ public partial class RunSimulator
 
     private Dictionary<string, object?>? ValidateSkipCardReward()
     {
-        if (_cardSelector.HasPendingReward) return null;  // event card rewards can always be skipped
+        // Skip is the game's Skip alternative; a reward without one (CanSkip false) can't be skipped.
+        if (_cardSelector.HasPendingReward)
+            return _cardSelector.PendingRewardAlternatives?.Any(a => a.OptionId == "Skip") == true
+                ? null
+                : Reject("skip_not_allowed", "this card reward cannot be skipped");
         if (_pendingCardReward == null)
             return Reject("no_pending_card_reward", "no card reward is pending");
         if (!_pendingCardReward.CanSkip)

@@ -326,6 +326,7 @@ public partial class RunSimulator
         _gameThread.Submit(() =>
         {
             _agentMode = agentMode;
+            _cardSelector.WaitForever = agentMode;
             _lastDecision = null;
             return Tracked("start_run", () => StartRunImpl(character, ascension, seed, lang, playedSave, act1));
         });
@@ -993,6 +994,14 @@ public partial class RunSimulator
                     return Error($"Unknown room type: {roomType}");
             }
 
+            // sts2-agent fork: the new room gets its own rewards (upstream keeps the
+            // previous combat's "rewards processed" flag, so a second entered combat
+            // had none).
+            if (_agentMode)
+            {
+                _rewardsProcessed = false;
+                ResetAgentRewards();
+            }
             RunManager.Instance.EnterRoom(room).GetAwaiter().GetResult();
             _syncCtx.Pump();
             WaitForActionExecutor();
@@ -1845,7 +1854,10 @@ public partial class RunSimulator
             // definition (see ReleaseStrandedEventOptionTask); anything else just
             // re-asserts `EventOptionInFlight == (task != null)`.
             if (!AnySelectionPending())
+            {
                 ReleaseStrandedEventOptionTask($"no selection pending at '{action}'");
+                ReleaseStrandedRewardClaimTask($"no selection pending at '{action}'");
+            }
 
             switch (action)
             {
@@ -1882,7 +1894,14 @@ public partial class RunSimulator
                 case "leave_room":
                     return DoLeaveRoom(player);
                 case "proceed":
+                    // sts2-agent fork: leaving the rewards screen (RunSimulator.Rewards.cs).
+                    if (_agentMode && _lastDecision?.GetValueOrDefault("decision") as string == "rewards")
+                        return ProceedFromAgentRewards();
                     return DoProceed(player);
+                case "claim_reward" when _agentMode:
+                    return DoClaimReward(player, args);
+                case "choose_card_reward_alternative" when _agentMode:
+                    return DoChooseCardRewardAlternative(args);
                 default:
                     return _agentMode ? Reject("unknown_action", $"Unknown action: {action}") : Error($"Unknown action: {action}");
             }
@@ -1911,6 +1930,7 @@ public partial class RunSimulator
 
         // Reset tracking for new room
         _rewardsProcessed = false;
+        ResetAgentRewards();
         _pendingCardReward = null;
         _eventOptionChosen = false;
         ResetEventAdvanceTracking();
@@ -2325,7 +2345,9 @@ public partial class RunSimulator
         if (_cardSelector.HasPendingReward)
         {
             Log("Skipping event card reward");
-            _cardSelector.SkipReward();
+            // sts2-agent fork: skip is the game's Skip alternative (validated as offered).
+            if (_agentMode) _cardSelector.ResolveAlternative("Skip");
+            else _cardSelector.SkipReward();
             _syncCtx.Pump();
             WaitForActionExecutor();
 
@@ -3076,7 +3098,7 @@ public partial class RunSimulator
                 };
             }).ToList();
 
-            return new Dictionary<string, object?>
+            var decision = new Dictionary<string, object?>
             {
                 ["type"] = "decision",
                 ["decision"] = "card_reward",
@@ -3086,6 +3108,15 @@ public partial class RunSimulator
                 ["from_event"] = true,
                 ["player"] = PlayerSummary(_runState!.Players[0]),
             };
+            if (_agentMode)
+            {
+                // sts2-agent fork: the alternatives by id; skip_card_reward is the Skip one.
+                var alternatives = CardRewardAlternativesDict();
+                decision["alternatives"] = alternatives;
+                decision["can_skip"] = alternatives.Any(a => a["id"] as string == "Skip");
+                decision["from_event"] = _pendingRewardClaimTask == null;
+            }
+            return decision;
         }
 
         // Check if there's a pending card selection (upgrade, remove, transform, start-of-turn powers)
@@ -4300,6 +4331,10 @@ public partial class RunSimulator
             Log("Event-nested resume did not advance room; falling through to combat reward");
         }
 
+        // sts2-agent fork: a real rewards screen instead (RunSimulator.Rewards.cs).
+        if (_agentMode && !_rewardsProcessed)
+            return AgentRewardsState(player, combatRoom);
+
         // Generate rewards manually instead of using TestMode auto-accept
         if (_pendingRewards == null && !_rewardsProcessed)
         {
@@ -5138,6 +5173,9 @@ public partial class RunSimulator
     {
         if (_pendingEventOptionTask != null || _runState?.CurrentRoom is EventRoom)
             DriveEventOptionTask();
+        // sts2-agent fork: a reward claim suspended at a selection resumes at the same
+        // points (RunSimulator.Rewards.cs).
+        DriveRewardClaimTask();
     }
 
     /// <summary>
@@ -7538,16 +7576,33 @@ public partial class RunSimulator
 
             // Store pending and block until main loop resolves
             PendingRewardCards = options.ToList();
+            // sts2-agent fork: CardReward.OnSelect passes the same alternatives list on
+            // every pass of its loop, but after a REROLL the game's screen regenerates
+            // them without REROLL (CanReroll is now false); do the same.
+            PendingRewardAlternatives = alternatives
+                .Where(a => !(a.OptionId == "REROLL" && ReferenceEquals(alternatives, _rerolledAlternatives)))
+                .ToList();
             _rewardChoice = -1;
-            _rewardWait = new ManualResetEventSlim(false);
+            _rewardAlternative = null;
+            var wait = _rewardWait = new ManualResetEventSlim(false);
 
             Console.Error.WriteLine($"[SIM] Card reward pending: {options.Count} cards (blocking)");
-            _rewardWait.Wait(TimeSpan.FromSeconds(300)); // Wait up to 5 min
+            // sts2-agent fork: in agent mode wait for the client's answer however long it
+            // takes, instead of turning a slow answer into a silent skip.
+            if (WaitForever) wait.Wait();
+            else wait.Wait(TimeSpan.FromSeconds(300)); // Wait up to 5 min
 
             var choice = _rewardChoice;
-            PendingRewardCards = null;
-            _rewardWait = null;
+            var alternative = _rewardAlternative;
+            // The resolving thread has already cleared the pending state (see
+            // ClearPendingReward); only a timeout leaves it set.
+            if (ReferenceEquals(_rewardWait, wait)) ClearPendingReward();
 
+            if (alternative != null)
+            {
+                if (alternative.OptionId == "REROLL") _rerolledAlternatives = alternatives;
+                return new MegaCrit.Sts2.Core.TestSupport.CardRewardSelection { alternative = alternative };
+            }
             if (choice >= 0 && choice < options.Count)
                 return new MegaCrit.Sts2.Core.TestSupport.CardRewardSelection { card = options[choice].Card };
             return default;  // Skip (both fields null)
@@ -7555,16 +7610,41 @@ public partial class RunSimulator
 
         public bool HasPendingReward => PendingRewardCards != null && _rewardWait != null;
 
+        // sts2-agent fork: the card-reward alternatives (Skip, REROLL, SACRIFICE)
+        // offered with the pending card reward, chosen by OptionId.
+        public List<CardRewardAlternative>? PendingRewardAlternatives { get; private set; }
+        private CardRewardAlternative? _rewardAlternative;
+        private IReadOnlyList<CardRewardAlternative>? _rerolledAlternatives;
+        public bool WaitForever;
+
+        public void ResolveAlternative(string optionId)
+        {
+            _rewardAlternative = PendingRewardAlternatives?.FirstOrDefault(a => a.OptionId == optionId);
+            ClearPendingReward()?.Set();
+        }
+
         public void ResolveReward(int index)
         {
             _rewardChoice = index;
-            _rewardWait?.Set();
+            ClearPendingReward()?.Set();
         }
 
         public void SkipReward()
         {
             _rewardChoice = -1;
-            _rewardWait?.Set();
+            ClearPendingReward()?.Set();
+        }
+
+        // sts2-agent fork: clear the pending reward BEFORE waking the waiting thread
+        // (same reason as ResolvePending): otherwise the main thread can still see the
+        // answered reward as pending while the game moves on, and report it again.
+        private ManualResetEventSlim? ClearPendingReward()
+        {
+            var wait = _rewardWait;
+            PendingRewardCards = null;
+            PendingRewardAlternatives = null;
+            _rewardWait = null;
+            return wait;
         }
     }
 
