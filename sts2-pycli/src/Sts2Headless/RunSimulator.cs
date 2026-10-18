@@ -254,7 +254,7 @@ internal class LocLookup
 /// through map navigation, combat, events, rest sites, shops, and act transitions.
 /// Drives the engine forward until it hits a "decision point" requiring external input.
 /// </summary>
-public class RunSimulator
+public partial class RunSimulator
 {
     private const int CurrentSaveSchemaVersion = 16;
     private RunState? _runState;
@@ -323,7 +323,12 @@ public class RunSimulator
     private Task? _pendingEventOptionTask;
 
     public Dictionary<string, object?> StartRun(string character, int ascension = 0, string? seed = null, string lang = "en", bool playedSave = false, string? act1 = null, bool agentMode = false) =>
-        _gameThread.Submit(() => { _agentMode = agentMode; return StartRunImpl(character, ascension, seed, lang, playedSave, act1); });
+        _gameThread.Submit(() =>
+        {
+            _agentMode = agentMode;
+            _lastDecision = null;
+            return Tracked("start_run", () => StartRunImpl(character, ascension, seed, lang, playedSave, act1));
+        });
 
     private Dictionary<string, object?> StartRunImpl(string character, int ascension, string? seed, string lang, bool playedSave = false, string? act1 = null)
     {
@@ -941,7 +946,7 @@ public class RunSimulator
     }
 
     public Dictionary<string, object?> EnterRoom(string roomType, string? encounter, string? eventId) =>
-        _gameThread.Submit(() => EnterRoomImpl(roomType, encounter, eventId));
+        _gameThread.Submit(() => Tracked("enter_room", () => EnterRoomImpl(roomType, encounter, eventId)));
 
     private Dictionary<string, object?> EnterRoomImpl(string roomType, string? encounter, string? eventId)
     {
@@ -1133,6 +1138,10 @@ public class RunSimulator
                 if (!card.CanPlay(out _, out _)) continue;
 
                 var needsTarget = card.TargetType == TargetType.AnyEnemy;
+                // sts2-agent fork: with no living enemy (e.g. TestSubject between
+                // phases) a targeted card has no legal play; the game cancels it and the
+                // host used to report "still in hand after action".
+                if (needsTarget && aliveCount == 0) continue;
                 if (needsTarget && aliveCount > 0)
                 {
                     for (int t = 0; t < aliveCount; t++)
@@ -1190,6 +1199,23 @@ public class RunSimulator
                 {
                     continue;
                 }
+                // sts2-agent fork: list exactly what agent-mode validation accepts:
+                // usable potions only, one entry per living enemy for targeted ones.
+                if (_agentMode)
+                {
+                    if (!player.CanRemovePotions || !potions[i].PassesCustomUsabilityCheck) continue;
+                    if (potions[i].TargetType == TargetType.AnyEnemy)
+                    {
+                        for (int t = 0; t < aliveCount; t++)
+                            actions.Add(new Dictionary<string, object?>
+                            {
+                                ["action"] = "use_potion",
+                                ["potion_index"] = i,
+                                ["target_index"] = t,
+                            });
+                        continue;
+                    }
+                }
                 actions.Add(new Dictionary<string, object?>
                 {
                     ["action"] = "use_potion",
@@ -1242,7 +1268,7 @@ public class RunSimulator
     /// tail of any action: it may pump combat and, after combat, generate rewards.
     /// </summary>
     public Dictionary<string, object?> GetDecision() =>
-        _gameThread.Submit(DetectDecisionPoint);
+        _gameThread.Submit(() => Tracked("get_decision", DetectDecisionPoint));
 
     private Dictionary<string, object?> GetStateImpl()
     {
@@ -1797,14 +1823,21 @@ public class RunSimulator
         }
     }
     public Dictionary<string, object?> ExecuteAction(string action, Dictionary<string, object?>? args) =>
-        _gameThread.Submit(() => ExecuteActionImpl(action, args));
+        _gameThread.Submit(() => Tracked(action, () => ExecuteActionImpl(action, args)));
 
     private Dictionary<string, object?> ExecuteActionImpl(string action, Dictionary<string, object?>? args)
     {
         try
         {
             if (_runState == null)
-                return Error("No run in progress");
+                return _agentMode ? Reject("no_run", "No run in progress") : Error("No run in progress");
+
+            var player = _runState.Players[0];
+
+            // sts2-agent fork: check the action against the decision point before
+            // anything executes (RunSimulator.Agent.cs).
+            if (_agentMode && ValidateAgentAction(action, args, player) is { } rejected)
+                return rejected;
 
             // Reconcile the scoped NGame stub at every dispatch, so its lifetime is an
             // asserted invariant rather than an inference from a field with leak paths.
@@ -1813,8 +1846,6 @@ public class RunSimulator
             // re-asserts `EventOptionInFlight == (task != null)`.
             if (!AnySelectionPending())
                 ReleaseStrandedEventOptionTask($"no selection pending at '{action}'");
-
-            var player = _runState.Players[0];
 
             switch (action)
             {
@@ -1853,11 +1884,20 @@ public class RunSimulator
                 case "proceed":
                     return DoProceed(player);
                 default:
-                    return Error($"Unknown action: {action}");
+                    return _agentMode ? Reject("unknown_action", $"Unknown action: {action}") : Error($"Unknown action: {action}");
             }
         }
         catch (Exception ex)
         {
+            // sts2-agent fork: an exception escaping an action can come from anywhere
+            // in it, so whether it changed state is unknown.
+            if (_agentMode)
+            {
+                var inner = ex;
+                while (inner.InnerException != null) inner = inner.InnerException;
+                return Failure("error", "unknown", $"Action '{action}' failed: {inner.GetType().Name}: {inner.Message}",
+                    null, "host_exception", new() { ["stack_trace"] = inner.StackTrace });
+            }
             return ErrorWithTrace($"Action '{action}' failed", ex);
         }
     }
@@ -1978,6 +2018,12 @@ public class RunSimulator
         var playsAfter = CombatManager.Instance.History.CardPlaysStarted.Count();
         if (playsAfter == playsBefore && handAfter.Count == handCountBefore && cardIndex < handAfter.Count && handAfter[cardIndex] == card)
         {
+            // sts2-agent fork: the play was queued but never registered as started;
+            // whether it changed anything (energy, triggers) is not known.
+            if (_agentMode)
+                return Failure("error", "unknown",
+                    $"Card could not be played (still in hand after action): {card.GetType().Name} [{card.Id}]",
+                    "the card play to start", "play_not_executed");
             return Error($"Card could not be played (still in hand after action): {card.GetType().Name} [{card.Id}]");
         }
 
@@ -2092,7 +2138,7 @@ public class RunSimulator
                 Log("EndTurn stuck (agent mode): reporting a failure instead of cancel + re-run");
                 return Failure("timeout", "started",
                     "end_turn did not reach the next player turn or a choice; upstream would cancel and re-run it",
-                    "next player turn");
+                    "next player turn", "end_turn_stuck");
             }
 
             // If STILL stuck, the WaitUntilQueue TCS is likely deadlocked.
@@ -2573,7 +2619,7 @@ public class RunSimulator
                 if (!WaitUntilCombatSettlesOrAsks("select_cards"))
                     return Failure("timeout", "started",
                         "the selection was applied but combat did not settle or ask for another choice",
-                        "next decision after select_cards");
+                        "next decision after select_cards", "settle_timeout");
             }
             else
                 WaitForActionExecutor();
@@ -2634,7 +2680,7 @@ public class RunSimulator
                 if (!WaitUntilCombatSettlesOrAsks("skip_select"))
                     return Failure("timeout", "started",
                         "the empty selection was applied but combat did not settle or ask for another choice",
-                        "next decision after skip_select");
+                        "next decision after skip_select", "settle_timeout");
             }
             else
                 WaitForActionExecutor();
@@ -2711,6 +2757,12 @@ public class RunSimulator
             _syncCtx.Pump();
             // Verify potion was consumed
             var afterPotions = player.Potions?.ToList() ?? new();
+            if (afterPotions.Contains(potion) && _agentMode)
+            {
+                // sts2-agent fork: report it; discarding would hide why the use failed.
+                return Failure("error", "started", $"{potion.Id.Entry} was used but not consumed",
+                    "the potion to be consumed", "potion_not_consumed");
+            }
             if (afterPotions.Contains(potion))
             {
                 // Potion wasn't consumed — manually discard it
@@ -2722,6 +2774,7 @@ public class RunSimulator
         catch (Exception ex)
         {
             LogException("Use potion failed", ex);
+            if (_agentMode) return DetectDecisionPoint();  // reported as an engine error, no discard
             // Try manual discard as fallback
             try { MegaCrit.Sts2.Core.Commands.PotionCmd.Discard(potion).GetAwaiter().GetResult(); } catch { }
         }
@@ -3138,6 +3191,11 @@ public class RunSimulator
                 100, "combat phase settle");
             if (IsPlayPhase()) return CombatPlayState(player);
             if (!CombatManager.Instance.IsInProgress) return DetectPostCombatState(player, combatRoom);
+            // sts2-agent fork: neither the play phase nor the end of combat; don't
+            // present that as a decision.
+            if (_agentMode && !AnySelectionPending())
+                return Failure("timeout", "started", "combat neither reached the play phase nor ended",
+                    "play phase or end of combat", "combat_not_settled");
             return CombatPlayState(player);
         }
 
@@ -4382,7 +4440,7 @@ public class RunSimulator
             RunManager.Instance.ProceedFromTerminalRewardsScreen().GetAwaiter().GetResult();
             _syncCtx.Pump();
         }
-        catch { }
+        catch (Exception ex) { LogException("ForceToMap proceed", ex); }
 
         if (_runState?.CurrentRoom is not MapRoom)
         {
@@ -4430,12 +4488,12 @@ public class RunSimulator
                 RunManager.Instance.ProceedFromTerminalRewardsScreen().GetAwaiter().GetResult();
                 _syncCtx.Pump();
             }
-            catch { }
+            catch (Exception ex) { LogException("Finished event proceed", ex); }
             // Force to map if still in event room
             if (_runState?.CurrentRoom is EventRoom)
             {
                 try { RunManager.Instance.EnterRoom(new MapRoom()).GetAwaiter().GetResult(); _syncCtx.Pump(); }
-                catch { }
+                catch (Exception ex) { LogException("Finished event to map", ex); }
             }
             return _runState?.CurrentRoom is MapRoom ? MapSelectState() : DetectDecisionPoint();
         }
@@ -4984,35 +5042,6 @@ public class RunSimulator
         int.TryParse(Environment.GetEnvironmentVariable("STS2_SETTLE_CAP_MS"), out var ms) ? ms : 15000;
 
     /// <summary>
-    /// sts2-agent fork: a failure the client can act on. Still <c>type: "error"</c> for
-    /// existing clients; <c>kind</c> is <c>timeout</c> or <c>error</c>, and
-    /// <c>execution</c> says how far the action got (<c>not_started</c>,
-    /// <c>started</c>, <c>completed</c>, <c>unknown</c>). After anything but
-    /// <c>not_started</c> the client must re-read state before acting again.
-    /// </summary>
-    private Dictionary<string, object?> Failure(string kind, string execution, string message, string waitingFor)
-    {
-        var pcs = _runState?.Players[0].PlayerCombatState;
-        return new Dictionary<string, object?>
-        {
-            ["type"] = "error",
-            ["kind"] = kind,
-            ["execution"] = execution,
-            ["message"] = message,
-            ["diag"] = new Dictionary<string, object?>
-            {
-                ["waiting_for"] = waitingFor,
-                ["combat_in_progress"] = CombatManager.Instance.IsInProgress,
-                ["play_phase"] = IsPlayPhase(),
-                ["turn_phase"] = pcs?.Phase.ToString(),
-                ["executor_running"] = RunManager.Instance.ActionExecutor.IsRunning,
-                ["selection_pending"] = AnySelectionPending(),
-                ["room"] = _runState?.CurrentRoom?.GetType().Name,
-            },
-        };
-    }
-
-    /// <summary>
     /// Pump the sync context until a freshly-launched handler <paramref name="task"/>
     /// (an event option's <c>Chosen()</c>, a rest-site <c>ChooseLocalOption</c>, or a
     /// shop card-removal) reaches a stable point: it has either run to completion or
@@ -5040,7 +5069,10 @@ public class RunSimulator
         const int settleCapMs = 30000;
         bool settled = WaitFor(() => task.IsCompleted || AnySelectionPending(), settleCapMs, reason);
         if (!settled)
+        {
             Log($"WaitUntilOptionTaskSettles: '{reason}' did not settle within {settleCapMs}ms (task still running, no selection surfaced)");
+            EngineErrors.Record("host", $"'{reason}' did not settle within {settleCapMs}ms");
+        }
     }
 
     /// <summary>
@@ -5119,6 +5151,7 @@ public class RunSimulator
             return;
         }
         Log($"[WARN] Abandoning stashed event-option task ({why}); its post-await effects will not run");
+        EngineErrors.Record("host", $"abandoned a stashed event-option task ({why}); its post-await effects will not run");
         _pendingEventOptionTask = null;
         SyncEventOptionInFlight();
     }
@@ -5159,7 +5192,11 @@ public class RunSimulator
 
         // Task ran to completion (or faulted) — surface faults, then drain.
         if (task.IsFaulted) { try { task.GetAwaiter().GetResult(); } catch (Exception ex) { LogException("Event option task fault", ex); } }
-        if (!completed) Log("Event option task did not settle within timeout");
+        if (!completed)
+        {
+            Log("Event option task did not settle within timeout");
+            EngineErrors.Record("host", "event option task did not settle within timeout");
+        }
         SyncEventOptionInFlight(); // leg is done — drop the stub before anything else runs
         WaitForActionExecutor();
         _syncCtx.Pump();
@@ -5413,6 +5450,11 @@ public class RunSimulator
         _modelDbInitialized = true;
 
         TestMode.IsOn = true;
+
+        // sts2-agent fork: collect engine errors for agent-mode failure reports, and
+        // install a test-only fault if STS2_TEST_FAULT asks for one.
+        EngineErrors.Hook();
+        TestFaults.Install();
 
         // v0.107.1: ReflectionHelper.ModTypes now throws if ModManager hasn't been
         // initialized (ModManager.State == None), and the run-start path reads it.
@@ -8453,6 +8495,7 @@ public class RunSimulator
         var inner = ex;
         while (inner.InnerException != null) inner = inner.InnerException;
         Log($"{context}: {inner.GetType().Name}: {inner.Message}");
+        EngineErrors.Record("host", $"{context}: {inner.GetType().Name}: {inner.Message}\n{inner.StackTrace}");
         var trace = inner.StackTrace;
         if (string.IsNullOrEmpty(trace)) return;
         var frames = trace.Split('\n');
