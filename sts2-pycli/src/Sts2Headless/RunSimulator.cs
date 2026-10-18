@@ -295,6 +295,13 @@ public class RunSimulator
     private int _lastKnownHp;
 
     private readonly HeadlessCardSelector _cardSelector = new();
+
+    /// <summary>
+    /// sts2-agent fork: set per run by <c>start_run{agent_mode:true}</c>. In agent mode
+    /// the host surfaces player choices instead of making them; with it off the
+    /// upstream flow is unchanged.
+    /// </summary>
+    private bool _agentMode;
     // Pending bundle selection (Scroll Boxes: pick 1 of N packs)
     private IReadOnlyList<IReadOnlyList<CardModel>>? _pendingBundles;
     private TaskCompletionSource<IEnumerable<CardModel>>? _pendingBundleTcs;
@@ -315,8 +322,8 @@ public class RunSimulator
     // / `_pendingPurchaseTask`.
     private Task? _pendingEventOptionTask;
 
-    public Dictionary<string, object?> StartRun(string character, int ascension = 0, string? seed = null, string lang = "en", bool playedSave = false, string? act1 = null) =>
-        _gameThread.Submit(() => StartRunImpl(character, ascension, seed, lang, playedSave, act1));
+    public Dictionary<string, object?> StartRun(string character, int ascension = 0, string? seed = null, string lang = "en", bool playedSave = false, string? act1 = null, bool agentMode = false) =>
+        _gameThread.Submit(() => { _agentMode = agentMode; return StartRunImpl(character, ascension, seed, lang, playedSave, act1); });
 
     private Dictionary<string, object?> StartRunImpl(string character, int ascension, string? seed, string lang, bool playedSave = false, string? act1 = null)
     {
@@ -1228,6 +1235,14 @@ public class RunSimulator
     //   victory flag   : player.Creature.IsDead == false at combat exit
     public Dictionary<string, object?> GetState() =>
         _gameThread.Submit(GetStateImpl);
+
+    /// <summary>
+    /// sts2-agent fork: re-detect the current decision point without sending an action.
+    /// While a selection is pending this only reads state. Otherwise it behaves like the
+    /// tail of any action: it may pump combat and, after combat, generate rewards.
+    /// </summary>
+    public Dictionary<string, object?> GetDecision() =>
+        _gameThread.Submit(DetectDecisionPoint);
 
     private Dictionary<string, object?> GetStateImpl()
     {
@@ -2535,12 +2550,17 @@ public class RunSimulator
         // completion. Combat-only; the first surfaced choice already resolved
         // above, so this only affects choices opened by the RESUMED play.
         bool combatResolve = CombatManager.Instance.IsInProgress;
-        if (combatResolve) _cardSelector.AutoResolveInline = true;
+        // sts2-agent fork: in agent mode a nested choice is surfaced, not auto-picked.
+        bool inlineResolve = combatResolve && !_agentMode;
+        if (inlineResolve) _cardSelector.AutoResolveInline = true;
         try
         {
             _cardSelector.ResolvePendingByIndices(indices);
             _syncCtx.Pump();
-            WaitForActionExecutor();
+            if (combatResolve && _agentMode)
+                WaitUntilCombatSettlesOrAsks("select_cards");
+            else
+                WaitForActionExecutor();
 
             // Await the stashed ChooseLocalOption task so the upgrade is fully
             // applied before we force-transition to the map.
@@ -2580,7 +2600,7 @@ public class RunSimulator
         }
         finally
         {
-            if (combatResolve) _cardSelector.AutoResolveInline = false;
+            if (inlineResolve) _cardSelector.AutoResolveInline = false;
         }
     }
 
@@ -2591,7 +2611,12 @@ public class RunSimulator
             Log("Skipping card selection");
             _cardSelector.CancelPending();
             _syncCtx.Pump();
-            WaitForActionExecutor();
+            // sts2-agent fork: in agent mode wait for a follow-on selection (or for
+            // combat to settle) the same way DoSelectCards does.
+            if (_agentMode && CombatManager.Instance.IsInProgress)
+                WaitUntilCombatSettlesOrAsks("skip_select");
+            else
+                WaitForActionExecutor();
 
             // Same continuation-drain as DoSelectCards: a skipped event-relic
             // AfterObtained selection (e.g. Neow's HeftyTablet → choose 1 of 3
@@ -4894,6 +4919,39 @@ public class RunSimulator
     /// suspended event-option task can make further progress.</summary>
     private bool AnySelectionPending() =>
         _cardSelector.HasPending || _cardSelector.HasPendingReward || _pendingBundles != null;
+
+    /// <summary>
+    /// sts2-agent fork. After a combat selection resolves, the game resumes whatever
+    /// awaited it (a card play, possibly played again by One-Two Punch; end-of-turn
+    /// work; start-of-turn powers such as Tools of the Trade), and that work can open
+    /// another selection. Pump until the next player choice is pending, or combat has
+    /// settled (play phase with the executor idle, combat over, or the player dead).
+    /// </summary>
+    private void WaitUntilCombatSettlesOrAsks(string reason)
+    {
+        const int idleStreakRequired = 50;  // pumps of play phase + idle executor
+        const int capMs = 15000;            // deadlock guard, not the expected exit
+        var executor = RunManager.Instance.ActionExecutor;
+        var player = _runState?.Players[0];
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        int idleStreak = 0;
+        while (sw.ElapsedMilliseconds < capMs)
+        {
+            _syncCtx.Pump();
+            if (AnySelectionPending()) return;
+            if (!CombatManager.Instance.IsInProgress || player?.Creature == null || player.Creature.IsDead) return;
+            if (IsPlayPhase() && !executor.IsRunning)
+            {
+                if (++idleStreak >= idleStreakRequired) return;
+            }
+            else
+            {
+                idleStreak = 0;
+            }
+            Thread.Sleep(1);
+        }
+        Log($"WaitUntilCombatSettlesOrAsks: '{reason}' did not settle within {capMs}ms");
+    }
 
     /// <summary>
     /// Pump the sync context until a freshly-launched handler <paramref name="task"/>
@@ -7318,11 +7376,17 @@ public class RunSimulator
             return _pendingTcs.Task;
         }
 
+        // sts2-agent fork: clear the pending state BEFORE completing the task.
+        // TrySetResult can run the game's continuation inline, and that continuation
+        // may open the next selection (a card played again by One-Two Punch, a
+        // start-of-turn power after an end-of-turn retain). Clearing afterwards
+        // wiped that new prompt out and orphaned its task, and the run wedged.
         public void ResolvePending(IEnumerable<CardModel> selected)
         {
-            _pendingTcs?.TrySetResult(selected);
+            var tcs = _pendingTcs;
             PendingOptions = null;
             _pendingTcs = null;
+            tcs?.TrySetResult(selected);
         }
 
         public void ResolvePendingByIndices(int[] indices)
@@ -7337,9 +7401,10 @@ public class RunSimulator
 
         public void CancelPending()
         {
-            _pendingTcs?.TrySetResult(Array.Empty<CardModel>());
+            var tcs = _pendingTcs;
             PendingOptions = null;
             _pendingTcs = null;
+            tcs?.TrySetResult(Array.Empty<CardModel>());
         }
 
         // Pending card reward from events (GetSelectedCardReward blocks until resolved)

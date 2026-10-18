@@ -113,7 +113,9 @@ class Program
                     cmd.TryGetProperty("played_save", out var ps) && ps.GetBoolean(),
                     // "overgrowth" | "underdocks" | "roll". Omit for the historical
                     // default (GetDefaultList => Overgrowth). See RunSimulator.
-                    cmd.TryGetProperty("act1", out var a1) ? a1.GetString() : null
+                    cmd.TryGetProperty("act1", out var a1) ? a1.GetString() : null,
+                    // sts2-agent fork: surface player choices instead of making them.
+                    cmd.TryGetProperty("agent_mode", out var am) && am.GetBoolean()
                 );
 
             case "roll_acts":
@@ -219,6 +221,10 @@ class Program
 
             case "get_state":
                 return sim.GetState();
+
+            // sts2-agent fork: re-detect the current decision point without an action.
+            case "get_decision":
+                return sim.GetDecision();
 
             case "write_continue_save":
             {
