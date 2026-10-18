@@ -18,6 +18,16 @@
 // (`belt_full`) and stays on the screen, as in the game; discarding a potion makes it
 // claimable. `proceed` skips whatever is left (Reward.OnSkipped), as leaving the
 // screen does. With agent mode off none of this runs.
+//
+// Rewards offered by events and relics (RewardsCmd.OfferCustom, and sets like Neow's
+// Bones' that call RewardsSet.Offer themselves) come to the same screen when the offer
+// is made by an event option or a reward claim: RewardsSet.testSelector hands the set
+// to the client instead of taking everything, and the offering code waits until the
+// set is completed (every reward claimed) or skipped (`proceed`), as it waits on the
+// game's screen. A set that disallows skipping (Neow's Bones) refuses `proceed`
+// (`skip_not_allowed`) and says so with `can_proceed: false`. Sets nest: a relic
+// claimed from a set can offer its own (Small Capsule), and the innermost is shown.
+// Offers made elsewhere (shops, rest sites, treasure) are still auto-taken.
 
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Rewards;
@@ -35,18 +45,99 @@ public partial class RunSimulator
     private List<Reward> _agentRewardsShown = new();
 
     /// <summary>
-    /// A claim suspended at the selection it opened (a card reward, a card removal).
-    /// Driven forward by the commands that resolve that selection.
+    /// Claims suspended at something they opened (a card reward, a card removal, a set
+    /// of rewards offered by the claimed relic), innermost last, each with the number of
+    /// custom sets open when it started. Driven forward by the commands that answer.
     /// </summary>
-    private Task? _pendingRewardClaimTask;
+    private readonly List<(Task Task, int Depth)> _pendingRewardClaims = new();
+
+    /// <summary>
+    /// Sets offered by events and relics that the client is claiming from, innermost
+    /// last. The offering code awaits `Done` (inside RewardsSet.testSelector).
+    /// </summary>
+    private readonly List<(RewardsSet Set, TaskCompletionSource Done)> _customRewardSets = new();
+    private readonly object _customRewardSetsLock = new();
+
+    /// <summary>
+    /// Set inside the thread-pool tasks that run an event option or a reward claim:
+    /// rewards offered within them are shown to the client (agent mode).
+    /// </summary>
+    internal static readonly AsyncLocal<bool> SurfaceCustomRewards = new();
+
+    /// <summary>Hands an offered set to the client; installed by start_run in agent mode.</summary>
+    internal static Func<RewardsSet, Task>? AgentCustomRewardsOffer;
+
+    private bool CustomRewardsPending
+    {
+        get { lock (_customRewardSetsLock) return _customRewardSets.Count > 0; }
+    }
+
+    private int CustomRewardsDepth
+    {
+        get { lock (_customRewardSetsLock) return _customRewardSets.Count; }
+    }
+
+    /// <summary>The innermost set offered by an event or relic, if any.</summary>
+    private RewardsSet? CurrentCustomRewardsSet
+    {
+        get { lock (_customRewardSetsLock) return _customRewardSets.Count > 0 ? _customRewardSets[^1].Set : null; }
+    }
+
+    /// <summary>The set the client claims from: the innermost custom set, else the room's.</summary>
+    private RewardsSet? ActiveAgentRewardsSet => CurrentCustomRewardsSet ?? _agentRewardsSet;
 
     /// <summary>Forget the previous room's rewards (a new room is being entered).</summary>
     private void ResetAgentRewards()
     {
         _agentRewardsSet = null;
         _agentRewardsShown = new();
-        _pendingRewardClaimTask = null;
+        _pendingRewardClaims.Clear();
     }
+
+    /// <summary>
+    /// RewardsSet.testSelector in agent mode, on the offering thread: register the set
+    /// and wait until the client has completed or skipped it.
+    /// </summary>
+    private Task OfferCustomRewardsToClient(RewardsSet set)
+    {
+        var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        lock (_customRewardSetsLock) _customRewardSets.Add((set, done));
+        Log($"Rewards offered to the client: {string.Join(", ", set.Rewards.Select(r => r.GetType().Name))}"
+            + (set.DisallowSkipping ? " (skipping disallowed)" : ""));
+        return done.Task;
+    }
+
+    /// <summary>
+    /// Wake the code that offered each innermost set the client has completed or
+    /// skipped. Returns whether any was released.
+    /// </summary>
+    private bool ReleaseCompletedCustomRewardSets()
+    {
+        var sync = RunManager.Instance.RewardsSetSynchronizer;
+        bool released = false;
+        while (true)
+        {
+            TaskCompletionSource done;
+            lock (_customRewardSetsLock)
+            {
+                if (_customRewardSets.Count == 0 || !sync.IsRewardsSetCompleted(_customRewardSets[^1].Set)) break;
+                done = _customRewardSets[^1].Done;
+                _customRewardSets.RemoveAt(_customRewardSets.Count - 1);
+            }
+            done.TrySetResult();
+            _syncCtx.Pump();
+            released = true;
+        }
+        return released;
+    }
+
+    /// <summary>
+    /// A prompt the client must answer that was opened after `depth` custom sets were
+    /// open: a card selection, a card reward, a bundle or a further set.
+    /// </summary>
+    private bool PromptPendingAbove(int depth) =>
+        _cardSelector.HasPending || _cardSelector.HasPendingReward || _pendingBundles != null
+        || CustomRewardsDepth > depth;
 
     /// <summary>
     /// After combat in agent mode: generate the room's rewards once, the way
@@ -68,22 +159,32 @@ public partial class RunSimulator
             _ = RunManager.Instance.RewardsSetSynchronizer.BeginRewardsSet(set);
             _agentRewardsSet = set;
         }
-        return RewardsState(player);
+        return RewardsState(player, set: _agentRewardsSet, custom: false);
     }
 
-    private Dictionary<string, object?> RewardsState(Player player)
+    /// <summary>
+    /// The rewards screen. `source` is `room` (after combat) or `custom` (offered by an
+    /// event or relic); `can_proceed` is false when the set disallows skipping.
+    /// </summary>
+    private Dictionary<string, object?> RewardsState(Player player, RewardsSet set, bool custom)
     {
-        _agentRewardsShown = _agentRewardsSet!.Rewards.Where(r => !r.SuccessfullySelected).ToList();
+        _agentRewardsShown = set.Rewards.Where(r => !r.SuccessfullySelected).ToList();
         return new Dictionary<string, object?>
         {
             ["type"] = "decision",
             ["decision"] = "rewards",
             ["context"] = RunContext(),
+            ["source"] = custom ? "custom" : "room",
             ["rewards"] = _agentRewardsShown.Select((r, i) => RewardDict(r, player, i)).ToList(),
-            ["gold_earned"] = player.Gold - _goldBeforeCombat,
+            ["can_proceed"] = !set.DisallowSkipping,
+            ["gold_earned"] = custom ? null : player.Gold - _goldBeforeCombat,
             ["player"] = PlayerSummary(player),
         };
     }
+
+    /// <summary>The innermost set offered by an event or relic, as a rewards decision.</summary>
+    private Dictionary<string, object?>? CustomRewardsState(Player player) =>
+        CurrentCustomRewardsSet is { } set ? RewardsState(player, set, custom: true) : null;
 
     private Dictionary<string, object?> RewardDict(Reward reward, Player player, int? index)
     {
@@ -145,8 +246,10 @@ public partial class RunSimulator
             as MegaCrit.Sts2.Core.Models.CardModel;
 
     /// <summary>
-    /// Claim one reward. A card reward or card removal suspends at its selection;
-    /// the claim is stashed and finished by the command that answers it.
+    /// Claim one reward. A card reward, a card removal or a relic that offers its own
+    /// rewards suspends the claim; it is stashed and finished by the command that
+    /// answers what it opened. Claiming the last reward of an offered set completes the
+    /// set, and the code that offered it continues.
     /// </summary>
     private Dictionary<string, object?> DoClaimReward(Player player, Dictionary<string, object?>? args)
     {
@@ -154,35 +257,46 @@ public partial class RunSimulator
         var reward = _agentRewardsShown[index];
         Log($"Claiming reward {index}: {reward.GetType().Name}");
         var sync = RunManager.Instance.RewardsSetSynchronizer;
-        var task = Task.Run(() => sync.SelectLocalReward(reward));
-        WaitUntilOptionTaskSettles(task, "reward claim or the selection it opens");
-        if (!task.IsCompleted && AnySelectionPending())
+        var depth = CustomRewardsDepth;
+        var task = Task.Run(() =>
         {
-            _pendingRewardClaimTask = task;
+            SurfaceCustomRewards.Value = true;
+            return sync.SelectLocalReward(reward);
+        });
+        WaitUntilOptionTaskSettles(task, "reward claim or what it opens", () => PromptPendingAbove(depth));
+        if (!task.IsCompleted && PromptPendingAbove(depth))
+        {
+            _pendingRewardClaims.Add((task, depth));
             WaitForActionExecutor();
             return DetectDecisionPoint();
         }
         FinishRewardClaim(task);
+        DrainEventOptionTaskIfDue();
         return DetectDecisionPoint();
     }
 
     /// <summary>
-    /// Drive a stashed claim after its selection was answered: it either completes or
-    /// suspends again (a REROLL shows new cards; some relics allow more than one pick).
+    /// Drive stashed claims, innermost first, after what they opened was answered: each
+    /// either completes or suspends again (a REROLL shows new cards; a set offered by
+    /// the claimed relic still has rewards). A completed offered set wakes the code that
+    /// offered it, which may be an outer claim.
     /// </summary>
     private void DriveRewardClaimTask()
     {
-        var task = _pendingRewardClaimTask;
-        _pendingRewardClaimTask = null;
-        if (task == null) return;
-        WaitUntilOptionTaskSettles(task, "reward claim (until next selection or completion)");
-        if (!task.IsCompleted && AnySelectionPending())
+        while (true)
         {
-            _pendingRewardClaimTask = task;
-            WaitForActionExecutor();
-            return;
+            ReleaseCompletedCustomRewardSets();
+            if (_pendingRewardClaims.Count == 0) return;
+            var (task, depth) = _pendingRewardClaims[^1];
+            WaitUntilOptionTaskSettles(task, "reward claim (until next prompt or completion)", () => PromptPendingAbove(depth));
+            if (!task.IsCompleted && PromptPendingAbove(depth))
+            {
+                WaitForActionExecutor();
+                return;
+            }
+            _pendingRewardClaims.RemoveAt(_pendingRewardClaims.Count - 1);
+            FinishRewardClaim(task);
         }
-        FinishRewardClaim(task);
     }
 
     private void FinishRewardClaim(Task task)
@@ -197,16 +311,30 @@ public partial class RunSimulator
     /// <summary>A stashed claim with no selection left to resume it can never finish.</summary>
     private void ReleaseStrandedRewardClaimTask(string why)
     {
-        if (_pendingRewardClaimTask == null || _pendingRewardClaimTask.IsCompleted) return;
+        if (_pendingRewardClaims.All(c => c.Task.IsCompleted))
+        {
+            _pendingRewardClaims.Clear();
+            return;
+        }
         Log($"[WARN] Abandoning stashed reward claim ({why})");
         EngineErrors.Record("host", $"abandoned a stashed reward claim ({why}); its remaining effects will not run");
-        _pendingRewardClaimTask = null;
+        _pendingRewardClaims.Clear();
     }
 
-    /// <summary>Leave the rewards screen: skip what is left, then continue as upstream does.</summary>
+    /// <summary>
+    /// Leave the rewards screen: skip what is left. An offered set is skipped and the
+    /// code that offered it continues; the room's set continues as upstream does.
+    /// </summary>
     private Dictionary<string, object?> ProceedFromAgentRewards()
     {
         var sync = RunManager.Instance.RewardsSetSynchronizer;
+        if (CustomRewardsPending)
+        {
+            sync.SkipLocalRewardsSet();  // the innermost set: the one on screen
+            _agentRewardsShown = new();
+            DrainEventOptionTaskIfDue();
+            return DetectDecisionPoint();
+        }
         if (_agentRewardsSet != null && !sync.IsRewardsSetCompleted(_agentRewardsSet))
             sync.SkipLocalRewardsSet();
         _agentRewardsSet = null;
@@ -247,12 +375,20 @@ public partial class RunSimulator
         if (!TryGetInt(args, "reward_index", out var index))
             return Reject("missing_argument", "claim_reward requires 'reward_index'");
         if (_lastDecision!.GetValueOrDefault("rewards") is not List<Dictionary<string, object?>> rewards
-            || _agentRewardsSet == null)
+            || ActiveAgentRewardsSet == null)
             return Reject("no_pending_rewards", "no rewards screen is open");
         if (index < 0 || index >= rewards.Count)
             return Reject("invalid_reward_index", $"reward index {index} is outside 0..{rewards.Count - 1}");
         if (rewards[index].GetValueOrDefault("available") is false)
             return Reject("reward_unavailable", $"reward {index} cannot be claimed: {rewards[index].GetValueOrDefault("reason")}");
+        return null;
+    }
+
+    /// <summary>`proceed` would skip a set that disallows skipping (Neow's Bones).</summary>
+    private Dictionary<string, object?>? ValidateProceedFromRewards()
+    {
+        if (_lastDecision!.GetValueOrDefault("can_proceed") is false)
+            return Reject("skip_not_allowed", "these rewards cannot be skipped; claim them");
         return null;
     }
 

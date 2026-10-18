@@ -166,6 +166,7 @@ public partial class RunSimulator
             case "skip_card_reward": return ValidateSkipCardReward();
             case "choose_card_reward_alternative": return ValidateCardRewardAlternative(args);
             case "claim_reward": return ValidateClaimReward(args);
+            case "proceed" when decision == "rewards": return ValidateProceedFromRewards();
             case "choose_option": return ValidateChooseOption(args);
             case "select_map_node": return ValidateMapNode(args);
             case "play_card": return ValidatePlayCard(args, player);

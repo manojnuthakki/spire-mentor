@@ -327,6 +327,7 @@ public partial class RunSimulator
         {
             _agentMode = agentMode;
             _cardSelector.WaitForever = agentMode;
+            AgentCustomRewardsOffer = agentMode ? OfferCustomRewardsToClient : null;
             _lastDecision = null;
             return Tracked("start_run", () => StartRunImpl(character, ascension, seed, lang, playedSave, act1));
         });
@@ -2891,7 +2892,12 @@ public partial class RunSimulator
                         // suspended-at-a-selection path, which returns early.
                         YieldPatches.EventOptionInFlight = true;
                         // Run on thread pool so GetSelectedCards/GetSelectedCardReward can block
-                        var task = Task.Run(() => options[optionIndex].Chosen());
+                        var task = Task.Run(() =>
+                        {
+                            // sts2-agent fork: rewards this option offers go to the client.
+                            SurfaceCustomRewards.Value = _agentMode;
+                            return options[optionIndex].Chosen();
+                        });
                         // Wait until the option's `Chosen()` either completes or
                         // suspends at a player decision (card selection / reward /
                         // bundle). The terminal condition is `task.IsCompleted ||
@@ -2912,7 +2918,7 @@ public partial class RunSimulator
                         // as the task is still making progress, so the selection is
                         // ALWAYS observed and the task ALWAYS stashed/driven.
                         WaitUntilOptionTaskSettles(task, "event option task or selection/bundle");
-                        if (_cardSelector.HasPending || _cardSelector.HasPendingReward || _pendingBundles != null)
+                        if (AnySelectionPending())
                         {
                             // The option's `Chosen()` (e.g. a relic AfterObtained that
                             // opens a card selection) is suspended at the `await`. Stash
@@ -3114,7 +3120,7 @@ public partial class RunSimulator
                 var alternatives = CardRewardAlternativesDict();
                 decision["alternatives"] = alternatives;
                 decision["can_skip"] = alternatives.Any(a => a["id"] as string == "Skip");
-                decision["from_event"] = _pendingRewardClaimTask == null;
+                decision["from_event"] = _pendingRewardClaims.Count == 0;
             }
             return decision;
         }
@@ -3174,6 +3180,10 @@ public partial class RunSimulator
                 ["combat"] = InCombatBoard(player),
             };
         }
+
+        // sts2-agent fork: rewards offered by an event or relic, innermost set first.
+        if (_agentMode && CustomRewardsState(player) is { } customRewards)
+            return customRewards;
 
         // Check if there's a pending card reward
         if (_pendingCardReward != null)
@@ -5042,7 +5052,8 @@ public partial class RunSimulator
     /// selection / reward / bundle that the client must resolve before the
     /// suspended event-option task can make further progress.</summary>
     private bool AnySelectionPending() =>
-        _cardSelector.HasPending || _cardSelector.HasPendingReward || _pendingBundles != null;
+        _cardSelector.HasPending || _cardSelector.HasPendingReward || _pendingBundles != null
+        || CustomRewardsPending;  // sts2-agent fork: rewards offered by an event or relic
 
     /// <summary>
     /// sts2-agent fork. After a combat selection resolves, the game resumes whatever
@@ -5109,10 +5120,11 @@ public partial class RunSimulator
     /// The cap below is a deadlock guard only (a genuinely hung handler), not the
     /// expected exit: in the common case we return the instant the task settles.
     /// </summary>
-    private void WaitUntilOptionTaskSettles(Task task, string reason)
+    private void WaitUntilOptionTaskSettles(Task task, string reason, Func<bool>? asks = null)
     {
         const int settleCapMs = 30000;
-        bool settled = WaitFor(() => task.IsCompleted || AnySelectionPending(), settleCapMs, reason);
+        asks ??= AnySelectionPending;
+        bool settled = WaitFor(() => task.IsCompleted || asks(), settleCapMs, reason);
         if (!settled)
         {
             Log($"WaitUntilOptionTaskSettles: '{reason}' did not settle within {settleCapMs}ms (task still running, no selection surfaced)");
@@ -5171,11 +5183,13 @@ public partial class RunSimulator
     /// </remarks>
     private void DrainEventOptionTaskIfDue()
     {
+        // sts2-agent fork: a reward claim suspended at a selection resumes at the same
+        // points (RunSimulator.Rewards.cs). Claims first: they are inner to an event
+        // option that offered the rewards being claimed, which resumes once its set
+        // is completed or skipped.
+        DriveRewardClaimTask();
         if (_pendingEventOptionTask != null || _runState?.CurrentRoom is EventRoom)
             DriveEventOptionTask();
-        // sts2-agent fork: a reward claim suspended at a selection resumes at the same
-        // points (RunSimulator.Rewards.cs).
-        DriveRewardClaimTask();
     }
 
     /// <summary>
@@ -7115,6 +7129,14 @@ public partial class RunSimulator
         {
             MegaCrit.Sts2.Core.Rewards.RewardsSet.testSelector = async set =>
             {
+                // sts2-agent fork: in agent mode, a set offered by an event option or a
+                // reward claim goes to the client (RunSimulator.Rewards.cs).
+                if (SurfaceCustomRewards.Value && AgentCustomRewardsOffer is { } offer)
+                {
+                    await offer(set);
+                    return;
+                }
+
                 var sync = MegaCrit.Sts2.Core.Runs.RunManager.Instance?.RewardsSetSynchronizer;
                 if (sync == null) return;
 
