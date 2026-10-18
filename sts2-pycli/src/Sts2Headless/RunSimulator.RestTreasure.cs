@@ -116,7 +116,7 @@ public partial class RunSimulator
             // values the game filled in (Heal's amount includes Regal Pillow and the like).
             ["title"] = LocText(opt.Title),
             ["description"] = LocText(opt.Description),
-            ["vars"] = LocVars(opt.Description),
+            ["vars"] = LocVars(opt.Description, player),
             ["preview"] = RestPreview(opt, player),
             ["is_enabled"] = opt.IsEnabled,
             ["reason"] = opt.IsEnabled ? null : opt.OptionId switch
@@ -145,7 +145,7 @@ public partial class RunSimulator
     }
 
     /// <summary>A LocString's variables as plain values (numbers, text, flags).</summary>
-    private Dictionary<string, object?>? LocVars(MegaCrit.Sts2.Core.Localization.LocString? loc)
+    private Dictionary<string, object?>? LocVars(MegaCrit.Sts2.Core.Localization.LocString? loc, Player player)
     {
         if (loc == null) return null;
         var vars = new Dictionary<string, object?>();
@@ -161,7 +161,7 @@ public partial class RunSimulator
                     MegaCrit.Sts2.Core.Localization.LocString nested => LocText(nested),
                     // Text the game already formatted: under the host's loc stub it is
                     // loc keys (Regal Pillow's "+{Heal} HP" line); look them up.
-                    string text => string.Join("\n", text.Split('\n').Select(_loc.BilingualFromKey)),
+                    string text => string.Join("\n", text.Split('\n').Select(line => FormattedLine(line, player))),
                     bool or int => value,
                     _ => value?.ToString(),
                 };
@@ -169,6 +169,30 @@ public partial class RunSimulator
         }
         catch (Exception ex) { Log($"Rest option vars unreadable: {ex.Message}"); }
         return vars.Count > 0 ? vars : null;
+    }
+
+    /// <summary>
+    /// A line the game formatted from a relic's text (`RELIC.additionalRestSiteHealText`,
+    /// with the relic's own values): under the host's loc stub it arrives as the bare key,
+    /// so look the text up and fill its {Name} placeholders from the owning relic's
+    /// DynamicVars. A line that isn't such a key is returned as it came.
+    /// </summary>
+    private string FormattedLine(string line, Player player)
+    {
+        var text = _loc.BilingualFromKey(line);
+        if (text == line) return line;
+        var entry = line.Split('.')[0];
+        var relic = player.Relics.FirstOrDefault(r => r.Id.Entry == entry);
+        if (relic != null)
+        {
+            try
+            {
+                foreach (var dv in relic.DynamicVars.Values)
+                    text = text.Replace("{" + dv.Name + "}", ((int)dv.BaseValue).ToString());
+            }
+            catch (Exception ex) { Log($"Relic text vars unreadable ({entry}): {ex.Message}"); }
+        }
+        return text;
     }
 
     /// <summary>
@@ -186,7 +210,8 @@ public partial class RunSimulator
             object?[] args = p.Select(pi => pi.ParameterType.IsInstanceOfType(player) ? player
                 : pi.ParameterType.IsInstanceOfType(player.Creature) ? (object?)player.Creature : null).ToArray();
             var amount = method.Invoke(method.IsStatic ? null : opt, args);
-            return new() { ["heal"] = Convert.ToInt32(amount) };
+            // The heal applies the amount truncated to whole HP (82 max HP: 24.6 heals 24).
+            return new() { ["heal"] = (int)Convert.ToDecimal(amount) };
         }
         catch (Exception ex)
         {
@@ -230,17 +255,20 @@ public partial class RunSimulator
             Log("Treasure room: opening the chest");
             WaitForActionExecutor();
             _syncCtx.Pump();
+            var before = player.Gold;
             try
             {
-                var before = player.Gold;
                 var rolled = treasureRoom.DoNormalRewards().GetAwaiter().GetResult();
                 _syncCtx.Pump();
-                // What the player actually gained (gold modifiers such as Bowler Hat apply).
-                var gained = player.Gold - before;
-                Log($"Treasure room: {rolled} gold rolled, {gained} gained");
-                _agentForced.Add(new() { ["kind"] = "open_chest", ["gold"] = gained });
+                Log($"Treasure room: {rolled} gold rolled");
             }
             catch (Exception ex) { LogException("Treasure gold", ex); }
+            finally
+            {
+                // The chest was opened whether or not a gold hook threw; report what the
+                // player actually gained (gold modifiers such as Bowler Hat apply).
+                _agentForced.Add(new() { ["kind"] = "open_chest", ["gold"] = player.Gold - before });
+            }
             _agentTreasureTask = Task.Run(() =>
             {
                 SurfaceCustomRewards.Value = true;
