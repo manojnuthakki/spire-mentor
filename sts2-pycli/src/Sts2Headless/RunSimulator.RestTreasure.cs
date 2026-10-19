@@ -68,6 +68,7 @@ public partial class RunSimulator
         _treasureOpened = false;
         _treasureRelicTaken = false;
         _agentTreasureTask = null;
+        ResetAgentShop();
     }
 
     /// <summary>
@@ -77,6 +78,7 @@ public partial class RunSimulator
     /// </summary>
     private void DriveAgentRoomTasks()
     {
+        DriveAgentShopTask();
         if (_agentRestTask != null && !AnySelectionPending())
         {
             WaitUntilOptionTaskSettles(_agentRestTask, "rest-site option (until next prompt or completion)");

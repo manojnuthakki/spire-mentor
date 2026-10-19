@@ -58,7 +58,8 @@ public partial class RunSimulator
         ["rest_site"] = new[] { "choose_option", "proceed", "use_potion", "discard_potion" },
         ["treasure"] = new[] { "take_relic", "proceed", "use_potion", "discard_potion" },
         ["crystal_sphere"] = new[] { "divine" },
-        ["shop"] = new[] { "buy_card", "buy_relic", "buy_potion", "remove_card", "leave_room", "proceed", "use_potion", "discard_potion" },
+        // leave_room is refused, as at the rest site and treasure: proceed leaves (RunSimulator.Shop.cs).
+        ["shop"] = new[] { "buy_card", "buy_relic", "buy_potion", "remove_card", "proceed", "use_potion", "discard_potion" },
         ["game_over"] = Array.Empty<string>(),
     };
 
@@ -191,6 +192,7 @@ public partial class RunSimulator
             case "proceed" when decision == "rewards": return ValidateProceedFromRewards();
             case "proceed" when decision == "rest_site": return ValidateProceedFromRestSite();
             case "take_relic": return ValidateTakeRelic(args);
+            case "buy_card" or "buy_relic" or "buy_potion" or "remove_card": return ValidateShopBuy(action, args, player);
             case "divine": return ValidateDivine(args);
             case "choose_option": return ValidateChooseOption(args);
             case "select_map_node": return ValidateMapNode(args);

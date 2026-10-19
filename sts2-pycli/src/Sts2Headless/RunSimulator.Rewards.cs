@@ -27,8 +27,8 @@
 // game's screen. A set that disallows skipping (Neow's Bones) refuses `proceed`
 // (`skip_not_allowed`) and says so with `can_proceed: false`. Sets nest: a relic
 // claimed from a set can offer its own (Small Capsule), and the innermost is shown.
-// So do offers made by a rest-site option or in a treasure room (RunSimulator.RestTreasure.cs);
-// offers made by a shop purchase are still auto-taken.
+// So do offers made by a rest-site option or in a treasure room (RunSimulator.RestTreasure.cs),
+// and by a shop purchase or Lord's Parasol (RunSimulator.Shop.cs).
 
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Rewards;

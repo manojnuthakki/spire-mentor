@@ -1879,6 +1879,9 @@ public partial class RunSimulator
                     return DoSelectCardReward(player, args);
                 case "skip_card_reward":
                     return DoSkipCardReward(player);
+                // sts2-agent fork: purchases run like rest-site options (RunSimulator.Shop.cs).
+                case "buy_card" or "buy_relic" or "buy_potion" or "remove_card" when _agentMode:
+                    return DoAgentBuy(action, args);
                 case "buy_card":
                     return DoBuyCard(player, args);
                 case "buy_relic":
@@ -1915,6 +1918,8 @@ public partial class RunSimulator
                         return ProceedFromRestSite();
                     if (_agentMode && _lastDecision?.GetValueOrDefault("decision") as string == "treasure")
                         return ProceedFromTreasure();
+                    if (_agentMode && _lastDecision?.GetValueOrDefault("decision") as string == "shop")
+                        return ProceedFromShop();
                     return DoProceed(player);
                 case "divine" when _agentMode:
                     return DoDivine(args);
@@ -4896,7 +4901,7 @@ public partial class RunSimulator
 
         var removal = merchantRoom.GetLocalInventory().CardRemovalEntry;
 
-        return new Dictionary<string, object?>
+        var state = new Dictionary<string, object?>
         {
             ["type"] = "decision",
             ["decision"] = "shop",
@@ -4907,6 +4912,9 @@ public partial class RunSimulator
             ["card_removal_cost"] = removal?.Cost,
             ["player"] = PlayerSummary(player),
         };
+        // sts2-agent fork: purchasability and reasons per slot, the removal's state (RunSimulator.Shop.cs).
+        if (_agentMode) AgentShopFields(state, merchantRoom, player);
+        return state;
     }
 
     private Dictionary<string, object?> TreasureState(TreasureRoom treasureRoom)
@@ -5600,6 +5608,7 @@ public partial class RunSimulator
         // install a test-only fault if STS2_TEST_FAULT asks for one.
         EngineErrors.Hook();
         TestFaults.Install();
+        InstallShopPatches();
 
         // v0.107.1: ReflectionHelper.ModTypes now throws if ModManager hasn't been
         // initialized (ModManager.State == None), and the run-start path reads it.
