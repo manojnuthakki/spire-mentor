@@ -43,7 +43,7 @@ public partial class RunSimulator
     {
         ["map_select"] = new[] { "select_map_node", "use_potion", "discard_potion" },
         ["combat_play"] = new[] { "play_card", "end_turn", "use_potion", "discard_potion" },
-        ["card_select"] = new[] { "select_cards", "skip_select" },
+        ["card_select"] = new[] { "select_cards", "skip_select", "cancel_select", "skip_card_choice" },
         ["card_reward"] = new[] { "select_card_reward", "skip_card_reward", "choose_card_reward_alternative", "use_potion", "discard_potion" },
         ["rewards"] = new[] { "claim_reward", "proceed", "use_potion", "discard_potion" },
         // proceed only when no option is available (checked below); leave_room would skip
@@ -176,6 +176,8 @@ public partial class RunSimulator
         {
             case "select_cards": return ValidateSelectCards(args);
             case "skip_select": return ValidateSkipSelect();
+            case "cancel_select": return ValidateCancelSelect();
+            case "skip_card_choice": return ValidateSkipCardChoice();
             case "select_card_reward": return ValidateSelectCardReward(args);
             case "skip_card_reward": return ValidateSkipCardReward();
             case "choose_card_reward_alternative": return ValidateCardRewardAlternative(args);
@@ -229,21 +231,65 @@ public partial class RunSimulator
                 $"index {indices.First(i => i < 0 || i >= options.Count)} is outside 0..{options.Count - 1}");
         if (indices.Distinct().Count() != indices.Count)
             return Reject("duplicate_index", "each card can be chosen once");
-        int lo = _cardSelector.PendingMinSelect, hi = _cardSelector.PendingMaxSelect;
+        int lo = AgentMinSelect, hi = _cardSelector.PendingMaxSelect;
         if (indices.Count < lo || indices.Count > hi)
             return Reject("count_out_of_range", $"{indices.Count} card(s) chosen; this prompt takes {lo}..{hi}");
         return null;
     }
 
+    // Skip, cancel and choosing nothing are three different answers in the game, though
+    // each reaches the code that asked as an empty selection:
+    // - choosing nothing: a prompt that takes 0..N cards (Purity, Gambling Chip; min 0),
+    //   skip_select; the effect completes with nothing chosen;
+    // - cancel: the deck screens' Close button, shown only when CardSelectorPrefs.Cancelable
+    //   (Smith, Cook, the shop's card removal, a card-removal reward), cancel_select; the
+    //   option, purchase or reward that opened it fails and nothing is spent. No in-combat
+    //   prompt is cancelable (the hand UI never reads the flag);
+    // - skip: the choose-a-card screen's Skip button, shown only with canSkip (Discovery,
+    //   the card potions, Hefty Tablet), skip_card_choice; no card is added, the card,
+    //   potion or relic that offered it is still spent.
+    // The choose-a-card screen calls the test selector with min 0 whatever canSkip says,
+    // but without a Skip button the game's screen takes exactly one card (Toolbox,
+    // Knowledge Demon), and with one, nothing chosen is the Skip: so its min is 1 here.
+
+    /// <summary>The fewest cards the game's screen accepts for the pending prompt.</summary>
+    private int AgentMinSelect =>
+        _cardSelector.PendingCanSkip != null ? 1 : _cardSelector.PendingMinSelect;
+
+    /// <summary>Whether the screen shows a Close button (CardSelectorPrefs.Cancelable).</summary>
+    private bool AgentCancelable =>
+        _cardSelector.PendingCanSkip == null && _cardSelector.PendingCancelable == true;
+
+    /// <summary>Whether the choose-a-card screen shows its Skip button.</summary>
+    private bool AgentCanSkip => _cardSelector.PendingCanSkip == true;
+
     private Dictionary<string, object?>? ValidateSkipSelect()
     {
         if (!_cardSelector.HasPending)
             return Reject("no_pending_selection", "no card selection is pending");
-        // A cancelable prompt (Smith, Cook) can be closed without a choice, as with the
-        // game's cancel button; the option that opened it then fails.
-        if (_cardSelector.PendingMinSelect > 0 && _cardSelector.PendingCancelable != true)
+        if (AgentMinSelect > 0)
             return Reject("skip_not_allowed",
-                $"this prompt requires at least {_cardSelector.PendingMinSelect} card(s); choosing none is not allowed");
+                $"this prompt requires at least {AgentMinSelect} card(s); choosing none is not allowed"
+                + (AgentCancelable ? " (cancel_select closes it)" : "")
+                + (AgentCanSkip ? " (skip_card_choice skips it)" : ""));
+        return null;
+    }
+
+    private Dictionary<string, object?>? ValidateCancelSelect()
+    {
+        if (!_cardSelector.HasPending)
+            return Reject("no_pending_selection", "no card selection is pending");
+        if (!AgentCancelable)
+            return Reject("cancel_not_allowed", "this prompt is not cancelable");
+        return null;
+    }
+
+    private Dictionary<string, object?>? ValidateSkipCardChoice()
+    {
+        if (!_cardSelector.HasPending)
+            return Reject("no_pending_selection", "no card selection is pending");
+        if (!AgentCanSkip)
+            return Reject("skip_not_allowed", "this prompt has no Skip button");
         return null;
     }
 

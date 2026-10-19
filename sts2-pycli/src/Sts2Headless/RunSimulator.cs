@@ -1892,6 +1892,13 @@ public partial class RunSimulator
                     return DoSelectCards(player, args);
                 case "skip_select":
                     return DoSkipSelect(player);
+                // sts2-agent fork: the deck screen's Close button and the choose-a-card
+                // screen's Skip button; both answer the selection with no card, as
+                // skip_select does, but each only where the game shows that button.
+                case "cancel_select" when _agentMode:
+                    return DoSkipSelect(player, "Cancelling card selection");
+                case "skip_card_choice" when _agentMode:
+                    return DoSkipSelect(player, "Skipping the card choice");
                 case "use_potion":
                     return DoUsePotion(player, args);
                 case "discard_potion":
@@ -2703,11 +2710,11 @@ public partial class RunSimulator
         }
     }
 
-    private Dictionary<string, object?> DoSkipSelect(Player player)
+    private Dictionary<string, object?> DoSkipSelect(Player player, string what = "Skipping card selection")
     {
         if (_cardSelector.HasPending)
         {
-            Log("Skipping card selection");
+            Log(what);
             _cardSelector.CancelPending();
             _syncCtx.Pump();
             // sts2-agent fork: in agent mode wait for a follow-on selection (or for
@@ -3170,7 +3177,7 @@ public partial class RunSimulator
                 };
             }).ToList();
 
-            return new Dictionary<string, object?>
+            var cardSelect = new Dictionary<string, object?>
             {
                 ["type"] = "decision",
                 ["decision"] = "card_select",
@@ -3201,6 +3208,15 @@ public partial class RunSimulator
                 // (rest-site upgrade, event grant), where there is no board.
                 ["combat"] = InCombatBoard(player),
             };
+            // sts2-agent fork: agent mode tells skip, cancel and choosing nothing apart
+            // (RunSimulator.Agent.cs, AgentMinSelect).
+            if (_agentMode)
+            {
+                cardSelect["min_select"] = AgentMinSelect;
+                cardSelect["cancelable"] = AgentCancelable;
+                cardSelect["can_skip"] = AgentCanSkip;
+            }
+            return cardSelect;
         }
 
         // sts2-agent fork: a divination that hung, then the minigame waiting for a move.
@@ -7425,15 +7441,23 @@ public partial class RunSimulator
         /// agent could decline a card the game requires it to take.
         /// </summary>
         public static bool? Cancelable;
+        /// <summary>
+        /// sts2-agent fork: `FromChooseACardScreen`'s `canSkip` (whether the screen shows
+        /// its Skip button); null for every other entry point. Agent mode reports it as
+        /// `can_skip`, apart from `Cancelable` (the deck screens' Close button), which the
+        /// upstream field above merges it into.
+        /// </summary>
+        public static bool? CanSkip;
 
-        public static (string? source, string? promptKey, string? sourceModel, bool? cancelable)
+        public static (string? source, string? promptKey, string? sourceModel, bool? cancelable, bool? canSkip)
             Consume()
         {
-            (string?, string?, string?, bool?) v = (Source, PromptKey, SourceModel, Cancelable);
+            (string?, string?, string?, bool?, bool?) v = (Source, PromptKey, SourceModel, Cancelable, CanSkip);
             Source = null;
             PromptKey = null;
             SourceModel = null;
             Cancelable = null;
+            CanSkip = null;
             return v;
         }
 
@@ -7476,6 +7500,7 @@ public partial class RunSimulator
                 PromptKey = prefs.Prompt.LocEntryKey;
                 SourceModel = ModelEntryFrom(__args);
                 Cancelable = prefs.Cancelable;
+                CanSkip = null;
             }
             catch { /* capture-only: never break the game's selection flow */ }
         }
@@ -7495,6 +7520,7 @@ public partial class RunSimulator
                 Cancelable = __originalMethod.Name == "FromChooseACardScreen"
                     ? (__args?.OfType<bool>().Cast<bool?>().FirstOrDefault() ?? false)
                     : false;
+                CanSkip = __originalMethod.Name == "FromChooseACardScreen" ? Cancelable : null;
             }
             catch { }
         }
@@ -7527,6 +7553,8 @@ public partial class RunSimulator
         // CardSelectorPrefs.Cancelable verbatim; null when the entry point was
         // not patched (the driver then falls back to the min<=0 guess).
         public bool? PendingCancelable { get; private set; }
+        // sts2-agent fork: the choose-a-card screen's canSkip; null for any other entry point.
+        public bool? PendingCanSkip { get; private set; }
         private TaskCompletionSource<IEnumerable<CardModel>>? _pendingTcs;
 
         public bool HasPending => _pendingTcs != null && !_pendingTcs.Task.IsCompleted;
@@ -7550,7 +7578,7 @@ public partial class RunSimulator
             // THIS selection, so even the early-return paths (empty/single/
             // inline) must clear it or a later unrelated pending selection
             // would carry a stale prompt_key.
-            (string? ctxSource, string? ctxPromptKey, string? ctxSourceModel, bool? ctxCancelable) =
+            (string? ctxSource, string? ctxPromptKey, string? ctxSourceModel, bool? ctxCancelable, bool? ctxCanSkip) =
                 HeadlessCardSelectContext.Consume();
             var optList = options.ToList();
             // Pile tracer (STS2_TRACE_PILES): emit the option list IN PRESENTATION
@@ -7591,6 +7619,7 @@ public partial class RunSimulator
             PendingSource = ctxSource;
             PendingSourceModel = ctxSourceModel;
             PendingCancelable = ctxCancelable;
+            PendingCanSkip = ctxCanSkip;
             _pendingTcs = new TaskCompletionSource<IEnumerable<CardModel>>();
 
             Console.Error.WriteLine($"[SIM] Card selection pending: {optList.Count} options, select {minSelect}-{maxSelect}");
