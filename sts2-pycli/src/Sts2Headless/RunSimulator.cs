@@ -5453,7 +5453,7 @@ public partial class RunSimulator
 
     private Dictionary<string, object?> PlayerSummary(Player player)
     {
-        return new Dictionary<string, object?>
+        var summary = new Dictionary<string, object?>
         {
             ["name"] = _loc.Bilingual("characters", (player.Character?.Id.Entry ?? "IRONCLAD") + ".title"),
             ["hp"] = player.Creature?.CurrentHp ?? 0,
@@ -5557,6 +5557,9 @@ public partial class RunSimulator
                 };
             }).ToList(),
         };
+        // sts2-agent fork: which potions the game lets you drink now (RunSimulator.Agent.cs).
+        if (_agentMode) AgentPotionFields(summary, player);
+        return summary;
     }
 
     /// <summary>Common context added to every decision point.</summary>

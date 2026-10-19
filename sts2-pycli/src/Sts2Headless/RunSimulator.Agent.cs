@@ -390,18 +390,47 @@ public partial class RunSimulator
         if (!player.CanRemovePotions)
             return Reject("potions_locked", "potions cannot be used or discarded right now");
         if (!use) return null;
-        // The game's own Use button rules (NPotionPopup).
+        if (!PotionUsableNow(potion))
+            return Reject("potion_not_usable", $"{potion.Id.Entry} cannot be used here");
+        if (potion.TargetType == TargetType.AnyEnemy && CombatManager.Instance.IsInProgress)
+            return ValidateEnemyTarget(args);
+        return null;
+    }
+
+    /// <summary>
+    /// The game's Use-button rule (NPotionPopup.RefreshButtons): an AnyTime potion whenever
+    /// the belt can be clicked, a CombatOnly one in the play phase, never an Automatic one,
+    /// and the potion's own check (Foul Potion out of combat needs the merchant's node, so
+    /// Headless never passes it). Locked potions (CanRemovePotions) are checked apart.
+    /// </summary>
+    private bool PotionUsableNow(PotionModel potion)
+    {
         bool usable = potion.Usage switch
         {
             PotionUsage.AnyTime => true,
             PotionUsage.CombatOnly => CombatManager.Instance.IsInProgress && IsPlayPhase(),
             _ => false,
         };
-        if (!usable || !potion.PassesCustomUsabilityCheck)
-            return Reject("potion_not_usable", $"{potion.Id.Entry} cannot be used here");
-        if (potion.TargetType == TargetType.AnyEnemy && CombatManager.Instance.IsInProgress)
-            return ValidateEnemyTarget(args);
-        return null;
+        try { return usable && potion.PassesCustomUsabilityCheck; }
+        catch (Exception ex)
+        {
+            Log($"{potion.Id.Entry} usability check threw: {ex.GetType().Name}: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Agent mode's player summary: each potion says whether it can be drunk now (`usable`,
+    /// the rule validation applies), and `potions_locked` whether the belt is locked (no use,
+    /// no discard: Ranwid the Elder, Stone of All Time, The Future of Potions while they run).
+    /// </summary>
+    private void AgentPotionFields(Dictionary<string, object?> summary, Player player)
+    {
+        var locked = !player.CanRemovePotions;
+        summary["potions_locked"] = locked;
+        if (summary.GetValueOrDefault("potions") is not List<Dictionary<string, object?>> dicts) return;
+        foreach (var (dict, potion) in dicts.Zip(player.Potions.Where(p => p != null)))
+            dict["usable"] = !locked && PotionUsableNow(potion);
     }
 
     private Dictionary<string, object?>? ValidateEnemyTarget(Dictionary<string, object?>? args)
