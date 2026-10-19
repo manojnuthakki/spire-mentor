@@ -87,8 +87,12 @@ public partial class RunSimulator
             items.Add(new()
             {
                 ["kind"] = CrystalSphereItemKind(item),
-                // The card reward's banner shows its rarity (common, uncommon, rare).
+                // The card reward's banner shows its rarity (common, uncommon, rare), but only
+                // once part of it is uncovered: the banner, and every pixel where the rarity
+                // pictures differ, lies in the card's top half (rows 9-70 of the 229-pixel
+                // textures, across both columns), i.e. the item's top row of cells.
                 ["rarity"] = item is MegaCrit.Sts2.Core.Events.Custom.CrystalSphereEvent.CrystalSphereItems.CrystalSphereCardReward
+                             && Enumerable.Range(0, item.Size.X).Any(dx => !game.cells[item.Position.X + dx, item.Position.Y].IsHidden)
                     ? CardRewardRarityField?.GetValue(item)?.ToString()?.ToLowerInvariant()
                     : null,
                 ["x"] = item.Position.X,
