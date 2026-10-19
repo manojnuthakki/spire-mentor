@@ -330,6 +330,7 @@ public partial class RunSimulator
             _agentSphereClick = null;
             PendingCrystalSphere = null;
             _cardSelector.WaitForever = agentMode;
+            _cardSelector.KeepCancelableSingletons = agentMode;
             AgentCustomRewardsOffer = agentMode ? OfferCustomRewardsToClient : null;
             _lastDecision = null;
             return Tracked("start_run", () => StartRunImpl(character, ascension, seed, lang, playedSave, act1));
@@ -7571,6 +7572,10 @@ public partial class RunSimulator
         // the Rust engine's inline auto-play choice resolution. Bead to file.
         public bool AutoResolveInline;
 
+        // sts2-agent fork (agent mode): a cancelable prompt with a single candidate stays
+        // pending instead of being answered with that card (GetSelectedCards).
+        public bool KeepCancelableSingletons;
+
         public Task<IEnumerable<CardModel>> GetSelectedCards(
             IEnumerable<CardModel> options, int minSelect, int maxSelect)
         {
@@ -7598,7 +7603,13 @@ public partial class RunSimulator
                 return Task.FromResult<IEnumerable<CardModel>>(Array.Empty<CardModel>());
 
             // If only one option and minSelect requires it, auto-select
-            if (optList.Count == 1 && minSelect >= 1)
+            // sts2-agent fork: not a cancelable prompt in agent mode. The game itself
+            // resolves a prompt with no more cards than MinSelect unless it requires
+            // manual confirmation (CardSelectCmd.FromDeckForUpgrade and the like), so a
+            // singleton that reaches the selector is a screen the player sees; for Smith
+            // with one upgradable card (Cancelable, RequireManualConfirmation) its Close
+            // button is a real choice, and picking for the player would spend the rest.
+            if (optList.Count == 1 && minSelect >= 1 && !(KeepCancelableSingletons && ctxCancelable == true))
                 return Task.FromResult<IEnumerable<CardModel>>(optList);
 
             // Nested-choice inline resolution (see AutoResolveInline above):
