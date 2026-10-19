@@ -327,6 +327,7 @@ public partial class RunSimulator
         {
             _agentMode = agentMode;
             AgentModeActive = agentMode;
+            _agentSphereClick = null;
             PendingCrystalSphere = null;
             _cardSelector.WaitForever = agentMode;
             AgentCustomRewardsOffer = agentMode ? OfferCustomRewardsToClient : null;
@@ -3202,7 +3203,9 @@ public partial class RunSimulator
             };
         }
 
-        // sts2-agent fork: the Crystal Sphere minigame waiting for a move.
+        // sts2-agent fork: a divination that hung, then the minigame waiting for a move.
+        if (_agentMode && PendingSphereClickFailure() is { } hung)
+            return hung;
         if (_agentMode && CrystalSpherePending)
             return CrystalSphereState(PendingCrystalSphere!, player);
 
@@ -4647,7 +4650,11 @@ public partial class RunSimulator
                     {
                         optVars = new Dictionary<string, object?>();
                         foreach (var dv in localEvent.DynamicVars.Values)
-                            optVars[dv.Name] = (int)dv.BaseValue;
+                            // sts2-agent fork: a text variable (CrystalSphere's CurseTitle) is
+                            // its text, not a number, in agent mode.
+                            optVars[dv.Name] = _agentMode && dv is MegaCrit.Sts2.Core.Localization.DynamicVars.StringVar sv
+                                ? _loc.BilingualFromKey(sv.StringValue ?? "")
+                                : (int)dv.BaseValue;
                     }
                 }
                 catch { }

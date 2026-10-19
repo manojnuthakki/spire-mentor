@@ -39,6 +39,13 @@ public partial class RunSimulator
 
     private static System.Reflection.FieldInfo? CrystalSphereCompletionField;
 
+    private static readonly System.Reflection.FieldInfo? CardRewardRarityField =
+        typeof(MegaCrit.Sts2.Core.Events.Custom.CrystalSphereEvent.CrystalSphereItems.CrystalSphereCardReward)
+            .GetField("_rarity", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+    /// <summary>A divination that has not finished (it hung): reported until it does.</summary>
+    private Task? _agentSphereClick;
+
     private static bool CrystalSpherePending =>
         PendingCrystalSphere is { } game && !game.IsFinished;
 
@@ -80,6 +87,10 @@ public partial class RunSimulator
             items.Add(new()
             {
                 ["kind"] = CrystalSphereItemKind(item),
+                // The card reward's banner shows its rarity (common, uncommon, rare).
+                ["rarity"] = item is MegaCrit.Sts2.Core.Events.Custom.CrystalSphereEvent.CrystalSphereItems.CrystalSphereCardReward
+                    ? CardRewardRarityField?.GetValue(item)?.ToString()?.ToLowerInvariant()
+                    : null,
                 ["x"] = item.Position.X,
                 ["y"] = item.Position.Y,
                 ["width"] = item.Size.X,
@@ -97,7 +108,8 @@ public partial class RunSimulator
             ["cleared"] = cleared,
             ["divinations_left"] = game.DivinationCount,
             ["tool"] = game.CrystalSphereTool == CrystalSphereMinigame.CrystalSphereToolType.Small ? "small" : "big",
-            ["items"] = items,
+            // By position, not in the order the game generated them (which the screen doesn't show).
+            ["items"] = items.OrderBy(i => (int)i["y"]!).ThenBy(i => (int)i["x"]!).ToList(),
             ["player"] = PlayerSummary(player),
         };
     }
@@ -111,6 +123,27 @@ public partial class RunSimulator
         MegaCrit.Sts2.Core.Events.Custom.CrystalSphereEvent.CrystalSphereItems.CrystalSphereRelic => "relic",
         _ => item.GetType().Name,
     };
+
+    /// <summary>A prompt other than the minigame itself is waiting for the client.</summary>
+    private bool OtherSelectionPending() =>
+        _cardSelector.HasPending || _cardSelector.HasPendingReward || _pendingBundles != null || CustomRewardsPending;
+
+    private Dictionary<string, object?> SphereClickNotSettled() =>
+        Failure("timeout", "started", "the Crystal Sphere divination did not finish", "the divination to complete",
+            "divine_not_settled");
+
+    /// <summary>
+    /// A divination that hung: until it completes, no decision is presented (its effects
+    /// may still land). Null when there is none, or once it has finished.
+    /// </summary>
+    private Dictionary<string, object?>? PendingSphereClickFailure()
+    {
+        if (_agentSphereClick == null) return null;
+        if (!_agentSphereClick.IsCompleted) return SphereClickNotSettled();
+        if (_agentSphereClick.IsFaulted) LogException("Crystal Sphere divination", _agentSphereClick.Exception!);
+        _agentSphereClick = null;
+        return null;
+    }
 
     private Dictionary<string, object?>? ValidateDivine(Dictionary<string, object?>? args)
     {
@@ -146,9 +179,14 @@ public partial class RunSimulator
             await game.CellClicked(game.cells[x, y]);
         });
         // The last divination completes the minigame, and the event option awaiting it
-        // goes on (on this task) to offer the revealed items: wait until the click is
-        // done or that offer is waiting for the client.
-        WaitUntilOptionTaskSettles(click, "Crystal Sphere divination");
+        // goes on to offer the revealed items: wait until the click is done or that offer
+        // (or another prompt) is waiting for the client. The minigame's own pending state
+        // doesn't count: it is pending before the click starts.
+        if (!WaitFor(() => click.IsCompleted || OtherSelectionPending(), SettleCapMs, "Crystal Sphere divination"))
+        {
+            _agentSphereClick = click;
+            return SphereClickNotSettled();
+        }
         if (click.IsFaulted) LogException("Crystal Sphere divination", click.Exception!);
         WaitForActionExecutor();
         _syncCtx.Pump();
