@@ -304,6 +304,19 @@ public partial class RunSimulator
         try { dict["enchantment_amount"] = card.Enchantment.Amount; } catch { }
     }
 
+    /// <summary>
+    /// Agent mode: a card reward's offers say whether they are upgraded (Molten Egg and the
+    /// like upgrade them as they are generated) and enchanted, as the screen shows them.
+    /// </summary>
+    private static void AgentRewardCardExtras(List<Dictionary<string, object?>> dicts, IEnumerable<MegaCrit.Sts2.Core.Models.CardModel> cards)
+    {
+        foreach (var (dict, card) in dicts.Zip(cards))
+        {
+            dict["upgraded"] = card.IsUpgraded;
+            AgentCardExtras(dict, card);
+        }
+    }
+
     private Dictionary<string, object?> ProceedFromShop()
     {
         Log("Shop: proceeding to the map");

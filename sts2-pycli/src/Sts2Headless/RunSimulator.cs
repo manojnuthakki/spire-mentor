@@ -3156,6 +3156,7 @@ public partial class RunSimulator
                 decision["alternatives"] = alternatives;
                 decision["can_skip"] = alternatives.Any(a => a["id"] as string == "Skip");
                 decision["from_event"] = _pendingRewardClaims.Count == 0;
+                AgentRewardCardExtras(cards, rewardCards.Select(cr => cr.Card));
             }
             return decision;
         }
@@ -4530,6 +4531,8 @@ public partial class RunSimulator
             };
         }).ToList();
 
+        // sts2-agent fork: what the offered cards are, as shown (RunSimulator.Shop.cs).
+        if (_agentMode) AgentRewardCardExtras(cards, _pendingCardReward.Cards);
         return new Dictionary<string, object?>
         {
             ["type"] = "decision",
