@@ -5047,6 +5047,12 @@ public partial class RunSimulator
                 else
                 {
                     idleStreak = 0;
+                    // sts2-agent fork: an action paused on a player choice keeps the
+                    // executor running (IsRunning is its queue task, not complete until
+                    // the queue drains) until the client answers, so this ran to the cap:
+                    // ~1.2 s per selection-opening card play. Only the client completes
+                    // a pending choice; stop waiting once one is pending.
+                    if (AnySelectionPending()) break;
                 }
                 Thread.Sleep(1);
             }
