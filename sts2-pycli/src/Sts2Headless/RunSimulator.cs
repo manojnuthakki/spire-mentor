@@ -3221,6 +3221,8 @@ public partial class RunSimulator
                 cardSelect["min_select"] = AgentMinSelect;
                 cardSelect["cancelable"] = AgentCancelable;
                 cardSelect["can_skip"] = AgentCanSkip;
+                foreach (var (dict, card) in opts.Zip(_cardSelector.PendingOptions))
+                    AgentCardExtras(dict, card);
             }
             return cardSelect;
         }
@@ -3999,6 +4001,7 @@ public partial class RunSimulator
         if (c.Enchantment != null)
         {
             cardInfo["enchantment"] = _loc.Bilingual("enchantments", c.Enchantment.Id.Entry + ".title");
+            if (_agentMode) AgentCardExtras(cardInfo, c);  // sts2-agent fork
             try { if (c.Enchantment.Amount != 0) cardInfo["enchantment_amount"] = c.Enchantment.Amount; } catch { }
         }
         if (c.Affliction != null)

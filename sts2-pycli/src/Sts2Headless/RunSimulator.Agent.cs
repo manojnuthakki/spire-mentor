@@ -428,6 +428,9 @@ public partial class RunSimulator
     {
         var locked = !player.CanRemovePotions;
         summary["potions_locked"] = locked;
+        if (summary.GetValueOrDefault("deck") is List<Dictionary<string, object?>> deck)
+            foreach (var (dict, card) in deck.Zip(player.Deck.Cards.Where(c => c != null)))
+                AgentCardExtras(dict, card);
         if (summary.GetValueOrDefault("potions") is not List<Dictionary<string, object?>> dicts) return;
         foreach (var (dict, potion) in dicts.Zip(player.Potions.Where(p => p != null)))
             dict["usable"] = !locked && PotionUsableNow(potion);

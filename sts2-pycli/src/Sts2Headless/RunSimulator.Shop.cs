@@ -47,8 +47,8 @@ public partial class RunSimulator
     /// <summary>Lord's Parasol's purchases, started on entering a shop (set by its prefix).</summary>
     private static Task? _agentParasolTask;
 
-    /// <summary>What Lord's Parasol is buying, reported once as a forced step.</summary>
-    private static List<Dictionary<string, object?>>? _agentParasolItems;
+    /// <summary>What Lord's Parasol has bought and not yet reported (a forced step on the next decision).</summary>
+    private static readonly List<Dictionary<string, object?>> _agentParasolItems = new();
 
     private static bool _shopPatchesInstalled;
 
@@ -76,17 +76,15 @@ public partial class RunSimulator
     private static bool LordsParasolPrefix(MerchantInventory inventory, ref Task __result)
     {
         if (!AgentModeActive) return true;
-        _agentParasolItems = inventory.CharacterCardEntries.Concat(inventory.ColorlessCardEntries)
-            .Where(e => e.IsStocked)
-            .Select(e => Item("card", e.CreationResult!.Card.Id.Entry))
-            .Concat(inventory.RelicEntries.Where(e => e.IsStocked).Select(e => Item("relic", e.Model!.Id.Entry)))
-            .Concat(inventory.PotionEntries.Where(e => e.IsStocked).Select(e => Item("potion", e.Model!.Id.Entry)))
-            .Concat(inventory.CardRemovalEntry is { Used: false } ? new[] { Item("card_removal", null) } : Array.Empty<Dictionary<string, object?>>())
-            .ToList();
+        lock (_agentParasolItems) _agentParasolItems.Clear();
         __result = _agentParasolTask = PurchaseEverythingHeadless(inventory);
         return false;
+    }
 
-        static Dictionary<string, object?> Item(string type, string? id) => new() { ["type"] = type, ["id"] = id };
+    /// <summary>A purchase Lord's Parasol completed (a full belt or a hook can refuse one).</summary>
+    private static void ParasolBought(string type, string? id)
+    {
+        lock (_agentParasolItems) _agentParasolItems.Add(new() { ["type"] = type, ["id"] = id });
     }
 
     /// <summary>
@@ -103,11 +101,24 @@ public partial class RunSimulator
         entries.AddRange(inventory.RelicEntries);
         entries.AddRange(inventory.PotionEntries);
         foreach (var entry in entries)
-            if (entry.IsStocked)
-                await entry.OnTryPurchaseWrapper(inventory, true);
+        {
+            if (!entry.IsStocked) continue;
+            // Read before buying: a completed purchase clears the entry's item.
+            var (type, id) = entry switch
+            {
+                MerchantCardEntry c => ("card", c.CreationResult?.Card.Id.Entry),
+                MerchantRelicEntry r => ("relic", r.Model?.Id.Entry),
+                MerchantPotionEntry p => ("potion", p.Model?.Id.Entry),
+                _ => ("item", null),
+            };
+            if (await entry.OnTryPurchaseWrapper(inventory, true)) ParasolBought(type, id);
+        }
         var removal = inventory.CardRemovalEntry;
         if (removal != null && !removal.Used && await removal.OnTryPurchaseWrapper(inventory, true, false))
+        {
             removal.SetUsed();
+            ParasolBought("card_removal", null);
+        }
     }
 
     /// <summary>
@@ -116,11 +127,6 @@ public partial class RunSimulator
     /// </summary>
     private void DriveAgentShopTask()
     {
-        if (_agentParasolItems != null)
-        {
-            _agentForced.Add(new() { ["kind"] = "purchase_everything", ["items"] = _agentParasolItems });
-            _agentParasolItems = null;
-        }
         if (_agentParasolTask != null && !AnySelectionPending())
         {
             WaitUntilOptionTaskSettles(_agentParasolTask, "Lord's Parasol purchases (until next prompt or completion)");
@@ -131,6 +137,16 @@ public partial class RunSimulator
                 if (task.IsFaulted) LogException("Lord's Parasol", task.Exception!);
                 WaitForActionExecutor();
                 _syncCtx.Pump();
+            }
+        }
+        // What it has bought so far, reported with the decision that follows (the rest, after a
+        // prompt it opened, with a later one).
+        lock (_agentParasolItems)
+        {
+            if (_agentParasolItems.Count > 0)
+            {
+                _agentForced.Add(new() { ["kind"] = "purchase_everything", ["items"] = _agentParasolItems.ToList() });
+                _agentParasolItems.Clear();
             }
         }
         if (_agentShopTask != null && !AnySelectionPending())
@@ -162,6 +178,10 @@ public partial class RunSimulator
         }
         else if (!entry.IsStocked) return "sold_out";
         if (!entry.EnoughGold) return "not_enough_gold";
+        // The removal offers the deck's removable cards (CardSelectCmd.FromDeckForRemoval); with
+        // none it spends nothing and does nothing.
+        if (entry is MerchantCardRemovalEntry && !player.Deck.Cards.Any(c => c != null && c.IsRemovable))
+            return "no_removable_cards";
         if (entry is MerchantPotionEntry potion)
         {
             if (!Hook.ShouldProcurePotion(_runState!, player.Creature?.CombatState, potion.Model!, player))
@@ -199,6 +219,15 @@ public partial class RunSimulator
             var card = entry.CreationResult?.Card;
             dict["rarity"] = card?.Rarity.ToString();
             dict["upgraded"] = card?.IsUpgraded;
+            if (card == null) continue;
+            // The card's own values: ShopState's ToMutable() throws on this (already mutable) card,
+            // so its stats were always empty.
+            var stats = new Dictionary<string, object?>();
+            try { foreach (var dv in card.DynamicVars.Values) stats[dv.Name.ToLowerInvariant()] = (int)dv.BaseValue; } catch { }
+            dict["stats"] = stats.Count > 0 ? stats : null;
+            var kws = card.Keywords?.Where(k => k != MegaCrit.Sts2.Core.Entities.Cards.CardKeyword.None).Select(k => k.ToString()).ToList();
+            dict["keywords"] = kws?.Count > 0 ? kws : null;
+            AgentCardExtras(dict, card);
         }
         Mark(cards, cardEntries, "id", "name", "type", "card_cost", "description", "stats", "after_upgrade", "rarity", "upgraded");
         Mark((List<Dictionary<string, object?>>)state["relics"]!, inv.RelicEntries, "id", "name", "description", "vars");
@@ -262,6 +291,17 @@ public partial class RunSimulator
             return removal != null ? removal.OnTryPurchaseWrapper(inv, false, true) : entry.OnTryPurchaseWrapper(inv, false);
         });
         return DetectDecisionPoint();
+    }
+
+    /// <summary>
+    /// Agent mode: a card's enchantment, by model id and amount (Kifuda's Adroit 3), so two
+    /// otherwise equal cards are told apart as on screen. Added only to an enchanted card.
+    /// </summary>
+    private static void AgentCardExtras(Dictionary<string, object?> dict, MegaCrit.Sts2.Core.Models.CardModel card)
+    {
+        if (card.Enchantment == null) return;
+        dict["enchantment_id"] = card.Enchantment.Id.Entry;
+        try { dict["enchantment_amount"] = card.Enchantment.Amount; } catch { }
     }
 
     private Dictionary<string, object?> ProceedFromShop()
