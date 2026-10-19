@@ -4448,9 +4448,14 @@ public partial class RunSimulator
             Log("Boss defeated, entering next act");
             try
             {
+                var actBefore = _runState?.CurrentActIndex;
                 RunManager.Instance.EnterNextAct().GetAwaiter().GetResult();
                 _syncCtx.Pump();
                 WaitForActionExecutor();
+                // sts2-agent fork: the next act is reported with the decision it leads to
+                // (after the last act's boss no act follows: TheArchitect's event comes next).
+                if (_agentMode && _runState != null && _runState.CurrentActIndex != actBefore)
+                    _agentForced.Add(new() { ["kind"] = "next_act", ["act"] = _runState.CurrentActIndex + 1 });
 
                 // Each non-first act's map begins on an Ancient node whose event
                 // offers the act-boss relic (a 1-of-3 choice). The shipped game
@@ -4471,9 +4476,18 @@ public partial class RunSimulator
                     && _runState!.CurrentRoom is MapRoom)
                 {
                     Log("Auto-entering act-start Ancient node for boss-relic choice");
-                    RunManager.Instance.EnterMapCoord(nextMap.StartingMapPoint.coord).GetAwaiter().GetResult();
+                    var start = nextMap.StartingMapPoint.coord;
+                    RunManager.Instance.EnterMapCoord(start).GetAwaiter().GetResult();
                     _syncCtx.Pump();
                     WaitForActionExecutor();
+                    // sts2-agent fork: the host entered the Ancient's node for the player
+                    // (the game waits for a click on it), so the client is told.
+                    if (_agentMode)
+                        _agentForced.Add(new()
+                        {
+                            ["kind"] = "enter_ancient",
+                            ["node"] = new Dictionary<string, object?> { ["col"] = (int)start.col, ["row"] = (int)start.row },
+                        });
                 }
             }
             catch (Exception ex) { LogException("EnterNextAct", ex); }
@@ -4773,7 +4787,7 @@ public partial class RunSimulator
                 eventDesc = d;
         }
 
-        return new Dictionary<string, object?>
+        var page = new Dictionary<string, object?>
         {
             ["type"] = "decision",
             ["decision"] = "event_choice",
@@ -4783,6 +4797,10 @@ public partial class RunSimulator
             ["options"] = options,
             ["player"] = PlayerSummary(_runState!.Players[0]),
         };
+        // sts2-agent fork: the event's model id on every page (agent mode), so the client
+        // needn't infer it from option keys (TheArchitect's last page has only PROCEED).
+        if (_agentMode) page["event_id"] = eventEntry;
+        return page;
     }
 
     private Dictionary<string, object?> RestSiteState(RestSiteRoom restRoom)
@@ -4981,6 +4999,10 @@ public partial class RunSimulator
         // BUG-005: When player died, the engine resets HP to max. Use last known HP instead.
         if (!isVictory)
             summary["hp"] = _lastKnownHp > 0 ? 0 : (player.Creature?.CurrentHp ?? 0);
+        // sts2-agent fork: a won run also kills the player (WinRun → GuaranteeKillAllPlayers),
+        // so its hp read 0; report the hp the run was won with (agent mode).
+        else if (_agentMode && player.Creature is { IsDead: true } && _agentHpBeforeCommand > 0)
+            summary["hp"] = _agentHpBeforeCommand;
         return new Dictionary<string, object?>
         {
             ["type"] = "decision",

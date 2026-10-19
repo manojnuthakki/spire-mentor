@@ -55,7 +55,8 @@ public partial class RunSimulator
 
     /// <summary>
     /// Steps the host took on its own while a command ran (agent mode), returned with the
-    /// command's decision as `forced`: {kind: "open_chest", gold}.
+    /// command's decision as `forced`: {kind: "open_chest", gold}; after a boss
+    /// {kind: "next_act", act} and {kind: "enter_ancient", node: {col, row}} (RunSimulator.cs).
     /// </summary>
     private readonly List<Dictionary<string, object?>> _agentForced = new();
 

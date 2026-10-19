@@ -34,6 +34,10 @@ public partial class RunSimulator
     /// </summary>
     private Dictionary<string, object?>? _lastDecision;
 
+    /// <summary>The player's hp when the current command started, while alive (agent mode):
+    /// the hp a won run ends with, since winning kills the player.</summary>
+    private int _agentHpBeforeCommand;
+
     /// <summary>
     /// Actions each decision kind accepts. A kind not listed (e.g. "unknown") is not
     /// checked. Potion use and discard are accepted wherever the host accepted them
@@ -69,6 +73,8 @@ public partial class RunSimulator
         foreach (var stray in EngineErrors.Drain())
             Log($"[WARN] engine error between commands (not reported): {stray}");
         _agentForced.Clear();
+        if (_runState?.Players[0].Creature is { IsDead: false } alive)
+            _agentHpBeforeCommand = alive.CurrentHp;
 
         var result = work();
         var forced = _agentForced.ToList();
