@@ -3100,7 +3100,8 @@ public partial class RunSimulator
             var bundles = _pendingBundles.Select((bundle, i) => new Dictionary<string, object?>
             {
                 ["index"] = i,
-                ["cards"] = bundle.Select(card =>
+                // sts2-agent fork: the deck's card JSON, ids included (RunSimulator.Events.cs).
+                ["cards"] = _agentMode ? bundle.Select(AgentCardDict).ToList() : bundle.Select(card =>
                 {
                     var stats = new Dictionary<string, object?>();
                     try { foreach (var dv in card.DynamicVars.Values) stats[dv.Name.ToLowerInvariant()] = (int)dv.BaseValue; } catch { }

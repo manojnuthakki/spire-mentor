@@ -194,6 +194,7 @@ public partial class RunSimulator
             case "take_relic": return ValidateTakeRelic(args);
             case "buy_card" or "buy_relic" or "buy_potion" or "remove_card": return ValidateShopBuy(action, args, player);
             case "divine": return ValidateDivine(args);
+            case "select_bundle": return ValidateSelectBundle(args);
             case "choose_option": return ValidateChooseOption(args);
             case "select_map_node": return ValidateMapNode(args);
             case "play_card": return ValidatePlayCard(args, player);
@@ -347,6 +348,19 @@ public partial class RunSimulator
                 // (RunSimulator.Events.cs).
                 ? Reject("option_unavailable", $"option {index} is not available ({option.GetValueOrDefault("reason")})")
                 : Reject("option_disabled", $"option {index} is not available");
+        return null;
+    }
+
+    /// <summary>Scroll Boxes' bundle choice: one of the bundles shown (upstream took bundle 0
+    /// for any index out of range, and failed unstructured without one).</summary>
+    private Dictionary<string, object?>? ValidateSelectBundle(Dictionary<string, object?>? args)
+    {
+        if (_pendingBundles == null || _pendingBundleTcs == null || _pendingBundleTcs.Task.IsCompleted)
+            return Reject("no_pending_bundle", "no bundle choice is pending");
+        if (!TryGetInt(args, "bundle_index", out var index))
+            return Reject("missing_argument", "select_bundle requires 'bundle_index'");
+        if (index < 0 || index >= _pendingBundles.Count)
+            return Reject("invalid_bundle_index", $"bundle index {index} is outside 0..{_pendingBundles.Count - 1}");
         return null;
     }
 
