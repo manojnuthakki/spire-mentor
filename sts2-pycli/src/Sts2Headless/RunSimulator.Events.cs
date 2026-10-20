@@ -20,7 +20,9 @@
 //
 // Each option carries the cards its hover tips show (HoverTipFactory.FromCard: Slippery
 // Bridge's card to lose, Tinker Time's Mad Science previews) as `cards`, in the deck's card
-// JSON. With agent mode off none of this runs.
+// JSON. An option's own text variables (set on its title or description rather than on the
+// event: The Future of Potions' potion, rarities and card type) are sent too: the title
+// rendered with its own, the description's in `vars`. With agent mode off none of this runs.
 
 using System.Text.RegularExpressions;
 using MegaCrit.Sts2.Core.Events;
@@ -73,6 +75,59 @@ public partial class RunSimulator
         var cards = (opt.HoverTips ?? Enumerable.Empty<IHoverTip>()).OfType<CardHoverTip>()
             .Select(t => t.Card).Where(c => c != null).Select(AgentCardDict).ToList();
         if (cards.Count > 0) dict["cards"] = cards;
+
+        // The option's own text variables (LocString.Add on its title or description), the
+        // ones its text names: the game also gives every option's description the
+        // character's pronouns and IsMultiplayer (EventOption.AddLocVars), which only a
+        // template that uses them needs (Morphic Grove's GROUP). The title is sent rendered,
+        // as its button shows it; the description's variables join `vars`, over the event's
+        // own of the same name. The two sets stay apart: in The Future of Potions `Rarity` is
+        // the potion's rarity in the title ("Insert Event Potion") but the promised card's in
+        // the description ({Potion}, {Rarity}, {Type}).
+        var titleVars = AgentOwnVars(opt.Title, dict.GetValueOrDefault("title") as string);
+        if (titleVars.Count > 0 && dict.GetValueOrDefault("title") is string template)
+            dict["title"] = OwnVar.Replace(template, m =>
+                titleVars.TryGetValue(m.Groups[1].Value, out var v) && m.Groups[2].Length == 0
+                    ? v?.ToString() ?? "" : m.Value);
+        var descriptionVars = AgentOwnVars(opt.Description, dict.GetValueOrDefault("description") as string);
+        if (descriptionVars.Count > 0)
+        {
+            var vars = dict.GetValueOrDefault("vars") as Dictionary<string, object?> ?? new();
+            foreach (var (name, value) in descriptionVars) vars[name] = value;
+            dict["vars"] = vars;
+        }
+    }
+
+    /// <summary>A placeholder in a loc template: its name, and a format if it has one ({Cards:plural:...}).</summary>
+    private static readonly Regex OwnVar = new(@"\{(\w+)(:[^}]*)?\}");
+
+    /// <summary>
+    /// The variables a LocString carries that its template names, as the game shows them:
+    /// text rendered, numbers as numbers, flags as flags.
+    /// </summary>
+    private Dictionary<string, object?> AgentOwnVars(MegaCrit.Sts2.Core.Localization.LocString? loc, string? template)
+    {
+        var vars = new Dictionary<string, object?>();
+        if (loc == null || string.IsNullOrEmpty(template)) return vars;
+        var named = OwnVar.Matches(template).Select(m => m.Groups[1].Value).ToHashSet();
+        try
+        {
+            foreach (var (name, value) in loc.Variables)
+            {
+                if (!named.Contains(name)) continue;
+                vars[name] = value switch
+                {
+                    MegaCrit.Sts2.Core.Localization.DynamicVars.StringVar sv => AgentLocText(sv.StringValue ?? ""),
+                    MegaCrit.Sts2.Core.Localization.DynamicVars.DynamicVar dv => (int)dv.BaseValue,
+                    MegaCrit.Sts2.Core.Localization.LocString nested => LocText(nested),
+                    string text => AgentLocText(text),
+                    bool or int => value,
+                    _ => value?.ToString(),
+                };
+            }
+        }
+        catch (Exception ex) { Log($"Event option vars unreadable: {ex.Message}"); }
+        return vars;
     }
 
     /// <summary>A card in the deck's JSON, with agent mode's extras.</summary>
