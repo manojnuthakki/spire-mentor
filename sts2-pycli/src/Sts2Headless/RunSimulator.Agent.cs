@@ -342,7 +342,11 @@ public partial class RunSimulator
         if (option.GetValueOrDefault("is_locked") is true)
             return Reject("option_locked", $"option {index} is locked");
         if (option.GetValueOrDefault("is_enabled") is false)
-            return Reject("option_disabled", $"option {index} is not available");
+            return _lastDecision.GetValueOrDefault("decision") as string == "event_choice"
+                // An event option the host disabled: no effect last time, or Trial's DOUBLE_DOWN
+                // (RunSimulator.Events.cs).
+                ? Reject("option_unavailable", $"option {index} is not available ({option.GetValueOrDefault("reason")})")
+                : Reject("option_disabled", $"option {index} is not available");
         return null;
     }
 
@@ -491,9 +495,10 @@ internal static class EngineErrors
 /// <summary>
 /// sts2-agent fork: test-only fault injection, for scenarios that check how failures
 /// are reported. <c>STS2_TEST_FAULT</c> is <c>hang:TYPE:METHOD</c> or
-/// <c>throw:TYPE:METHOD</c>, naming a game method that returns a Task (for example
-/// <c>hang:MegaCrit.Sts2.Core.Models.MonsterModel:PerformMove</c>). Every call then
-/// returns a task that never completes, or one that faults, in place of the real body.
+/// <c>throw:TYPE:METHOD</c> or <c>noop:TYPE:METHOD</c>, naming a game method that returns a
+/// Task (for example <c>hang:MegaCrit.Sts2.Core.Models.MonsterModel:PerformMove</c>). Every
+/// call then returns a task that never completes, one that faults, or one already completed
+/// (the body doesn't run), in place of the real body.
 /// Unset (the normal case) installs nothing.
 /// </summary>
 internal static class TestFaults
@@ -506,21 +511,32 @@ internal static class TestFaults
         if (string.IsNullOrEmpty(fault)) return;
         var parts = fault.Split(':', 2);
         var method = parts.Length == 2 ? AccessTools.Method(parts[1]) : null;
-        if (parts[0] is not ("hang" or "throw") || method == null || method.ReturnType != typeof(Task))
+        if (parts[0] is not ("hang" or "throw" or "noop") || method == null || method.ReturnType != typeof(Task))
         {
             // A misspelt test knob must not quietly run the scenario without its fault.
-            Console.Error.WriteLine($"[FATAL] STS2_TEST_FAULT '{fault}': expected hang|throw:TYPE:METHOD returning Task");
+            Console.Error.WriteLine($"[FATAL] STS2_TEST_FAULT '{fault}': expected hang|throw|noop:TYPE:METHOD returning Task");
             Environment.Exit(2);
         }
         _fault = fault;
         new Harmony("sts2headless.testfault").Patch(method,
-            new HarmonyMethod(typeof(TestFaults), parts[0] == "hang" ? nameof(HangPrefix) : nameof(ThrowPrefix)));
+            new HarmonyMethod(typeof(TestFaults), parts[0] switch
+            {
+                "hang" => nameof(HangPrefix),
+                "throw" => nameof(ThrowPrefix),
+                _ => nameof(NoopPrefix),
+            }));
         Console.Error.WriteLine($"[TEST] fault injected: {fault}");
     }
 
     public static bool HangPrefix(ref Task __result)
     {
         __result = new TaskCompletionSource().Task;
+        return false;
+    }
+
+    public static bool NoopPrefix(ref Task __result)
+    {
+        __result = Task.CompletedTask;
         return false;
     }
 

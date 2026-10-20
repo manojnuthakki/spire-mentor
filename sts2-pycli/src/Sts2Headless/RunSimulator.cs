@@ -2916,6 +2916,7 @@ public partial class RunSimulator
                     try
                     {
                         _eventOptionChosen = true;
+                        _agentLastEventOption = optionIndex;
                         _lastEventAdvanceCount = advanceBefore;
                         // Hand out the non-null NGame stub for the duration of this leg
                         // only — see YieldPatches.EventOptionInFlight for why it must not
@@ -3004,7 +3005,14 @@ public partial class RunSimulator
                 var optsAfter = localEvent.CurrentOptions;
                 var optCountAfter = optsAfter?.Count ?? 0;
                 var advanced = Volatile.Read(ref _eventAdvanceCount) != advanceBefore;
-                if (!localEvent.IsFinished && !advanced && optCountAfter > 0)
+                if (!localEvent.IsFinished && !advanced && optCountAfter > 0 && _agentMode)
+                {
+                    // sts2-agent fork: as the game, the page stays, with the option
+                    // disabled (RunSimulator.Events.cs).
+                    AgentMarkNoEffect(localEvent, optionIndex);
+                    _eventOptionChosen = false;
+                }
+                else if (!localEvent.IsFinished && !advanced && optCountAfter > 0)
                 {
                     Log($"Event {localEvent.GetType().Name} didn't advance, force-finishing");
                     ForceToMap();
@@ -4593,7 +4601,12 @@ public partial class RunSimulator
             var sameEvent = ReferenceEquals(localEvent, _advanceTrackedEvent);
             var stuck = sameEvent && currentOpts != null && currentOpts.Count > 0 &&
                 Volatile.Read(ref _eventAdvanceCount) == _lastEventAdvanceCount;
-            if (stuck)
+            if (stuck && _agentMode && _agentLastEventOption >= 0)
+            {
+                // sts2-agent fork: shown again with the option disabled (RunSimulator.Events.cs).
+                AgentMarkNoEffect(localEvent, _agentLastEventOption);
+            }
+            else if (stuck)
             {
                 Log($"Event {localEvent.GetType().Name}: same options after choice, force-finishing");
                 _eventOptionChosen = false;
@@ -4608,6 +4621,7 @@ public partial class RunSimulator
         if (localEvent == null || localEvent.IsFinished)
         {
             Log($"Event {localEvent?.GetType().Name ?? "null"} finished, proceeding");
+            AgentEventFinished(localEvent);  // sts2-agent fork: reported as a forced step
             try
             {
                 RunManager.Instance.ProceedFromTerminalRewardsScreen().GetAwaiter().GetResult();
@@ -4626,6 +4640,8 @@ public partial class RunSimulator
         var currentOptions = localEvent.CurrentOptions;
         if (currentOptions == null || currentOptions.Count == 0)
         {
+            // sts2-agent fork: a failure to diagnose, not a silent map (RunSimulator.Events.cs).
+            if (_agentMode) return AgentEventWithoutOptions(localEvent);
             Log($"Event {localEvent.GetType().Name} has no options, auto-skipping");
             try { RunManager.Instance.EnterRoom(new MapRoom()).GetAwaiter().GetResult(); _syncCtx.Pump(); }
             catch (Exception ex) { LogException("Option-less event to map", ex); }
@@ -4695,7 +4711,7 @@ public partial class RunSimulator
                             // sts2-agent fork: a text variable (CrystalSphere's CurseTitle) is
                             // its text, not a number, in agent mode.
                             optVars[dv.Name] = _agentMode && dv is MegaCrit.Sts2.Core.Localization.DynamicVars.StringVar sv
-                                ? _loc.BilingualFromKey(sv.StringValue ?? "")
+                                ? AgentLocText(sv.StringValue ?? "")
                                 : (int)dv.BaseValue;
                     }
                 }
@@ -4771,7 +4787,7 @@ public partial class RunSimulator
                     }
                 }
 
-                return new Dictionary<string, object?>
+                var optDict = new Dictionary<string, object?>
                 {
                     ["index"] = i,
                     ["title"] = title,
@@ -4781,6 +4797,9 @@ public partial class RunSimulator
                     ["will_kill_player"] = willKill,
                     ["vars"] = optVars?.Count > 0 ? optVars : null,
                 };
+                // sts2-agent fork: disabled options and hover-tip cards (RunSimulator.Events.cs).
+                if (_agentMode) AgentEventOptionFields(optDict, localEvent, opt, i);
+                return optDict;
             }).ToList();
 
         // Resolve event name — try ancients table first (for Neow), then events
@@ -5543,29 +5562,32 @@ public partial class RunSimulator
                 };
             }).Where(x => x != null).ToList(),
             ["deck_size"] = player.Deck?.Cards?.Count(c => c != null) ?? 0,
-            ["deck"] = player.Deck?.Cards?.Where(c => c != null).Select(c =>
-            {
-                var dstats = new Dictionary<string, object?>();
-                try { foreach (var dv in c.DynamicVars.Values) dstats[dv.Name.ToLowerInvariant()] = (int)dv.BaseValue; } catch { }
-                var dkws = c.Keywords?.Where(k => k != CardKeyword.None).Select(k => k.ToString()).ToList();
-                return new Dictionary<string, object?>
-                {
-                    ["id"] = c.Id.ToString(),
-                    ["name"] = _loc.Card(c.Id.Entry),
-                    ["cost"] = c.EnergyCost?.GetResolved() ?? 0,
-                    ["type"] = c.Type.ToString(),
-                    ["upgraded"] = c.IsUpgraded,
-                    ["description"] = _loc.Bilingual("cards", c.Id.Entry + ".description"),
-                    ["stats"] = dstats.Count > 0 ? dstats : null,
-                    ["keywords"] = dkws?.Count > 0 ? dkws : null,
-                    ["tinker_time_rider"] = MadScienceRider(c),
-                    ["after_upgrade"] = GetUpgradedInfo(c),
-                };
-            }).ToList(),
+            ["deck"] = player.Deck?.Cards?.Where(c => c != null).Select(DeckCardDict).ToList(),
         };
         // sts2-agent fork: which potions the game lets you drink now (RunSimulator.Agent.cs).
         if (_agentMode) AgentPotionFields(summary, player);
         return summary;
+    }
+
+    /// <summary>A deck card's JSON (the player summary's deck).</summary>
+    private Dictionary<string, object?> DeckCardDict(CardModel c)
+    {
+        var dstats = new Dictionary<string, object?>();
+        try { foreach (var dv in c.DynamicVars.Values) dstats[dv.Name.ToLowerInvariant()] = (int)dv.BaseValue; } catch { }
+        var dkws = c.Keywords?.Where(k => k != CardKeyword.None).Select(k => k.ToString()).ToList();
+        return new Dictionary<string, object?>
+        {
+            ["id"] = c.Id.ToString(),
+            ["name"] = _loc.Card(c.Id.Entry),
+            ["cost"] = c.EnergyCost?.GetResolved() ?? 0,
+            ["type"] = c.Type.ToString(),
+            ["upgraded"] = c.IsUpgraded,
+            ["description"] = _loc.Bilingual("cards", c.Id.Entry + ".description"),
+            ["stats"] = dstats.Count > 0 ? dstats : null,
+            ["keywords"] = dkws?.Count > 0 ? dkws : null,
+            ["tinker_time_rider"] = MadScienceRider(c),
+            ["after_upgrade"] = GetUpgradedInfo(c),
+        };
     }
 
     /// <summary>Common context added to every decision point.</summary>

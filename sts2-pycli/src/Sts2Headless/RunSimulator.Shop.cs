@@ -229,7 +229,7 @@ public partial class RunSimulator
             dict["keywords"] = kws?.Count > 0 ? kws : null;
             AgentCardExtras(dict, card);
         }
-        Mark(cards, cardEntries, "id", "name", "type", "card_cost", "description", "stats", "after_upgrade", "rarity", "upgraded");
+        Mark(cards, cardEntries, "id", "name", "type", "card_cost", "description", "stats", "after_upgrade", "rarity", "upgraded", "tinker_time_rider");
         Mark((List<Dictionary<string, object?>>)state["relics"]!, inv.RelicEntries, "id", "name", "description", "vars");
         Mark((List<Dictionary<string, object?>>)state["potions"]!, inv.PotionEntries, "id", "name", "description", "vars");
 
@@ -294,11 +294,15 @@ public partial class RunSimulator
     }
 
     /// <summary>
-    /// Agent mode: a card's enchantment, by model id and amount (Kifuda's Adroit 3), so two
-    /// otherwise equal cards are told apart as on screen. Added only to an enchanted card.
+    /// Agent mode: a card's type and Mad Science's rider (Tinker Time's card is a Skill,
+    /// Attack or Power, with a rider, so two Mad Science cards differ by both), and its
+    /// enchantment, by model id and amount (Kifuda's Adroit 3), so two otherwise equal cards
+    /// are told apart as on screen. The enchantment is added only to an enchanted card.
     /// </summary>
     private static void AgentCardExtras(Dictionary<string, object?> dict, MegaCrit.Sts2.Core.Models.CardModel card)
     {
+        dict["type"] = card.Type.ToString();
+        dict["tinker_time_rider"] = MadScienceRider(card);
         if (card.Enchantment == null) return;
         dict["enchantment_id"] = card.Enchantment.Id.Entry;
         try { dict["enchantment_amount"] = card.Enchantment.Amount; } catch { }
