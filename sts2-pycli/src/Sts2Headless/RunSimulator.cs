@@ -4381,6 +4381,9 @@ public partial class RunSimulator
             // (and any reward commands it queues) to completion before re-detecting.
             _syncCtx.Pump();
             WaitForActionExecutor();
+            // sts2-agent fork: the event's Resume() is kept and driven, so what it offers
+            // reaches the client (RunSimulator.EventResume.cs).
+            if (_agentMode) DriveAgentEventResume();
             // Reset the combat-reward bookkeeping so the resumed event's own
             // reward surfaces / drains cleanly on the next decision detect.
             _rewardsProcessed = false;
@@ -5641,6 +5644,7 @@ public partial class RunSimulator
         EngineErrors.Hook();
         TestFaults.Install();
         InstallShopPatches();
+        InstallEventResumePatch();
 
         // v0.107.1: ReflectionHelper.ModTypes now throws if ModManager hasn't been
         // initialized (ModManager.State == None), and the run-start path reads it.

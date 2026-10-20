@@ -68,17 +68,19 @@ public partial class RunSimulator
         _treasureOpened = false;
         _treasureRelicTaken = false;
         _agentTreasureTask = null;
+        _agentEventResumeTask = null;
         ResetAgentShop();
     }
 
     /// <summary>
-    /// Drive a running rest-site or treasure task once what it opened has been
-    /// answered: it completes or suspends at the next prompt. Called before reading the
-    /// decision point.
+    /// Drive a running shop purchase, event resume (RunSimulator.EventResume.cs), rest-site
+    /// option or treasure task once what it opened has been answered: it completes or
+    /// suspends at the next prompt. Called before reading the decision point.
     /// </summary>
     private void DriveAgentRoomTasks()
     {
         DriveAgentShopTask();
+        DriveAgentEventResume();
         if (_agentRestTask != null && !AnySelectionPending())
         {
             WaitUntilOptionTaskSettles(_agentRestTask, "rest-site option (until next prompt or completion)");
