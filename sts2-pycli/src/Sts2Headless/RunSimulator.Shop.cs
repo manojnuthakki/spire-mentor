@@ -302,6 +302,7 @@ public partial class RunSimulator
             };
         }
         state["can_proceed"] = true;
+        AgentFoulPotionTarget(state, player);
     }
 
     /// <summary>The entry a buy names, or null (the index is checked by the validation).</summary>

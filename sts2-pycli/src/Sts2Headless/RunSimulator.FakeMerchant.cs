@@ -12,13 +12,28 @@
 //
 // Prices are the entries' own: MerchantEntry.Cost applies Hook.ModifyMerchantPrice only in
 // a MerchantRoom, and the restock after a purchase also needs one, so neither happens here
-// (as in the game). Throwing a Foul Potion at the merchant (its fight) is not offered: the
-// game's usability check needs the NFakeMerchant node, so a held Foul Potion is listed
-// `usable: false` and use_potion refuses it. With agent mode off none of this runs.
+// (as in the game).
+//
+// The Foul Potion out of combat (audit batch 6). The game lets it be thrown at a merchant
+// (FoulPotion.PassesCustomUsabilityCheck -> GetFoulPotionMerchantTarget: the MerchantRoom's
+// or the fake merchant's node, its inventory closed), and Headless has no node, so the check
+// always failed. In agent mode the target is the shop decision itself: a held Foul Potion is
+// `usable` there (at a merchant and at the fake merchant, nowhere else out of combat) and
+// use_potion throws it, with no target (TargetedNoCreature, as the game's merchant button
+// gives). At a merchant the game's own OnUse then pays 100 gold (its node part, a dialogue
+// line, is skipped when there is no node). At the fake merchant OnUse needs the NFakeMerchant
+// node, so a prefix runs what its FakeMerchant branch runs without it:
+// FakeMerchant.FoulPotionThrown, which starts FakeMerchantEventEncounter with the rug and the
+// unsold relics as extra rewards and doesn't resume the event, so the fight's rewards lead
+// to the map. With agent mode off none of this runs.
 
+using HarmonyLib;
+using MegaCrit.Sts2.Core.Combat;
 using MegaCrit.Sts2.Core.Entities.Merchant;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Models.Events;
+using MegaCrit.Sts2.Core.Models.Potions;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
 
@@ -56,5 +71,54 @@ public partial class RunSimulator
         Log("Fake merchant: proceeding to the map");
         _agentFakeMerchantLeft = merchant;
         return DetectDecisionPoint();
+    }
+
+    /// <summary>
+    /// A held Foul Potion can be thrown at the shop shown now (agent mode; called by
+    /// AgentShopFields): the game's target is the merchant's node with its inventory closed,
+    /// which in Headless is the shop decision itself.
+    /// </summary>
+    private static void AgentFoulPotionTarget(Dictionary<string, object?> state, Player player)
+    {
+        if (CombatManager.Instance.IsInProgress || !player.CanRemovePotions) return;
+        if (state.GetValueOrDefault("player") is not Dictionary<string, object?> summary
+            || summary.GetValueOrDefault("potions") is not List<Dictionary<string, object?>> dicts) return;
+        foreach (var (dict, potion) in dicts.Zip(player.Potions.Where(p => p != null)))
+            if (potion is FoulPotion) dict["usable"] = true;
+    }
+
+    /// <summary>A Foul Potion thrown at the shop the client is answering (agent mode).</summary>
+    private bool AgentFoulPotionThrowable(PotionModel potion) =>
+        potion is FoulPotion && !CombatManager.Instance.IsInProgress
+        && _lastDecision?.GetValueOrDefault("decision") as string == "shop" && AgentShopInventory() != null;
+
+    private static bool _foulPotionPatchInstalled;
+
+    private static void InstallFoulPotionPatch()
+    {
+        if (_foulPotionPatchInstalled) return;
+        _foulPotionPatchInstalled = true;
+        var method = AccessTools.Method(typeof(FoulPotion), "OnUse");
+        if (method == null)
+        {
+            Log("[WARN] FoulPotion.OnUse not found; the fake merchant's Foul Potion not patched");
+            return;
+        }
+        new Harmony("sts2headless.foulpotion").Patch(method,
+            new HarmonyMethod(typeof(RunSimulator), nameof(FoulPotionOnUsePrefix)));
+    }
+
+    /// <summary>
+    /// FoulPotion.OnUse at the fake merchant (v0.107.1: if the event's node is an NFakeMerchant,
+    /// show the vfx and await each player's FakeMerchant.FoulPotionThrown), without the node.
+    /// </summary>
+    private static bool FoulPotionOnUsePrefix(FoulPotion __instance, ref Task __result)
+    {
+        if (!AgentModeActive || CombatManager.Instance.IsInProgress) return true;
+        var runState = __instance.Owner.RunState;
+        if (runState.CurrentRoom is not EventRoom { CanonicalEvent: FakeMerchant }) return true;
+        __result = Task.WhenAll(runState.Players.Select(p =>
+            ((FakeMerchant)RunManager.Instance.EventSynchronizer.GetEventForPlayer(p)).FoulPotionThrown(__instance)));
+        return false;
     }
 }

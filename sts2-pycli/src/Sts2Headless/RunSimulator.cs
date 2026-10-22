@@ -2773,8 +2773,11 @@ public partial class RunSimulator
         // so a null target silently no-ops the whole effect (the potion is
         // consumed but block/strength/energy never land). In single-player
         // AnyPlayer == the local player's creature.
+        // sts2-agent fork: in agent mode a potion thrown at no creature (the Foul Potion at a
+        // merchant) gets no target, as the game's merchant button gives; with the player's
+        // creature it would fail IsValidTarget and the action would be cancelled.
         if (potionTargetType == TargetType.Self
-            || potionTargetType == TargetType.TargetedNoCreature
+            || (potionTargetType == TargetType.TargetedNoCreature && !_agentMode)
             || potionTargetType == TargetType.AnyPlayer)
         {
             target = player.Creature;
@@ -5698,6 +5701,7 @@ public partial class RunSimulator
         TestFaults.Install();
         InstallShopPatches();
         InstallEventResumePatch();
+        InstallFoulPotionPatch();
 
         // v0.107.1: ReflectionHelper.ModTypes now throws if ModManager hasn't been
         // initialized (ModManager.State == None), and the run-start path reads it.

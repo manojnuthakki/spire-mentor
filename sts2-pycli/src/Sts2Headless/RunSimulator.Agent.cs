@@ -410,7 +410,7 @@ public partial class RunSimulator
         if (!player.CanRemovePotions)
             return Reject("potions_locked", "potions cannot be used or discarded right now");
         if (!use) return null;
-        if (!PotionUsableNow(potion))
+        if (!PotionUsableNow(potion) && !AgentFoulPotionThrowable(potion))
             return Reject("potion_not_usable", $"{potion.Id.Entry} cannot be used here");
         if (potion.TargetType == TargetType.AnyEnemy && CombatManager.Instance.IsInProgress)
             return ValidateEnemyTarget(args);
@@ -420,8 +420,9 @@ public partial class RunSimulator
     /// <summary>
     /// The game's Use-button rule (NPotionPopup.RefreshButtons): an AnyTime potion whenever
     /// the belt can be clicked, a CombatOnly one in the play phase, never an Automatic one,
-    /// and the potion's own check (Foul Potion out of combat needs the merchant's node, so
-    /// Headless never passes it). Locked potions (CanRemovePotions) are checked apart.
+    /// and the potion's own check (Foul Potion out of combat needs the merchant's node, which
+    /// Headless doesn't have: the shop decision stands in for it, RunSimulator.FakeMerchant.cs).
+    /// Locked potions (CanRemovePotions) are checked apart.
     /// </summary>
     private bool PotionUsableNow(PotionModel potion)
     {
