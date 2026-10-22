@@ -56,7 +56,7 @@ public partial class RunSimulator
     /// makes room for the next one; agent mode offers that window as the `parasol_continue`
     /// decision (use_potion, discard_potion, `continue`) only when the belt is full.
     /// </summary>
-    private static TaskCompletionSource? _agentParasolPause;
+    private static TaskCompletionSource<bool>? _agentParasolPause;
     private static string? _agentParasolPausePotion;
 
     private static bool ParasolPaused => _agentParasolPause is { Task.IsCompleted: false };
@@ -70,6 +70,17 @@ public partial class RunSimulator
     {
         _agentShopTask = null;
         _agentShopRemoval = null;
+        // A room entered while Lord's Parasol is paused (a harness enter_room) ends its purchases:
+        // the paused loop returns without buying, and nothing it bought is left to report.
+        var pause = _agentParasolPause;
+        _agentParasolPause = null;
+        _agentParasolPausePotion = null;
+        if (pause != null)
+        {
+            _agentParasolTask = null;
+            lock (_agentParasolItems) _agentParasolItems.Clear();
+            pause.TrySetResult(false);
+        }
     }
 
     private static void InstallShopPatches()
@@ -128,8 +139,8 @@ public partial class RunSimulator
             if (entry is MerchantPotionEntry && !inventory.Player.HasOpenPotionSlots)
             {
                 _agentParasolPausePotion = id;
-                var pause = _agentParasolPause = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                await pause.Task;
+                var pause = _agentParasolPause = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                if (!await pause.Task) return;  // abandoned: another room was entered
             }
             if (await entry.OnTryPurchaseWrapper(inventory, true)) ParasolBought(type, id);
         }
@@ -206,7 +217,7 @@ public partial class RunSimulator
         var pause = _agentParasolPause;
         _agentParasolPause = null;
         _agentParasolPausePotion = null;
-        pause?.TrySetResult();
+        pause?.TrySetResult(true);
         return DetectDecisionPoint();
     }
 

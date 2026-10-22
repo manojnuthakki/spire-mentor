@@ -3088,8 +3088,6 @@ public partial class RunSimulator
         if (_agentMode) DriveAgentRoomTasks();
         // sts2-agent fork: an event resumed after its fight that hung (RunSimulator.EventResume.cs).
         if (_agentMode && EventResumeNotSettled() is { } resumeHung) return resumeHung;
-        // sts2-agent fork: Lord's Parasol paused before a potion purchase (RunSimulator.Shop.cs).
-        if (_agentMode && ParasolContinueState(player) is { } parasolPause) return parasolPause;
 
         // Check game over (death). A WON run also ends with dead players:
         // RunManager.WinRun → OnEnded(isVictory: true) → GuaranteeKillAllPlayers.
@@ -3100,6 +3098,10 @@ public partial class RunSimulator
         {
             return GameOverState(_runState.CurrentRoom?.IsVictoryRoom ?? false);
         }
+
+        // sts2-agent fork: Lord's Parasol paused before a potion purchase (RunSimulator.Shop.cs);
+        // after the death check, so a run that has ended is game_over, not the pause.
+        if (_agentMode && ParasolContinueState(player) is { } parasolPause) return parasolPause;
 
         // Check if there's a pending bundle selection (Scroll Boxes: pick 1 of N packs)
         if (_pendingBundles != null && _pendingBundleTcs != null && !_pendingBundleTcs.Task.IsCompleted)
