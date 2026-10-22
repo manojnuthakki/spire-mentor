@@ -4496,6 +4496,21 @@ public partial class RunSimulator
         // Boss → next act
         if (combatRoom.RoomType == RoomType.Boss)
         {
+            // sts2-agent fork: A10 (Double Boss). With a second boss and the player on
+            // the first boss's node, the game's Proceed goes back to the map
+            // (NRewardsScreen.OnProceedButtonPressed → ProceedFromTerminalRewardsScreen),
+            // not to the act change; the player then clicks the second boss's node, the
+            // first boss node's only child, and RoomSet.NextBossEncounter fights it.
+            // Nothing is forced: the map move is the client's.
+            var map = _runState?.Map;
+            if (_agentMode && map?.SecondBossMapPoint != null
+                && _runState!.CurrentMapCoord == map.BossMapPoint.coord)
+            {
+                Log("First boss defeated, back to the map for the second boss");
+                ForceToMap();
+                return MapSelectState();
+            }
+
             Log("Boss defeated, entering next act");
             try
             {
