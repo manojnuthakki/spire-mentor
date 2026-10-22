@@ -328,6 +328,7 @@ public partial class RunSimulator
             _agentMode = agentMode;
             AgentModeActive = agentMode;
             _agentSphereClick = null;
+            ResetAgentEventResume();
             PendingCrystalSphere = null;
             _cardSelector.WaitForever = agentMode;
             _cardSelector.KeepCancelableSingletons = agentMode;
@@ -3083,6 +3084,8 @@ public partial class RunSimulator
         // sts2-agent fork: a rest-site option or treasure-room step that was waiting on
         // an answered prompt continues first (RunSimulator.RestTreasure.cs).
         if (_agentMode) DriveAgentRoomTasks();
+        // sts2-agent fork: an event resumed after its fight that hung (RunSimulator.EventResume.cs).
+        if (_agentMode && EventResumeNotSettled() is { } resumeHung) return resumeHung;
 
         // Check game over (death). A WON run also ends with dead players:
         // RunManager.WinRun → OnEnded(isVictory: true) → GuaranteeKillAllPlayers.

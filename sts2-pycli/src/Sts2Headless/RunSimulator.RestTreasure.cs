@@ -68,7 +68,7 @@ public partial class RunSimulator
         _treasureOpened = false;
         _treasureRelicTaken = false;
         _agentTreasureTask = null;
-        _agentEventResumeTask = null;
+        ResetAgentEventResume();
         ResetAgentShop();
     }
 

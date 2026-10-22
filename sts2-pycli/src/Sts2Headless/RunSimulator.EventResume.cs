@@ -15,14 +15,16 @@
 // loop, with each Resume started under SurfaceCustomRewards and kept: rewards it offers come
 // to the `rewards` decision (`source: custom`), a prompt it opens (a relic's own choice) to
 // the ordinary decisions, and the host drives it to completion as it drives a rest-site option
-// (RunSimulator.RestTreasure.cs) before reading the next decision. With agent mode off none of
-// this runs.
+// (RunSimulator.RestTreasure.cs) before reading the next decision. A Resume that doesn't finish
+// within the settle cap is reported as `timeout, started, event_resume_not_settled` (and again
+// on each re-read until it does), not left for the map. With agent mode off none of this runs.
 
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Game;
 using MegaCrit.Sts2.Core.Rooms;
+using MegaCrit.Sts2.Core.Runs;
 
 namespace Sts2Headless;
 
@@ -76,19 +78,49 @@ public partial class RunSimulator
         return false;
     }
 
+    /// <summary>Set once a resumed event has not finished within the settle cap (it hung).</summary>
+    private static bool _agentEventResumeHung;
+
     /// <summary>
     /// Drive a resumed event once what it opened has been answered: it completes or suspends
-    /// at the next prompt. Called before reading the decision point.
+    /// at the next prompt. Called before reading the decision point. The first wait is bounded
+    /// by the settle cap; after that (a Resume that hung) each re-read only pumps and looks, as
+    /// a hung Crystal Sphere divination does, and <see cref="EventResumeNotSettled"/> reports it.
     /// </summary>
     private void DriveAgentEventResume()
     {
-        if (_agentEventResumeTask == null || AnySelectionPending()) return;
-        WaitUntilOptionTaskSettles(_agentEventResumeTask, "event resume after its fight (until next prompt or completion)");
-        if (!_agentEventResumeTask.IsCompleted) return;
         var task = _agentEventResumeTask;
+        if (task == null || AnySelectionPending()) return;
+        if (_agentEventResumeHung) _syncCtx.Pump();
+        else if (!WaitFor(() => task.IsCompleted || AnySelectionPending(), SettleCapMs, "event resume after its fight"))
+        {
+            _agentEventResumeHung = true;
+            return;
+        }
+        if (!task.IsCompleted) return;  // suspended at what it opened
         _agentEventResumeTask = null;
-        if (task.IsFaulted) LogException("Event resume", task.Exception!);
+        _agentEventResumeHung = false;
+        // A fault was already reported once, by the game's own TaskHelper.RunSafely.
         WaitForActionExecutor();
         _syncCtx.Pump();
+    }
+
+    /// <summary>
+    /// A resumed event that hasn't finished and isn't waiting on the client: no decision is
+    /// presented (in particular the finished event isn't left for the map) until it completes.
+    /// </summary>
+    private Dictionary<string, object?>? EventResumeNotSettled()
+    {
+        if (_agentEventResumeTask is not { IsCompleted: false } || AnySelectionPending()) return null;
+        var ev = RunManager.Instance.EventSynchronizer?.GetLocalEvent();
+        return Failure("timeout", "started", "the event's resume after its fight did not finish",
+            "the event's Resume to complete", "event_resume_not_settled",
+            new() { ["event_id"] = ev?.Id?.Entry });
+    }
+
+    private static void ResetAgentEventResume()
+    {
+        _agentEventResumeTask = null;
+        _agentEventResumeHung = false;
     }
 }
