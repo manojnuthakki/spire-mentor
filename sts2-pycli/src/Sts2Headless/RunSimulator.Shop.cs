@@ -24,8 +24,9 @@
 // removal used. Lord's Parasol's purchases run in the game's order without its UI calls:
 // every stocked card, relic and potion, then the card removal (not cancelable), all with
 // the cost ignored; the decision that follows reports
-// `forced: [{kind: "purchase_everything", items}]`. With agent mode off none of this
-// runs.
+// `forced: [{kind: "purchase_everything", items}]`. The fake merchant's relics use the same
+// listing, checks and purchases (RunSimulator.FakeMerchant.cs). With agent mode off none of
+// this runs.
 
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Merchant;
@@ -192,9 +193,8 @@ public partial class RunSimulator
     }
 
     /// <summary>Agent mode's additions to the shop decision (RunSimulator.cs, ShopState).</summary>
-    private void AgentShopFields(Dictionary<string, object?> state, MerchantRoom room, Player player)
+    private void AgentShopFields(Dictionary<string, object?> state, MerchantInventory inv, Player player)
     {
-        var inv = room.GetLocalInventory();
         // The Hoarder modifier forbids the removal; the game's slot marks it used on display.
         if (inv.CardRemovalEntry is { Used: false } r && !Hook.ShouldAllowMerchantCardRemoval(_runState!, player))
             r.SetUsed();
@@ -265,9 +265,8 @@ public partial class RunSimulator
 
     private Dictionary<string, object?>? ValidateShopBuy(string action, Dictionary<string, object?>? args, Player player)
     {
-        if (_runState?.CurrentRoom is not MerchantRoom room)
+        if (AgentShopInventory() is not { } inv)
             return Reject("wrong_decision", "not in a shop");
-        var inv = room.GetLocalInventory();
         var entry = ShopEntryFor(action, args, inv, out var missing);
         if (missing != null) return Reject("missing_argument", $"{action} requires '{missing}'");
         if (entry == null)
@@ -280,7 +279,7 @@ public partial class RunSimulator
 
     private Dictionary<string, object?> DoAgentBuy(string action, Dictionary<string, object?>? args)
     {
-        var inv = ((MerchantRoom)_runState!.CurrentRoom!).GetLocalInventory();
+        var inv = AgentShopInventory()!;  // checked by ValidateShopBuy
         var entry = ShopEntryFor(action, args, inv, out _)!;  // checked by ValidateShopBuy
         Log($"Shop: {action} ({entry.GetType().Name}, {entry.Cost}g)");
         var removal = entry as MerchantCardRemovalEntry;
@@ -323,6 +322,7 @@ public partial class RunSimulator
 
     private Dictionary<string, object?> ProceedFromShop()
     {
+        if (AgentFakeMerchant() is { } merchant) return ProceedFromFakeMerchant(merchant);
         Log("Shop: proceeding to the map");
         ForceToMap();
         return DetectDecisionPoint();

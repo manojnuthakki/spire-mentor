@@ -4594,6 +4594,9 @@ public partial class RunSimulator
         var localEvent = RunManager.Instance.EventSynchronizer?.GetLocalEvent();
         _syncCtx.Pump();
 
+        // sts2-agent fork: the fake merchant's relics are a shop (RunSimulator.FakeMerchant.cs).
+        if (_agentMode && AgentFakeMerchantState(_runState!.Players[0]) is { } fakeShop) return fakeShop;
+
         // If we already chose an event option and the event didn't advance, force-finish
         if (_eventOptionChosen && localEvent != null && !localEvent.IsFinished)
         {
@@ -4877,7 +4880,12 @@ public partial class RunSimulator
     {
         var inv = merchantRoom.GetLocalInventory();
         if (inv == null) { ForceToMap(); return MapSelectState(); }
+        return ShopState(inv, player);
+    }
 
+    // sts2-agent fork: the shop over an inventory, so the fake merchant's (RunSimulator.FakeMerchant.cs) shares it.
+    private Dictionary<string, object?> ShopState(MerchantInventory inv, Player player)
+    {
         var cards = inv.CharacterCardEntries.Concat(inv.ColorlessCardEntries)
             .Select((e, i) =>
             {
@@ -4931,7 +4939,7 @@ public partial class RunSimulator
             return dict;
         }).ToList();
 
-        var removal = merchantRoom.GetLocalInventory().CardRemovalEntry;
+        var removal = inv.CardRemovalEntry;
 
         var state = new Dictionary<string, object?>
         {
@@ -4945,7 +4953,7 @@ public partial class RunSimulator
             ["player"] = PlayerSummary(player),
         };
         // sts2-agent fork: purchasability and reasons per slot, the removal's state (RunSimulator.Shop.cs).
-        if (_agentMode) AgentShopFields(state, merchantRoom, player);
+        if (_agentMode) AgentShopFields(state, inv, player);
         return state;
     }
 
