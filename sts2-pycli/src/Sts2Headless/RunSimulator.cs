@@ -1922,6 +1922,8 @@ public partial class RunSimulator
                     if (_agentMode && _lastDecision?.GetValueOrDefault("decision") as string == "shop")
                         return ProceedFromShop();
                     return DoProceed(player);
+                case "continue" when _agentMode:
+                    return DoParasolContinue();
                 case "divine" when _agentMode:
                     return DoDivine(args);
                 case "take_relic" when _agentMode:
@@ -3086,6 +3088,8 @@ public partial class RunSimulator
         if (_agentMode) DriveAgentRoomTasks();
         // sts2-agent fork: an event resumed after its fight that hung (RunSimulator.EventResume.cs).
         if (_agentMode && EventResumeNotSettled() is { } resumeHung) return resumeHung;
+        // sts2-agent fork: Lord's Parasol paused before a potion purchase (RunSimulator.Shop.cs).
+        if (_agentMode && ParasolContinueState(player) is { } parasolPause) return parasolPause;
 
         // Check game over (death). A WON run also ends with dead players:
         // RunManager.WinRun → OnEnded(isVictory: true) → GuaranteeKillAllPlayers.
@@ -3234,6 +3238,7 @@ public partial class RunSimulator
                 cardSelect["min_select"] = AgentMinSelect;
                 cardSelect["cancelable"] = AgentCancelable;
                 cardSelect["can_skip"] = AgentCanSkip;
+                cardSelect["pile"] = _cardSelector.PendingPile;
                 foreach (var (dict, card) in opts.Zip(_cardSelector.PendingOptions))
                     AgentCardExtras(dict, card);
             }
@@ -3686,7 +3691,13 @@ public partial class RunSimulator
         catch { return null; }
     }
 
-    private static Dictionary<string, object?>? PowerVars(PowerModel pw)
+    private Dictionary<string, object?>? PowerVars(PowerModel pw) => PowerVars(pw, _agentMode ? AgentLocText : null);
+
+    /// <summary>
+    /// A power's variables. sts2-agent fork: given `text`, a string variable keeps its text,
+    /// localized as an event option's (Nightmare's card title), instead of 0.
+    /// </summary>
+    private static Dictionary<string, object?>? PowerVars(PowerModel pw, Func<string, string>? text)
     {
         try
         {
@@ -3694,7 +3705,8 @@ public partial class RunSimulator
             if (vars == null) return null;
             var d = new Dictionary<string, object?>();
             foreach (var dv in vars)
-                d[dv.Name] = (int)dv.BaseValue;
+                d[dv.Name] = text != null && dv is MegaCrit.Sts2.Core.Localization.DynamicVars.StringVar sv
+                    ? text(sv.StringValue ?? "") : (int)dv.BaseValue;
             return d.Count > 0 ? d : null;
         }
         catch { return null; }
@@ -4006,7 +4018,9 @@ public partial class RunSimulator
         {
             cardInfo["star_cost"] = starCost;
             // BUG-007: Override can_play for star-cost cards when player lacks stars
-            if (includePlayability && pcs != null && pcs.Stars < starCost)
+            // sts2-agent fork: not in agent mode, where CanPlay already checks the star cost
+            // with its modifiers (a free Dying Star from Splash is playable at 0 stars).
+            if (includePlayability && pcs != null && pcs.Stars < starCost && !_agentMode)
                 cardInfo["can_play"] = false;
         }
         var kws = c.Keywords?.Where(k => k != CardKeyword.None).Select(k => k.ToString()).ToList();
@@ -4014,7 +4028,6 @@ public partial class RunSimulator
         if (c.Enchantment != null)
         {
             cardInfo["enchantment"] = _loc.Bilingual("enchantments", c.Enchantment.Id.Entry + ".title");
-            if (_agentMode) AgentCardExtras(cardInfo, c);  // sts2-agent fork
             try { if (c.Enchantment.Amount != 0) cardInfo["enchantment_amount"] = c.Enchantment.Amount; } catch { }
         }
         if (c.Affliction != null)
@@ -4022,6 +4035,7 @@ public partial class RunSimulator
             cardInfo["affliction"] = _loc.Bilingual("afflictions", c.Affliction.Id.Entry + ".title");
             try { if (c.Affliction.Amount != 0) cardInfo["affliction_amount"] = c.Affliction.Amount; } catch { }
         }
+        if (_agentMode) AgentCardExtras(cardInfo, c);  // sts2-agent fork: every card view's fields
         return cardInfo;
     }
 
@@ -4315,7 +4329,9 @@ public partial class RunSimulator
             }
 
             // Regent: Stars
-            if (pcs != null && pcs.Stars >= 0 && player.Character?.Id.Entry == "REGENT")
+            // sts2-agent fork: for every character in agent mode (Shining Strike gives an
+            // Ironclad stars; a foreign star-cost card needs them).
+            if (pcs != null && pcs.Stars >= 0 && (_agentMode || player.Character?.Id.Entry == "REGENT"))
             {
                 result["stars"] = pcs.Stars;
             }
@@ -4332,6 +4348,15 @@ public partial class RunSimulator
                     ["block"] = osty.Block,
                     ["alive"] = osty.IsAlive,
                 };
+                // sts2-agent fork: Osty's powers (Die For You takes the player's unblocked damage).
+                if (_agentMode)
+                    ((Dictionary<string, object?>)result["osty"]!)["powers"] = osty.Powers?.Select(pw => new Dictionary<string, object?>
+                    {
+                        ["id"] = pw.Id.Entry,
+                        ["amount"] = pw.Amount,
+                        ["display_amount"] = pw.DisplayAmount,
+                        ["vars"] = PowerVars(pw),
+                    }).ToList();
             }
             else if (player.Character?.Id.Entry == "NECROBINDER")
             {
@@ -7533,6 +7558,8 @@ public partial class RunSimulator
         /// upstream field above merges it into.
         /// </summary>
         public static bool? CanSkip;
+        /// <summary>sts2-agent fork: `FromCombatPile`'s pile (`CardPile.Type`); null for every other entry point.</summary>
+        public static string? Pile;
 
         public static (string? source, string? promptKey, string? sourceModel, bool? cancelable, bool? canSkip)
             Consume()
@@ -7543,6 +7570,7 @@ public partial class RunSimulator
             SourceModel = null;
             Cancelable = null;
             CanSkip = null;
+            Pile = null;
             return v;
         }
 
@@ -7586,6 +7614,7 @@ public partial class RunSimulator
                 SourceModel = ModelEntryFrom(__args);
                 Cancelable = prefs.Cancelable;
                 CanSkip = null;
+                Pile = __args?.OfType<MegaCrit.Sts2.Core.Entities.Cards.CardPile>().FirstOrDefault()?.Type.ToString();
             }
             catch { /* capture-only: never break the game's selection flow */ }
         }
@@ -7606,6 +7635,7 @@ public partial class RunSimulator
                     ? (__args?.OfType<bool>().Cast<bool?>().FirstOrDefault() ?? false)
                     : false;
                 CanSkip = __originalMethod.Name == "FromChooseACardScreen" ? Cancelable : null;
+                Pile = null;
             }
             catch { }
         }
@@ -7640,6 +7670,8 @@ public partial class RunSimulator
         public bool? PendingCancelable { get; private set; }
         // sts2-agent fork: the choose-a-card screen's canSkip; null for any other entry point.
         public bool? PendingCanSkip { get; private set; }
+        // sts2-agent fork: the combat pile a FromCombatPile selection picks from; null for any other.
+        public string? PendingPile { get; private set; }
         private TaskCompletionSource<IEnumerable<CardModel>>? _pendingTcs;
 
         public bool HasPending => _pendingTcs != null && !_pendingTcs.Task.IsCompleted;
@@ -7667,6 +7699,7 @@ public partial class RunSimulator
             // THIS selection, so even the early-return paths (empty/single/
             // inline) must clear it or a later unrelated pending selection
             // would carry a stale prompt_key.
+            var ctxPile = HeadlessCardSelectContext.Pile;
             (string? ctxSource, string? ctxPromptKey, string? ctxSourceModel, bool? ctxCancelable, bool? ctxCanSkip) =
                 HeadlessCardSelectContext.Consume();
             var optList = options.ToList();
@@ -7715,6 +7748,7 @@ public partial class RunSimulator
             PendingSourceModel = ctxSourceModel;
             PendingCancelable = ctxCancelable;
             PendingCanSkip = ctxCanSkip;
+            PendingPile = ctxPile;
             _pendingTcs = new TaskCompletionSource<IEnumerable<CardModel>>();
 
             Console.Error.WriteLine($"[SIM] Card selection pending: {optList.Count} options, select {minSelect}-{maxSelect}");

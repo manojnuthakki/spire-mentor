@@ -24,7 +24,9 @@
 // removal used. Lord's Parasol's purchases run in the game's order without its UI calls:
 // every stocked card, relic and potion, then the card removal (not cancelable), all with
 // the cost ignored; the decision that follows reports
-// `forced: [{kind: "purchase_everything", items}]`. The fake merchant's relics use the same
+// `forced: [{kind: "purchase_everything", items}]`. Before a potion purchase with the belt
+// full it stops at the `parasol_continue` decision (use_potion, discard_potion, continue),
+// the window the game's wait between purchases leaves. The fake merchant's relics use the same
 // listing, checks and purchases (RunSimulator.FakeMerchant.cs). With agent mode off none of
 // this runs.
 
@@ -47,6 +49,17 @@ public partial class RunSimulator
 
     /// <summary>Lord's Parasol's purchases, started on entering a shop (set by its prefix).</summary>
     private static Task? _agentParasolTask;
+
+    /// <summary>
+    /// Lord's Parasol waiting before a potion purchase with a full belt, and that potion's id. The
+    /// game awaits after each purchase with the belt usable, so a potion drunk or discarded there
+    /// makes room for the next one; agent mode offers that window as the `parasol_continue`
+    /// decision (use_potion, discard_potion, `continue`) only when the belt is full.
+    /// </summary>
+    private static TaskCompletionSource? _agentParasolPause;
+    private static string? _agentParasolPausePotion;
+
+    private static bool ParasolPaused => _agentParasolPause is { Task.IsCompleted: false };
 
     /// <summary>What Lord's Parasol has bought and not yet reported (a forced step on the next decision).</summary>
     private static readonly List<Dictionary<string, object?>> _agentParasolItems = new();
@@ -112,6 +125,12 @@ public partial class RunSimulator
                 MerchantPotionEntry p => ("potion", p.Model?.Id.Entry),
                 _ => ("item", null),
             };
+            if (entry is MerchantPotionEntry && !inventory.Player.HasOpenPotionSlots)
+            {
+                _agentParasolPausePotion = id;
+                var pause = _agentParasolPause = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                await pause.Task;
+            }
             if (await entry.OnTryPurchaseWrapper(inventory, true)) ParasolBought(type, id);
         }
         var removal = inventory.CardRemovalEntry;
@@ -128,9 +147,10 @@ public partial class RunSimulator
     /// </summary>
     private void DriveAgentShopTask()
     {
-        if (_agentParasolTask != null && !AnySelectionPending())
+        if (_agentParasolTask != null && !AnySelectionPending() && !ParasolPaused)
         {
-            WaitUntilOptionTaskSettles(_agentParasolTask, "Lord's Parasol purchases (until next prompt or completion)");
+            WaitUntilOptionTaskSettles(_agentParasolTask, "Lord's Parasol purchases (until next prompt, pause or completion)",
+                () => AnySelectionPending() || ParasolPaused);
             if (_agentParasolTask.IsCompleted)
             {
                 var task = _agentParasolTask;
@@ -164,6 +184,30 @@ public partial class RunSimulator
                 _syncCtx.Pump();
             }
         }
+    }
+
+    /// <summary>Lord's Parasol paused before a potion purchase with a full belt, or null.</summary>
+    private Dictionary<string, object?>? ParasolContinueState(Player player)
+    {
+        if (!ParasolPaused) return null;
+        return new Dictionary<string, object?>
+        {
+            ["type"] = "decision",
+            ["decision"] = "parasol_continue",
+            ["context"] = RunContext(),
+            ["next_potion"] = _agentParasolPausePotion,
+            ["player"] = PlayerSummary(player),
+        };
+    }
+
+    /// <summary>`continue`: Lord's Parasol goes on with the potion purchase it paused before.</summary>
+    private Dictionary<string, object?> DoParasolContinue()
+    {
+        var pause = _agentParasolPause;
+        _agentParasolPause = null;
+        _agentParasolPausePotion = null;
+        pause?.TrySetResult();
+        return DetectDecisionPoint();
     }
 
     /// <summary>
@@ -229,7 +273,8 @@ public partial class RunSimulator
             dict["keywords"] = kws?.Count > 0 ? kws : null;
             AgentCardExtras(dict, card);
         }
-        Mark(cards, cardEntries, "id", "name", "type", "card_cost", "description", "stats", "after_upgrade", "rarity", "upgraded", "tinker_time_rider");
+        Mark(cards, cardEntries, "id", "name", "type", "card_cost", "description", "stats", "after_upgrade", "rarity", "upgraded", "tinker_time_rider",
+            "cost_x", "star_cost", "star_cost_x", "replay_count", "sly_this_turn", "will_retain");
         Mark((List<Dictionary<string, object?>>)state["relics"]!, inv.RelicEntries, "id", "name", "description", "vars");
         Mark((List<Dictionary<string, object?>>)state["potions"]!, inv.PotionEntries, "id", "name", "description", "vars");
 
@@ -302,6 +347,18 @@ public partial class RunSimulator
     {
         dict["type"] = card.Type.ToString();
         dict["tinker_time_rider"] = MadScienceRider(card);
+        // Costs as the card shows them (NCard): energy X, the star cost with every modifier
+        // (Void Form, a temporary cost; null when the card has none) or star X.
+        dict["cost_x"] = SafeCardBool(() => card.EnergyCost.CostsX);
+        dict["star_cost_x"] = SafeCardBool(() => card.HasStarCostX);
+        int? starCost = null;
+        try { if (!card.HasStarCostX && card.GetStarCostWithModifiers() is var s and >= 0) starCost = s; } catch { }
+        dict["star_cost"] = starCost;
+        // Extra plays (Transfigure, Hidden Gem, Soldier's Stew), with the enchantment's, as the
+        // hover tip counts them; and this turn's Sly and Retain (Hand Trick, Well-Laid Plans).
+        try { dict["replay_count"] = card.GetEnchantedReplayCount(); } catch { dict["replay_count"] = 0; }
+        dict["sly_this_turn"] = SafeCardBool(() => card.IsSlyThisTurn);
+        dict["will_retain"] = SafeCardBool(() => card.ShouldRetainThisTurn);
         if (card.Enchantment == null) return;
         dict["enchantment_id"] = card.Enchantment.Id.Entry;
         try { dict["enchantment_amount"] = card.Enchantment.Amount; } catch { }

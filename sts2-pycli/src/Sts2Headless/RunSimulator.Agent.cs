@@ -60,6 +60,8 @@ public partial class RunSimulator
         ["crystal_sphere"] = new[] { "divine" },
         // leave_room is refused, as at the rest site and treasure: proceed leaves (RunSimulator.Shop.cs).
         ["shop"] = new[] { "buy_card", "buy_relic", "buy_potion", "remove_card", "proceed", "use_potion", "discard_potion" },
+        // Lord's Parasol paused before a potion purchase with a full belt (RunSimulator.Shop.cs).
+        ["parasol_continue"] = new[] { "use_potion", "discard_potion", "continue" },
         ["game_over"] = Array.Empty<string>(),
     };
 
