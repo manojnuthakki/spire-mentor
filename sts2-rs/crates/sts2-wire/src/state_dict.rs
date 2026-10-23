@@ -511,6 +511,11 @@ pub struct ParsedCard {
     /// not send it — which is currently EVERY live producer, see the
     /// MadScience block in [`build_card`].
     pub tinker_time_rider: Option<String>,
+    /// C# `CardModel.BaseReplayCount`: the card's own extra plays (Hidden Gem,
+    /// Transfigure), NOT counting an enchantment's (Spiral, Glam), which the
+    /// engine adds from the enchantment itself. [`sts2_core::Card::base_replay_count`].
+    /// Absent → 0, the value every card had on the wire before the field.
+    pub replay_count: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -1424,6 +1429,11 @@ fn parse_card<V: WireValue>(d: &V, path: &str) -> WireResult<ParsedCard> {
         None => None,
     };
 
+    let replay_count = opt_i32("replay_count", "`replay_count` must be int or null")?.unwrap_or(0);
+    if replay_count < 0 {
+        return Err(schema_err(format!("{path}.replay_count"), "must be >= 0"));
+    }
+
     Ok(ParsedCard {
         card_id,
         raw_id,
@@ -1446,6 +1456,7 @@ fn parse_card<V: WireValue>(d: &V, path: &str) -> WireResult<ParsedCard> {
         affliction_applied_exhaust,
         card_type,
         tinker_time_rider,
+        replay_count,
     })
 }
 
@@ -2115,7 +2126,7 @@ fn build_card(parsed: &ParsedCard, uid: CardUid, path: &str) -> WireResult<Card>
         // FastenPower's Defend-sourced block bonus never applied.
         tags: sts2_content::cards::status::tags_for_card_id(card_id),
         energy_spent: 0,
-        base_replay_count: 0,
+        base_replay_count: parsed.replay_count,
         keyword_override: None,
         affliction: None,
     };

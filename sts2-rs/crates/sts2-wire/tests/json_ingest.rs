@@ -115,6 +115,28 @@ fn synthetic_status_and_curse_ids_resolve() {
     assert!(clumsy.card_id.is_some(), "`curse:Clumsy` must resolve");
 }
 
+/// A card's own replays (`replay_count`, C# `BaseReplayCount`: Hidden Gem)
+/// land on `Card::base_replay_count`; absent is 0, as before the field, and a
+/// negative count is refused.
+#[test]
+fn a_cards_replay_count_comes_across() {
+    let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();
+    value["deck"]["hand"][0]["replay_count"] = serde_json::json!(2);
+    let state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    let replays: Vec<i32> = state
+        .player
+        .hand
+        .iter()
+        .map(|uid| state.cards[uid.get() as usize - 1].base_replay_count)
+        .collect();
+    assert_eq!(replays, [2, 0]);
+
+    value["deck"]["hand"][0]["replay_count"] = serde_json::json!(-1);
+    let err = parse_json(&value).unwrap_err();
+    assert!(matches!(err, WireError::Schema { .. }), "got {err:?}");
+    assert_eq!(err.path(), "$.deck.hand[0].replay_count");
+}
+
 #[test]
 fn failures_carry_their_path_and_class() {
     let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();

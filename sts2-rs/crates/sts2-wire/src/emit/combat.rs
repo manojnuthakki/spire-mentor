@@ -221,6 +221,11 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
         set(&mut d, "enchantment", id.wire_name());
         set(&mut d, "enchantment_amount", *amount);
     }
+    // The card's own extra plays (Hidden Gem); an enchantment's are the
+    // enchantment's. Absent when 0, as before the field.
+    if card.base_replay_count != 0 {
+        set(&mut d, "replay_count", card.base_replay_count);
+    }
     // Per-card affliction (Bound/Devoured/…): additive optional fields
     // so afflicted cards survive the round-trip — without them a
     // reconstructed ChainsOfBinding state believes every card playable.
