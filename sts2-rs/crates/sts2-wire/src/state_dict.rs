@@ -3904,6 +3904,47 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
         }
     }
 
+    // --- Ovicopter-fight egg slots ---
+    //
+    // `OvicopterNormal.Slots = ["egg1", .., "egg5", "ovicopter"]`: the
+    // Ovicopter holds slot 5 and `LayEggsMove` gives each egg the HIGHEST
+    // slot no living enemy holds (`Slots.LastOrDefault`, Ovicopter.cs:87),
+    // with `Enemies` kept slot-sorted, so living eggs are listed before the
+    // Ovicopter. `ovicopter_lay_eggs_effect` reads both from `enemy_slot()`:
+    // left unstamped, the Ovicopter sorts as slot-unknown and the next lay
+    // appends its eggs AFTER it where the game puts them before. The eggs'
+    // exact slots are not on the wire; the k listed eggs take the top k egg
+    // slots in order (exact unless a lower egg died while a higher one
+    // lived).
+    if let Some(ovi_pos) = parsed
+        .encounter
+        .iter()
+        .position(|e| e.kind == MonsterKind::Ovicopter && !e.is_dead && !e.is_escaped)
+    {
+        const OVICOPTER_SLOT: u8 = 5;
+        let live: Vec<(usize, CreatureUid)> = parsed
+            .encounter
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| !e.is_escaped)
+            .zip(enemy_uids.iter())
+            .filter(|((_, e), _)| !e.is_dead)
+            .map(|((i, _), uid)| (i, *uid))
+            .collect();
+        let eggs: Vec<CreatureUid> = live
+            .iter()
+            .filter(|(i, _)| *i < ovi_pos && parsed.encounter[*i].kind == MonsterKind::ToughEgg)
+            .map(|(_, uid)| *uid)
+            .collect();
+        let first = OVICOPTER_SLOT.saturating_sub(u8::try_from(eggs.len()).unwrap_or(OVICOPTER_SLOT));
+        for (k, uid) in eggs.iter().enumerate() {
+            state.set_enemy_slot(*uid, first + u8::try_from(k).unwrap_or(0));
+        }
+        if let Some((_, uid)) = live.iter().find(|(i, _)| *i == ovi_pos) {
+            state.set_enemy_slot(*uid, OVICOPTER_SLOT);
+        }
+    }
+
     // --- C# `Enemies`-order (slot) restoration for reviver rosters ---
     //
     // The adapter wire lists ALIVE enemies in C# `Enemies` order and

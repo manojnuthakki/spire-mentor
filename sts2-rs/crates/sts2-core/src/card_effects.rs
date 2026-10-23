@@ -3886,8 +3886,15 @@ pub fn card_is_sly(state: &CombatState, uid: CardUid) -> bool {
 /// `true` iff `card` exhausts on play, honoring an upgrade-aware
 /// [`Card::keyword_override`] when set and otherwise deferring to the
 /// `CardId`-keyed EXHAUST registry. Bead `sts2-rs-59atd`.
+///
+/// C# `SoulsPower.OnEnchant` removes the card's Exhaust keyword (it can only
+/// enchant a card that has one, `SoulsPower.CanEnchant`), so a Soul's Power
+/// card never exhausts on play.
 #[must_use]
 pub fn card_exhausts_inst(card: &Card) -> bool {
+    if card.has_enchantment(crate::cards::EnchantmentId::SoulsPower) {
+        return false;
+    }
     match card.keyword_override {
         Some(k) => k.contains(KeywordOverride::EXHAUST),
         None => card_exhausts(card.card_id),

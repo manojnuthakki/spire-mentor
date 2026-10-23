@@ -184,3 +184,87 @@ fn malformed_json_text_fails_at_the_root() {
     assert_eq!(err.path(), "$");
     assert!(err.to_string().contains("invalid JSON"));
 }
+
+/// A small fight: a 100-hp Nibbit, `hand` (card ids) in hand, three Strikes to
+/// draw, `relics`, 3 energy.
+fn small_fight(hand: &[&str], relics: serde_json::Value) -> serde_json::Value {
+    let card = |id: &str, i: usize| serde_json::json!({"id": id, "stable_idx": i, "kind": "card", "upgraded": false});
+    serde_json::json!({
+        "wire_version": 1, "phase": "PlayerPlayPhase", "round": 1, "side": "Player", "is_elite": false,
+        "turn": 1, "combat_id": 0, "rng": {"seed": 1, "ascension": 0},
+        "player": {"class": "ironclad", "hp": 80, "max_hp": 80, "block": 0, "energy": 3, "max_energy": 3,
+                   "energy_regen_per_turn": 3, "gold": 0, "relics": relics, "powers": [], "potions": []},
+        "deck": {"hand": hand.iter().enumerate().map(|(i, id)| card(id, i + 1)).collect::<Vec<_>>(),
+                 "draw_pile": (0..3).map(|i| card("STRIKE_IRONCLAD", 10 + i)).collect::<Vec<_>>(),
+                 "discard_pile": [], "exhaust_pile": []},
+        "encounter": [{"kind": "Nibbit", "uid": 1, "hp": 100, "max_hp": 100, "block": 0, "powers": [],
+                       "intents": [{"kind": "Attack", "amount": 6, "times": 1}], "intent_history": [],
+                       "is_dead": false, "is_escaped": false}],
+    })
+}
+
+fn play(state: &mut sts2_core::CombatState, hand_index: u8, target: Option<u8>) {
+    let _ = sts2_core::apply(state, sts2_core::Action::PlayCard { hand_index, target });
+}
+
+/// C# `SoulsPower.OnEnchant` removes the card's Exhaust keyword: a Soul's
+/// Power Molten Fist goes to the discard pile, a plain one is exhausted.
+#[test]
+fn a_souls_power_card_does_not_exhaust() {
+    sts2_content::cards::dispatch::ensure_installed();
+    for (enchanted, discarded, exhausted) in [(true, 1, 0), (false, 0, 1)] {
+        let mut value = small_fight(&["MOLTEN_FIST"], serde_json::json!([]));
+        if enchanted {
+            value["deck"]["hand"][0]["enchantment"] = serde_json::json!("SOULS_POWER");
+            value["deck"]["hand"][0]["enchantment_amount"] = serde_json::json!(1);
+        }
+        let mut state = state_from_json_str(&value.to_string()).expect("rebuilds");
+        play(&mut state, 0, Some(0));
+        assert_eq!(
+            (state.player.discard.len(), state.player.exhaust.len()),
+            (discarded, exhausted),
+            "Soul's Power: {enchanted}"
+        );
+    }
+}
+
+/// C# `BrilliantScarf`: after 4 (non-auto) plays this turn, the 5th card in the
+/// hand costs 0; the count (the relic's counter, its `DisplayAmount`) comes from
+/// the wire and resets at the player's turn start.
+#[test]
+fn brilliant_scarf_makes_the_fifth_card_free() {
+    sts2_content::cards::dispatch::ensure_installed();
+    let scarf = |n: i32| serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": n}]);
+    let cost = |state: &sts2_core::CombatState, i: usize| {
+        sts2_core::hooks::effective_card_cost(state, state.player.hand[i])
+    };
+    let state = state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(3)).to_string()).unwrap();
+    assert_eq!(cost(&state, 0), 2, "the 4th play pays");
+
+    let mut state = state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(4)).to_string()).unwrap();
+    assert_eq!((cost(&state, 0), cost(&state, 1)), (0, 0), "the 5th is free, whichever it is");
+    play(&mut state, 0, Some(0));
+    assert_eq!(state.player.energy, 3, "the free Bash cost nothing");
+    assert_eq!(state.relics[0].counter, 5);
+    assert_eq!(cost(&state, 0), 2, "the 6th pays again");
+
+    let _ = sts2_core::apply(&mut state, sts2_core::Action::EndTurn);
+    assert_eq!(state.relics[0].counter, 0, "reset at the player's turn start");
+}
+
+/// `OvicopterNormal.Slots = [egg1..egg5, ovicopter]`: a rebuilt Ovicopter holds
+/// slot 5 and the listed eggs the top egg slots, so its next lay puts the new
+/// eggs before it, as the game's slot-sorted enemy list does.
+#[test]
+fn an_ovicopter_fight_rebuilds_with_its_egg_slots() {
+    sts2_content::cards::dispatch::ensure_installed();
+    let mut value = small_fight(&["STRIKE_IRONCLAD"], serde_json::json!([]));
+    let enemy = |kind: &str, uid: i32, mv: &str| serde_json::json!({"kind": kind, "uid": uid, "hp": 20,
+        "max_hp": 20, "block": 0, "powers": [], "intents": [], "intent_history": [], "move_state": mv,
+        "is_dead": false, "is_escaped": false});
+    value["encounter"] = serde_json::json!([enemy("ToughEgg", 1, "HATCH_MOVE"), enemy("ToughEgg", 2, "HATCH_MOVE"),
+                                            enemy("Ovicopter", 3, "SMASH_MOVE")]);
+    let state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    let slots: Vec<Option<u8>> = state.enemy_uids.iter().map(|uid| state.enemy_slot(*uid)).collect();
+    assert_eq!(slots, [Some(3), Some(4), Some(5)]);
+}

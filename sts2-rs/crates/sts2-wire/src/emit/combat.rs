@@ -1001,10 +1001,9 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
         // `alive = !is_dead`). Deriving this from HP — rather than the
         // old hardcoded `false` — fixes the FOGMOG IllusionPower parity
         // bug (sts2-rs-vvi6g): the player-killed EyeWithTeeth used to
-        // read as alive at 0 HP. NB: `state_from_dict` drops `is_dead`
-        // enemies (documented truncation), so this is emission-only
-        // fidelity, not a round-trip change — all round-trip fixtures
-        // keep enemies at hp > 0.
+        // read as alive at 0 HP. `state_from_dict` keeps an `is_dead`
+        // enemy as a corpse (a reviver's: Decimillipede segments, Eye with
+        // Teeth), so a dumped corpse round-trips.
         set(&mut m, "is_dead", c.current_hp <= 0);
         set(&mut m, "is_escaped", false);
         // C# `RemoveCreature` parity (bead sts2-rs-c8why): a dead enemy

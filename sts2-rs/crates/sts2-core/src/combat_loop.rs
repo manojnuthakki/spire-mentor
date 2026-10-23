@@ -158,6 +158,23 @@ fn bump_void_form_play_tally(state: &mut CombatState) {
     }
 }
 
+/// The player's (unmelted) Brilliant Scarf, whose `counter` is C#'s
+/// `CardsPlayedThisTurn` (the relic's `DisplayAmount`).
+fn brilliant_scarf_relic_mut(state: &mut CombatState) -> Option<&mut crate::Relic> {
+    state
+        .relics
+        .iter_mut()
+        .find(|r| !r.is_melted && r.kind == crate::RelicKind::BrilliantScarf)
+}
+
+/// Count `plays` non-auto-play card plays on Brilliant Scarf (C#
+/// `BrilliantScarf.AfterCardPlayed`, `CardsPlayedThisTurn++` per play).
+fn bump_brilliant_scarf_tally(state: &mut CombatState, plays: i32) {
+    if let Some(r) = brilliant_scarf_relic_mut(state) {
+        r.counter = r.counter.saturating_add(plays);
+    }
+}
+
 /// Zero every live player VoidForm instance's per-turn tally. C#
 /// `VoidFormPower.BeforeSideTurnStart` (VoidFormPower.cs:75-83).
 fn reset_void_form_play_tally(state: &mut CombatState) {
@@ -577,6 +594,10 @@ pub fn start_player_turn(state: &mut CombatState) -> StepResult {
     // participants. That tally is NOT the same quantity as the bucket array
     // above — see [`reset_void_form_play_tally`].
     reset_void_form_play_tally(state);
+    // C# `BrilliantScarf.BeforeSideTurnStart` zeroes `CardsPlayedThisTurn`.
+    if let Some(r) = brilliant_scarf_relic_mut(state) {
+        r.counter = 0;
+    }
     // Round boundary for the HistoryCourse slot: everything stamped during
     // the round that just ended becomes "last round's last Attack/Skill";
     // the new round (incl. its turn-start Mayhem auto-plays) accumulates
@@ -7554,6 +7575,11 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // path so `IsAutoPlay` is false by construction (the auto-play tally in
     // [`auto_play_tally_finished`] deliberately does NOT call this).
     bump_void_form_play_tally(state);
+    // C# `BrilliantScarf.AfterCardPlayed` counts every play iteration that is
+    // not an auto-play (it sits inside `OnPlayWrapper`'s `playCount` loop,
+    // CardModel.cs:1904-1959): the initial play, each replay and the Echo
+    // replay. This is the hand-play path, so none is an auto-play.
+    bump_brilliant_scarf_tally(state, 1 + extra_plays.max(0) + i32::from(echo_this_card));
 
     // ── Cleanup: move Play → Discard or Exhaust ──────────────────────────
     // Bead `sts2-rs-6ynt.3.4`: branch on the engine-side EXHAUST keyword
