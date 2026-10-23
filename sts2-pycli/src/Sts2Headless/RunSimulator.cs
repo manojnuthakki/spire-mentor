@@ -4094,8 +4094,8 @@ public partial class RunSimulator
         typeof(MegaCrit.Sts2.Core.Combat.History.CombatHistoryEntry).GetProperty("RoundNumber", NonPublic);
 
     /// <summary>
-    /// Agent mode: the moves enemies performed on the enemy turn of the
-    /// previous round and of this one, as `[{combat_id, round, intents}]`
+    /// Agent mode: every move enemies performed in this combat so far, in
+    /// order, as `[{combat_id, round, intents}]`
     /// (`intents`: the performed move's intent types), from the game's own
     /// combat history (`MonsterPerformedMoveEntry`, added by
     /// `MonsterModel.PerformMove` once the move is done; its round is the
@@ -4108,19 +4108,21 @@ public partial class RunSimulator
     /// its move performs DEAD_MOVE, which has no intents; a move replaced on
     /// the enemy turn (a stun) shows its own intents. So the intents tell the
     /// move it telegraphed from another. Enemies removed from combat after
-    /// their move are covered too.
+    /// their move are covered too. The whole combat is kept, not a window:
+    /// two decisions can be several rounds apart (Mayhem autoplaying Void
+    /// Form at the start of the turn ends it before any decision), and the
+    /// game clears its history only when a combat starts or ends.
     /// </summary>
     private List<Dictionary<string, object?>>? EnemyMoves(CombatState? combatState)
     {
         if (!_agentMode || combatState == null || HistoryEntryRound == null) return null;
-        var since = combatState.RoundNumber - 1;
         var moves = new List<Dictionary<string, object?>>();
         foreach (var entry in CombatManager.Instance.History.Entries
                      .OfType<MegaCrit.Sts2.Core.Combat.History.Entries.MonsterPerformedMoveEntry>())
         {
             var round = (int)HistoryEntryRound.GetValue(entry)!;
             var id = entry.Actor?.CombatId;
-            if (round >= since && id.HasValue)
+            if (id.HasValue)
                 moves.Add(new Dictionary<string, object?>
                 {
                     ["combat_id"] = (long)id.Value,
