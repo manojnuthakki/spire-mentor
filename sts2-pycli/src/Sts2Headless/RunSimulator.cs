@@ -4090,6 +4090,43 @@ public partial class RunSimulator
         dict["combat_id"] = e.CombatId.HasValue ? (long)e.CombatId.Value : null;
     }
 
+    private static readonly System.Reflection.PropertyInfo? HistoryEntryRound =
+        typeof(MegaCrit.Sts2.Core.Combat.History.CombatHistoryEntry).GetProperty("RoundNumber", NonPublic);
+
+    /// <summary>
+    /// Agent mode: the moves enemies performed on the enemy turn of the
+    /// previous round and of this one, as `[{combat_id, round, intents}]`
+    /// (`intents`: the performed move's intent types), from the game's own
+    /// combat history (`MonsterPerformedMoveEntry`, added by
+    /// `MonsterModel.PerformMove` once the move is done; its round is the
+    /// entry's private `RoundNumber`). The player watches each enemy act, so
+    /// this is public; the move's id is not sent. Every creature still in
+    /// combat takes a turn, a corpse too (`ExecuteEnemyTurn`): a Decimillipede
+    /// segment poisoned to death before its move performs DEAD_MOVE, which has
+    /// no intents. So the intents tell the move it telegraphed from another.
+    /// Enemies already removed from combat are covered too.
+    /// </summary>
+    private List<Dictionary<string, object?>>? EnemyMoves(CombatState? combatState)
+    {
+        if (!_agentMode || combatState == null || HistoryEntryRound == null) return null;
+        var since = combatState.RoundNumber - 1;
+        var moves = new List<Dictionary<string, object?>>();
+        foreach (var entry in CombatManager.Instance.History.Entries
+                     .OfType<MegaCrit.Sts2.Core.Combat.History.Entries.MonsterPerformedMoveEntry>())
+        {
+            var round = (int)HistoryEntryRound.GetValue(entry)!;
+            var id = entry.Actor?.CombatId;
+            if (round >= since && id.HasValue)
+                moves.Add(new Dictionary<string, object?>
+                {
+                    ["combat_id"] = (long)id.Value,
+                    ["round"] = round,
+                    ["intents"] = entry.Move.Intents.Select(i => i.IntentType.ToString()).ToList(),
+                });
+        }
+        return moves;
+    }
+
     private Dictionary<string, object?> CombatPlayState(Player player)
     {
         var pcs = player.PlayerCombatState;
@@ -4329,6 +4366,7 @@ public partial class RunSimulator
             // Published as a PAIR or not at all — see `MirrorRngBlock`.
             ["rng"] = MirrorRngBlock(),
         };
+        if (EnemyMoves(combatState) is { } enemyMoves) result["enemy_moves"] = enemyMoves;
 
         // Character-specific mechanics
         try
