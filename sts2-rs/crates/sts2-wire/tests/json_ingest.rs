@@ -305,3 +305,25 @@ fn brilliant_scarf_makes_the_fifth_card_free_in_stars() {
         assert_eq!(plays, playable, "counter {counter}: playable with no stars");
     }
 }
+
+/// C# counts each play iteration as it ends (`AfterCardPlayed` inside the
+/// `playCount` loop): a Helix Drill made to replay (Transfigure: cost 1, one
+/// replay) as the 4th play has its replay be the 5th, free. Helix's hits are
+/// the energy spent this turn less its own cost at that moment: 1 - 1 = 0 on
+/// the play, 1 - 0 = 1 on the free replay, so 3 damage (0 if the count moved
+/// only after the whole series).
+#[test]
+fn brilliant_scarf_counts_each_replay_as_it_ends() {
+    sts2_content::cards::dispatch::ensure_installed();
+    sts2_content::relics::dispatch::ensure_installed();
+    let mut value = small_fight(&["HELIX_DRILL"], serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": 3}]));
+    let helix = &mut value["deck"]["hand"][0];
+    helix["base_cost"] = serde_json::json!(1);
+    helix["cost_override"] = serde_json::json!(1);
+    helix["replay_count"] = serde_json::json!(1);
+    let mut state = state_from_json_str(&value.to_string()).unwrap();
+    play(&mut state, 0, Some(0));
+    let nibbit = state.creatures.iter().find(|c| c.id == state.enemy_uids[0].0).unwrap();
+    assert_eq!(nibbit.current_hp, 100 - 3, "the replay, free, hits once");
+    assert_eq!(state.relics[0].counter, 5);
+}

@@ -158,6 +158,23 @@ fn bump_void_form_play_tally(state: &mut CombatState) {
     }
 }
 
+/// C# `BrilliantScarf.AfterCardPlayed`: `CardsPlayedThisTurn++` at the end of
+/// each play iteration that is not an auto-play (it runs inside
+/// `OnPlayWrapper`'s `playCount` loop, CardModel.cs:1904-1959, and returns on
+/// `cardPlay.IsAutoPlay`). Called from the hand-play path only, once per
+/// iteration (the play, each replay, the Echo replay), so a replay that
+/// follows the fourth play already reads the fifth card free (Helix Drill's
+/// hits subtract its own cost at that point).
+fn bump_brilliant_scarf(state: &mut CombatState) {
+    if let Some(r) = state
+        .relics
+        .iter_mut()
+        .find(|r| !r.is_melted && r.kind == crate::RelicKind::BrilliantScarf)
+    {
+        r.counter = r.counter.saturating_add(1);
+    }
+}
+
 /// Zero every live player VoidForm instance's per-turn tally. C#
 /// `VoidFormPower.BeforeSideTurnStart` (VoidFormPower.cs:75-83).
 fn reset_void_form_play_tally(state: &mut CombatState) {
@@ -7310,6 +7327,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // `after_card_played` walks so enchantment side-effects observe
     // any state changes those listeners produced.
     crate::enchantment_hooks::dispatch_after_card_played(state, card_uid);
+    bump_brilliant_scarf(state);
 
     // ── OneTwoPunch replay loop (bead `sts2-rs-76t5`) ────────────────────
     // Replay the card `extra_plays` additional times (mirrors the
@@ -7415,6 +7433,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
         if card.card_type == crate::cards::CardType::Skill {
             state.discount_pinpoint_on_skill_played();
         }
+        bump_brilliant_scarf(state);
         if state.is_over {
             break;
         }
@@ -7537,6 +7556,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
                     .ethereal_cards_played_this_combat
                     .saturating_add(1);
             }
+            bump_brilliant_scarf(state);
             // (EchoForm now grants a single extra play, so there is no replay
             // loop to break out of on a combat-ending replay — the cleanup
             // below already no-ops on an empty board.)
@@ -7554,17 +7574,6 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // path so `IsAutoPlay` is false by construction (the auto-play tally in
     // [`auto_play_tally_finished`] deliberately does NOT call this).
     bump_void_form_play_tally(state);
-    // C# `BrilliantScarf.AfterCardPlayed` counts each play iteration of a
-    // non-auto play (`OnPlayWrapper`'s `playCount` loop, CardModel.cs:1904-1959;
-    // `if (cardPlay.IsAutoPlay) return`): the play, each replay and the Echo
-    // replay. This is the hand-play path; auto-plays never reach it.
-    if let Some(r) = state
-        .relics
-        .iter_mut()
-        .find(|r| !r.is_melted && r.kind == crate::RelicKind::BrilliantScarf)
-    {
-        r.counter = r.counter.saturating_add(1 + extra_plays.max(0) + i32::from(echo_this_card));
-    }
 
     // ── Cleanup: move Play → Discard or Exhaust ──────────────────────────
     // Bead `sts2-rs-6ynt.3.4`: branch on the engine-side EXHAUST keyword
