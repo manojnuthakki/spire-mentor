@@ -234,10 +234,15 @@ fn a_souls_power_card_does_not_exhaust() {
 #[test]
 fn brilliant_scarf_makes_the_fifth_card_free() {
     sts2_content::cards::dispatch::ensure_installed();
+    sts2_content::relics::dispatch::ensure_installed();
     let scarf = |n: i32| serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": n}]);
     let cost = |state: &sts2_core::CombatState, i: usize| {
         sts2_core::hooks::effective_card_cost(state, state.player.hand[i])
     };
+    let mut state = state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(0)).to_string()).unwrap();
+    play(&mut state, 0, Some(0));
+    assert_eq!(state.relics[0].counter, 1, "one play counts once");
+
     let state = state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(3)).to_string()).unwrap();
     assert_eq!(cost(&state, 0), 2, "the 4th play pays");
 

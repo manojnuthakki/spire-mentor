@@ -12467,7 +12467,8 @@ const MODIFY_MAX_ENERGY_KINDS: crate::PowerKindSet = crate::PowerKindSet::from_k
 /// a zero-override, this fold would need a real two-pass split.)
 /// C# `BrilliantScarf.TryModifyEnergyCostInCombatLate`: while the owner has
 /// played `Cards - 1` = 4 cards this turn (`CardsPlayedThisTurn`, the relic's
-/// `counter`), a card in the hand or the play pile costs 0 (`ShouldModifyCost`).
+/// `counter`, kept by sts2-content's `listener_brilliant_scarf_card_played`),
+/// a card in the hand or the play pile costs 0 (`ShouldModifyCost`).
 /// A `...Late` absolute-zero hook, so it wins over every additive one; an
 /// X-cost card is left alone (`CardEnergyCost.GetWithModifiers` skips the
 /// global hooks for `CostsX`).

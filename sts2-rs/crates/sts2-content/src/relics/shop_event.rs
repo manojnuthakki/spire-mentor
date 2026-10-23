@@ -727,12 +727,12 @@ pub fn install_pool() {
     // Bead `sts2-rs-70anj.1`: real `after_card_played` +
     // `before_side_turn_start` legs for `BrilliantScarf` (Python
     // `shop_event.py::BrilliantScarf`). The Python class is a
-    // tracker-only mirror at pin `01c094d` (the "5th card costs 0"
-    // effect is documented but never implemented in Python — see
-    // `feedback_plan_doc_lag_check_code_first`). We mirror the actual
-    // Python behavior: increment `Relic.counter` per player card
-    // played, reset on player side-turn-start. Cost-0 hook deferred
-    // until Python adds it.
+    // tracker-only mirror at pin `01c094d`. The counter is C#'s
+    // `CardsPlayedThisTurn`: incremented per player card played, reset on
+    // player side-turn-start. The "5th card costs 0" effect
+    // (`TryModifyEnergyCostInCombatLate`) reads it in sts2-core
+    // `hooks::brilliant_scarf_makes_free`. (C# skips auto-plays,
+    // `cardPlay.IsAutoPlay`; this listener has no such flag and counts them.)
     register_after_card_played(
         RelicId::BrilliantScarf,
         listener_brilliant_scarf_card_played as AfterCardPlayedFn,
