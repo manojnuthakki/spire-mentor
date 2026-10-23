@@ -4100,11 +4100,15 @@ public partial class RunSimulator
     /// combat history (`MonsterPerformedMoveEntry`, added by
     /// `MonsterModel.PerformMove` once the move is done; its round is the
     /// entry's private `RoundNumber`). The player watches each enemy act, so
-    /// this is public; the move's id is not sent. Every creature still in
-    /// combat takes a turn, a corpse too (`ExecuteEnemyTurn`): a Decimillipede
-    /// segment poisoned to death before its move performs DEAD_MOVE, which has
-    /// no intents. So the intents tell the move it telegraphed from another.
-    /// Enemies already removed from combat are covered too.
+    /// this is public; the move's id is not sent. `ExecuteEnemyTurn` gives a
+    /// turn to each enemy in combat when the enemy turn starts (a snapshot),
+    /// a corpse the game keeps included, except one summoned this turn
+    /// (`Creature.TakeTurn` skips `SpawnedThisTurn`), and except one removed
+    /// before its turn comes. A Decimillipede segment poisoned to death before
+    /// its move performs DEAD_MOVE, which has no intents; a move replaced on
+    /// the enemy turn (a stun) shows its own intents. So the intents tell the
+    /// move it telegraphed from another. Enemies removed from combat after
+    /// their move are covered too.
     /// </summary>
     private List<Dictionary<string, object?>>? EnemyMoves(CombatState? combatState)
     {
