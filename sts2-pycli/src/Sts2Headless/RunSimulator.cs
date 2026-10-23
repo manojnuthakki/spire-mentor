@@ -4073,6 +4073,23 @@ public partial class RunSimulator
         }
     }
 
+    /// <summary>
+    /// Agent mode: an enemy's model id (`MONSTER.X`, the name's own key) and
+    /// its `combat_id`, the game's `Creature.CombatId`. The game assigns that
+    /// once, when the creature is attached to the fight (`CombatState.
+    /// AttachCreature`, from a counter that only grows), and a revival heals
+    /// the same creature, so the id survives its own death and revival and
+    /// any other enemy's death, revival or summoning; a summoned enemy gets
+    /// the next one. The list index stays the targeting position among the
+    /// living enemies. Default mode keeps upstream's shape.
+    /// </summary>
+    private void AppendEnemyIdentity(Dictionary<string, object?> dict, Creature e)
+    {
+        if (!_agentMode) return;
+        dict["model_id"] = e.Monster?.Id.ToString();
+        dict["combat_id"] = e.CombatId.HasValue ? (long)e.CombatId.Value : null;
+    }
+
     private Dictionary<string, object?> CombatPlayState(Player player)
     {
         var pcs = player.PlayerCombatState;
@@ -4141,6 +4158,7 @@ public partial class RunSimulator
                     // exact planning blindness fixed live in PRs #263/#264.
                     ["move_state"] = e.Monster?.NextMove?.Id,
                 };
+                AppendEnemyIdentity(enemyDict, e);
                 // Allowlisted private AI state (Fabricator._lastSpawned,
                 // KnowledgeDemon curse counter) — see AppendMonsterHiddenState.
                 AppendMonsterHiddenState(enemyDict, e.Monster);
@@ -4192,6 +4210,7 @@ public partial class RunSimulator
                     ["intents"] = dIntents.Count > 0 ? dIntents : null,
                     ["move_state"] = e.Monster?.NextMove?.Id,
                 };
+                AppendEnemyIdentity(corpseDict, e);
                 // Same allowlisted private AI state as the alive branch — a
                 // reviving monster's counters survive its death.
                 AppendMonsterHiddenState(corpseDict, e.Monster);
