@@ -7554,6 +7554,17 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // path so `IsAutoPlay` is false by construction (the auto-play tally in
     // [`auto_play_tally_finished`] deliberately does NOT call this).
     bump_void_form_play_tally(state);
+    // C# `BrilliantScarf.AfterCardPlayed` counts each play iteration of a
+    // non-auto play (`OnPlayWrapper`'s `playCount` loop, CardModel.cs:1904-1959;
+    // `if (cardPlay.IsAutoPlay) return`): the play, each replay and the Echo
+    // replay. This is the hand-play path; auto-plays never reach it.
+    if let Some(r) = state
+        .relics
+        .iter_mut()
+        .find(|r| !r.is_melted && r.kind == crate::RelicKind::BrilliantScarf)
+    {
+        r.counter = r.counter.saturating_add(1 + extra_plays.max(0) + i32::from(echo_this_card));
+    }
 
     // ── Cleanup: move Play → Discard or Exhaust ──────────────────────────
     // Bead `sts2-rs-6ynt.3.4`: branch on the engine-side EXHAUST keyword

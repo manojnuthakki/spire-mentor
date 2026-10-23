@@ -273,3 +273,35 @@ fn an_ovicopter_fight_rebuilds_with_its_egg_slots() {
     let slots: Vec<Option<u8>> = state.enemy_uids.iter().map(|uid| state.enemy_slot(*uid)).collect();
     assert_eq!(slots, [Some(3), Some(4), Some(5)]);
 }
+
+/// C# `BrilliantScarf.AfterCardPlayed` skips auto-plays: Havoc's auto-played
+/// Strike doesn't count, so after Havoc (the 3rd play) Bash still costs 2.
+#[test]
+fn brilliant_scarf_does_not_count_an_auto_play() {
+    sts2_content::cards::dispatch::ensure_installed();
+    sts2_content::relics::dispatch::ensure_installed();
+    let mut value = small_fight(&["HAVOC", "BASH"], serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": 2}]));
+    value["deck"]["draw_pile"] = serde_json::json!([{"id": "STRIKE_IRONCLAD", "stable_idx": 10, "kind": "card",
+                                                     "upgraded": false}]);
+    let mut state = state_from_json_str(&value.to_string()).unwrap();
+    play(&mut state, 0, None);
+    assert_eq!(state.relics[0].counter, 3, "Havoc counts, its auto-played Strike doesn't");
+    assert_eq!(sts2_core::hooks::effective_card_cost(&state, state.player.hand[0]), 2);
+}
+
+/// C# `BrilliantScarf.TryModifyStarCost`: the fifth card costs no stars either.
+#[test]
+fn brilliant_scarf_makes_the_fifth_card_free_in_stars() {
+    sts2_content::cards::dispatch::ensure_installed();
+    sts2_content::relics::dispatch::ensure_installed();
+    for (counter, playable) in [(3, false), (4, true)] {
+        let value = small_fight(&["CRESCENT_SPEAR"], serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": counter}]));
+        let state = state_from_json_str(&value.to_string()).unwrap();
+        let card = &state.cards[state.player.hand[0].get() as usize - 1];
+        assert_eq!(sts2_core::effective_star_cost_in_combat(&state, card) == 0, playable, "counter {counter}");
+        let plays = sts2_core::legal_actions(&state)
+            .iter()
+            .any(|a| matches!(a, sts2_core::Action::PlayCard { hand_index: 0, .. }));
+        assert_eq!(plays, playable, "counter {counter}: playable with no stars");
+    }
+}

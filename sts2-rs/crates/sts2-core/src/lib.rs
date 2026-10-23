@@ -12372,6 +12372,10 @@ pub fn effective_star_cost_in_combat(state: &CombatState, card: &crate::cards::C
     if base == 0 {
         return 0;
     }
+    // C# `BrilliantScarf.TryModifyStarCost`: the fifth card is free in stars too.
+    if crate::hooks::brilliant_scarf_makes_free(state, card, card.uid) {
+        return 0;
+    }
     let vf_amount = state.player_power_amount(crate::powers::PowerKind::VoidForm);
     if vf_amount > 0 {
         let played = crate::combat_loop::void_form_cards_played_this_turn(state);

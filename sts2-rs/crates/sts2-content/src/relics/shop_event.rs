@@ -728,15 +728,11 @@ pub fn install_pool() {
     // `before_side_turn_start` legs for `BrilliantScarf` (Python
     // `shop_event.py::BrilliantScarf`). The Python class is a
     // tracker-only mirror at pin `01c094d`. The counter is C#'s
-    // `CardsPlayedThisTurn`: incremented per player card played, reset on
-    // player side-turn-start. The "5th card costs 0" effect
-    // (`TryModifyEnergyCostInCombatLate`) reads it in sts2-core
-    // `hooks::brilliant_scarf_makes_free`. (C# skips auto-plays,
-    // `cardPlay.IsAutoPlay`; this listener has no such flag and counts them.)
-    register_after_card_played(
-        RelicId::BrilliantScarf,
-        listener_brilliant_scarf_card_played as AfterCardPlayedFn,
-    );
+    // `CardsPlayedThisTurn`, reset here at the player's side-turn-start. It is
+    // incremented in sts2-core `combat_loop::finish_card_play`, the hand-play
+    // path, because C# skips auto-plays (`cardPlay.IsAutoPlay`) and this
+    // listener can't tell them apart. The "5th card costs 0" effect reads it in
+    // sts2-core `hooks::brilliant_scarf_makes_free`.
     register_before_side_turn_start(
         RelicId::BrilliantScarf,
         listener_brilliant_scarf_turn_reset as BeforeSideTurnStartFn,
@@ -2044,30 +2040,6 @@ fn listener_chemical_x_modify_x_value(state: &CombatState, current_x: i32) -> i3
         return current_x;
     }
     current_x + CHEMICAL_X_INCREASE
-}
-
-/// `BrilliantScarf::after_card_played` — `self._cards_this_turn += 1`
-/// (Python `sts2-rl-agent@01c094d:sts2_env/relics/shop_event.py::
-/// BrilliantScarf`). Tracker-only mirror — Python's documented "5th
-/// card costs 0" effect is not implemented at this pin (see
-/// `feedback_plan_doc_lag_check_code_first`). We track the per-turn
-/// play count on `Relic.counter` so downstream beads can wire the
-/// cost-0 hook once Python adds it. Bead `sts2-rs-70anj.1`.
-#[allow(clippy::trivially_copy_pass_by_ref)]
-fn listener_brilliant_scarf_card_played(
-    state: &mut CombatState,
-    _ctx: &CardEventCtx,
-) -> EffectResult {
-    for relic in &mut state.relics {
-        if relic.is_melted {
-            continue;
-        }
-        if relic.kind == RelicKind::BrilliantScarf {
-            relic.counter = relic.counter.saturating_add(1);
-            return EffectResult::Resolved;
-        }
-    }
-    EffectResult::NotImplemented
 }
 
 /// `BrilliantScarf::before_side_turn_start` — `if side == PLAYER:
@@ -10112,65 +10084,28 @@ mod tests {
     }
 
     #[test]
-    fn listener_brilliant_scarf_tracks_card_plays_and_resets_on_player_turn() {
-        use sts2_core::cards::CardId;
-        use sts2_core::relic_effects::{
-            dispatch_after_card_played, dispatch_before_side_turn_start, CardEventCtx,
-        };
+    fn listener_brilliant_scarf_resets_on_player_turn() {
+        use sts2_core::relic_effects::dispatch_before_side_turn_start;
         crate::relics::dispatch::ensure_installed();
         let mut state = CombatState::default();
         equip_relic(&mut state, RelicKind::BrilliantScarf);
-        let ctx = CardEventCtx {
-            card_id: CardId::StrikeIronclad,
-            card_uid: None,
-            target: None,
-            card_tags: sts2_core::cards::CardTags::NONE,
-            energy_spent: 0,
+        // The count itself is kept on the hand-play path (sts2-core
+        // `finish_card_play`, auto-plays excluded); this listener resets it.
+        let set = |state: &mut CombatState, n: i32| {
+            for r in &mut state.relics {
+                if r.kind == RelicKind::BrilliantScarf {
+                    r.counter = n;
+                }
+            }
         };
-        for _ in 0..4 {
-            let _ = dispatch_after_card_played(&mut state, &ctx);
-        }
-        let counter = state
-            .relics
-            .iter()
-            .find(|r| !r.is_melted && r.kind == RelicKind::BrilliantScarf)
-            .map(|r| r.counter)
-            .unwrap_or_default();
-        assert_eq!(counter, 4);
-        let _ = dispatch_before_side_turn_start(&mut state, Side::Player);
-        let counter_after_reset = state
-            .relics
-            .iter()
-            .find(|r| !r.is_melted && r.kind == RelicKind::BrilliantScarf)
-            .map_or(99, |r| r.counter);
-        assert_eq!(counter_after_reset, 0);
-    }
-
-    #[test]
-    fn listener_brilliant_scarf_does_not_reset_on_enemy_turn() {
-        use sts2_core::cards::CardId;
-        use sts2_core::relic_effects::{
-            dispatch_after_card_played, dispatch_before_side_turn_start, CardEventCtx,
+        let get = |state: &CombatState| {
+            state.relics.iter().find(|r| r.kind == RelicKind::BrilliantScarf).map_or(99, |r| r.counter)
         };
-        crate::relics::dispatch::ensure_installed();
-        let mut state = CombatState::default();
-        equip_relic(&mut state, RelicKind::BrilliantScarf);
-        let ctx = CardEventCtx {
-            card_id: CardId::StrikeIronclad,
-            card_uid: None,
-            target: None,
-            card_tags: sts2_core::cards::CardTags::NONE,
-            energy_spent: 0,
-        };
-        let _ = dispatch_after_card_played(&mut state, &ctx);
+        set(&mut state, 4);
         let _ = dispatch_before_side_turn_start(&mut state, Side::Enemy);
-        let counter = state
-            .relics
-            .iter()
-            .find(|r| !r.is_melted && r.kind == RelicKind::BrilliantScarf)
-            .map(|r| r.counter)
-            .unwrap_or_default();
-        assert_eq!(counter, 1, "Enemy-turn start must not reset the counter");
+        assert_eq!(get(&state), 4, "Enemy-turn start must not reset the counter");
+        let _ = dispatch_before_side_turn_start(&mut state, Side::Player);
+        assert_eq!(get(&state), 0);
     }
 
     #[test]

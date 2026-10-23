@@ -12467,17 +12467,17 @@ const MODIFY_MAX_ENERGY_KINDS: crate::PowerKindSet = crate::PowerKindSet::from_k
 /// a zero-override, this fold would need a real two-pass split.)
 /// C# `BrilliantScarf.TryModifyEnergyCostInCombatLate`: while the owner has
 /// played `Cards - 1` = 4 cards this turn (`CardsPlayedThisTurn`, the relic's
-/// `counter`, kept by sts2-content's `listener_brilliant_scarf_card_played`),
-/// a card in the hand or the play pile costs 0 (`ShouldModifyCost`).
-/// A `...Late` absolute-zero hook, so it wins over every additive one; an
-/// X-cost card is left alone (`CardEnergyCost.GetWithModifiers` skips the
-/// global hooks for `CostsX`).
+/// `counter`, bumped per non-auto play in `combat_loop::finish_card_play` and
+/// reset by sts2-content's turn-start listener), a card in the hand or the play
+/// pile costs 0 energy (`ShouldModifyCost`) and 0 stars (`TryModifyStarCost`,
+/// in `effective_star_cost_in_combat`). A `...Late` absolute-zero hook, so it
+/// wins over every additive one; an X-cost card keeps its energy cost
+/// (`CardEnergyCost.GetWithModifiers` skips the global hooks for `CostsX`).
 pub const BRILLIANT_SCARF_FREE_AFTER: i32 = 4;
 
 #[must_use]
-pub fn brilliant_scarf_makes_free(state: &CombatState, card: &crate::cards::Card, card_uid: CardUid) -> bool {
-    !card.is_x_cost()
-        && state
+pub fn brilliant_scarf_makes_free(state: &CombatState, _card: &crate::cards::Card, card_uid: CardUid) -> bool {
+    state
             .relics
             .iter()
             .any(|r| !r.is_melted && r.kind == crate::RelicKind::BrilliantScarf
@@ -12488,7 +12488,9 @@ pub fn brilliant_scarf_makes_free(state: &CombatState, card: &crate::cards::Card
 #[must_use]
 pub fn dispatch_modify_card_cost(state: &CombatState, ctx: &CardCostCtx) -> i32 {
     if let Some(uid) = ctx.card_uid {
-        if crate::card_by_uid(&state.cards, uid).is_some_and(|c| brilliant_scarf_makes_free(state, c, uid)) {
+        if crate::card_by_uid(&state.cards, uid)
+            .is_some_and(|c| !c.is_x_cost() && brilliant_scarf_makes_free(state, c, uid))
+        {
             return 0;
         }
     }
@@ -12689,7 +12691,7 @@ pub fn effective_card_cost_inst_with_mask(
     // Tangled-style surcharge still stacks on top. Parity: Necro PARITY10
     // (FLATTEN played after an Osty attack cost 2 here vs 0 in C#, cascading
     // into an energy/hand/enemy-hp divergence).
-    if brilliant_scarf_makes_free(state, card, card_uid) {
+    if !card.is_x_cost() && brilliant_scarf_makes_free(state, card, card_uid) {
         return 0;
     }
     let base_cost = if card_cost_locally_zeroed(state, card) {
