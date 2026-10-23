@@ -43,7 +43,7 @@ use crate::hooks::{CreatureRef, ValueProps};
 use crate::{CardUid, CombatState, PlayerCombatState};
 
 // Bit-packed per-combat "used" flags stashed on the card's
-// `VarKey::Generic` combat-var. The Vigorous + Glam bits agree
+// `VarKey::EnchantmentUsed` combat-var. The Vigorous + Glam bits agree
 // byte-for-byte with the content-side `sts2-content::enchantments`
 // encoding (helpers `mark_vigorous_used` / `vigorous_used` /
 // `mark_glam_used` / `glam_used`). Swift + Sown bits are core-side
@@ -67,7 +67,7 @@ pub fn enchant_play_count_bonus(card: &Card) -> i32 {
     if card.has_enchantment(EnchantmentId::Spiral) {
         bonus += 1;
     }
-    if card.has_enchantment(EnchantmentId::Glam) && card.combat_var(VarKey::Generic) & GLAM_USED_BIT == 0 {
+    if card.has_enchantment(EnchantmentId::Glam) && card.combat_var(VarKey::EnchantmentUsed) & GLAM_USED_BIT == 0 {
         bonus += 1;
     }
     bonus
@@ -102,8 +102,8 @@ pub fn enchant_damage_additive(card: &crate::cards::Card, is_powered: bool) -> i
         total = total.saturating_add(card.combat_var(VarKey::RampageDamage));
     }
     // Vigorous applies once per card per combat; the consumed bit lives on
-    // `VarKey::Generic`.
-    if card.combat_var(VarKey::Generic) & VIGOROUS_USED_BIT == 0 {
+    // `VarKey::EnchantmentUsed`.
+    if card.combat_var(VarKey::EnchantmentUsed) & VIGOROUS_USED_BIT == 0 {
         total = total.saturating_add(card.enchantment(EnchantmentId::Vigorous));
     }
     // Inky (Blade of Ink shivs): fixed +1, regardless of stacks. v0.107.1
@@ -558,7 +558,7 @@ fn on_card_played_stub(state: &mut CombatState, card_uid: CardUid) {
             card.enchantment(EnchantmentId::Adroit),
             card.enchantment(EnchantmentId::Swift),
             card.enchantment(EnchantmentId::Sown),
-            card.combat_var(VarKey::Generic),
+            card.combat_var(VarKey::EnchantmentUsed),
         )
     };
 
@@ -641,7 +641,7 @@ fn after_card_played_stub(state: &mut CombatState, card_uid: CardUid) {
     let Some(card) = state.cards.get_mut(idx) else {
         return;
     };
-    let mut bits = card.combat_var(VarKey::Generic);
+    let mut bits = card.combat_var(VarKey::EnchantmentUsed);
     if card.has_enchantment(EnchantmentId::Vigorous) {
         bits |= VIGOROUS_USED_BIT;
     }
@@ -654,7 +654,7 @@ fn after_card_played_stub(state: &mut CombatState, card_uid: CardUid) {
     if card.has_enchantment(EnchantmentId::Sown) {
         bits |= SOWN_USED_BIT;
     }
-    card.set_combat_var(VarKey::Generic, bits);
+    card.set_combat_var(VarKey::EnchantmentUsed, bits);
 }
 
 // ---------------------------------------------------------------------------
@@ -995,21 +995,21 @@ mod tests {
     }
 
     /// Vigorous: after_card_played sets the per-combat used bit on the
-    /// card's VarKey::Generic slot. The encoding mirrors
+    /// card's VarKey::EnchantmentUsed slot. The encoding mirrors
     /// `sts2-content::enchantments::mark_vigorous_used` (bit 0).
     #[test]
     fn vigorous_after_card_played_marks_used_bit() {
         let mut state = state_with_one_enchanted_card(EnchantmentId::Vigorous, 5);
-        assert_eq!(state.cards[0].combat_var(VarKey::Generic) & 0b01, 0);
+        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b01, 0);
         dispatch_after_card_played(&mut state, uid(1));
         assert_eq!(
-            state.cards[0].combat_var(VarKey::Generic) & 0b01,
+            state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b01,
             0b01,
             "Vigorous-used bit set after first play resolves",
         );
         // Idempotent: a second after_card_played leaves the bit set.
         dispatch_after_card_played(&mut state, uid(1));
-        assert_eq!(state.cards[0].combat_var(VarKey::Generic) & 0b01, 0b01);
+        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b01, 0b01);
     }
 
     /// Sharp: pure query-side enchantment; on_card_played MUST NOT
@@ -1021,14 +1021,14 @@ mod tests {
         let mut state = state_with_one_enchanted_card(EnchantmentId::Sharp, 3);
         let hp_before = state.player.current_hp;
         let rampage_before = state.cards[0].combat_var(VarKey::RampageDamage);
-        let generic_before = state.cards[0].combat_var(VarKey::Generic);
+        let generic_before = state.cards[0].combat_var(VarKey::EnchantmentUsed);
         dispatch_on_card_played(&mut state, uid(1));
         assert_eq!(state.player.current_hp, hp_before);
         assert_eq!(
             state.cards[0].combat_var(VarKey::RampageDamage),
             rampage_before
         );
-        assert_eq!(state.cards[0].combat_var(VarKey::Generic), generic_before);
+        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed), generic_before);
     }
 
     /// Favored: pure query-side multiplier; on_card_played MUST NOT
@@ -1041,7 +1041,7 @@ mod tests {
         dispatch_on_card_played(&mut state, uid(1));
         assert_eq!(state.player.current_hp, hp_before);
         assert_eq!(state.cards[0].combat_var(VarKey::RampageDamage), 0);
-        assert_eq!(state.cards[0].combat_var(VarKey::Generic), 0);
+        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed), 0);
     }
 
     // -----------------------------------------------------------------
@@ -1086,7 +1086,7 @@ mod tests {
         // Set the consumed marker (Wave 3 after_card_played wiring).
         dispatch_after_card_played(&mut state, uid(1));
         assert_eq!(
-            state.cards[0].combat_var(VarKey::Generic) & 0b0100,
+            state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b0100,
             0b0100,
             "Swift-used bit set"
         );
@@ -1105,7 +1105,7 @@ mod tests {
         assert_eq!(state.player.energy, 2);
         dispatch_after_card_played(&mut state, uid(1));
         assert_eq!(
-            state.cards[0].combat_var(VarKey::Generic) & 0b1000,
+            state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b1000,
             0b1000,
             "Sown-used bit set"
         );
@@ -1121,11 +1121,11 @@ mod tests {
         let mut state = state_with_one_enchanted_card(EnchantmentId::Glam, 1);
         // on_card_played is inert for Glam.
         dispatch_on_card_played(&mut state, uid(1));
-        assert_eq!(state.cards[0].combat_var(VarKey::Generic) & 0b10, 0);
+        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b10, 0);
         // after_card_played sets the bit.
         dispatch_after_card_played(&mut state, uid(1));
         assert_eq!(
-            state.cards[0].combat_var(VarKey::Generic) & 0b10,
+            state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b10,
             0b10,
             "Glam-used bit set on after_card_played"
         );
@@ -1144,7 +1144,7 @@ mod tests {
         assert_eq!(state.player.energy, energy_before);
         assert_eq!(state.player.block, block_before);
         // Generic combat_var must stay 0 — Spiral does not own any bit.
-        assert_eq!(state.cards[0].combat_var(VarKey::Generic), 0);
+        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed), 0);
     }
 
     /// Nimble: query-only block bonus; on_card_played is inert. The
@@ -1269,7 +1269,7 @@ mod tests {
         let energy_before = state.player.energy;
         let block_before = state.player.block;
         let cost_before = state.cards[0].cost;
-        let generic_before = state.cards[0].combat_var(VarKey::Generic);
+        let generic_before = state.cards[0].combat_var(VarKey::EnchantmentUsed);
 
         dispatch_on_card_drawn(&mut state, uid(1), true);
         dispatch_after_player_turn_start(&mut state);
@@ -1285,7 +1285,7 @@ mod tests {
         assert_eq!(state.player.energy, energy_before);
         assert_eq!(state.player.block, block_before);
         assert_eq!(state.cards[0].cost, cost_before);
-        assert_eq!(state.cards[0].combat_var(VarKey::Generic), generic_before);
+        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed), generic_before);
         assert_eq!(shuffle, vec![uid(1)]);
     }
 

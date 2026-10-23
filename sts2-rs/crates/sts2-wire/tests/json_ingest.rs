@@ -137,6 +137,21 @@ fn a_cards_replay_count_comes_across() {
     assert_eq!(err.path(), "$.deck.hand[0].replay_count");
 }
 
+/// Keyword Sly granted for the combat (MasterPlanner) stays on the card in
+/// every pile: a draw-pile card flagged `sly` comes back Sly, and is emitted
+/// `sly` there; `sly_turn` (Hand Trick) stays hand-only.
+#[test]
+fn granted_sly_comes_across_in_every_pile() {
+    let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();
+    value["deck"]["draw_pile"][1]["flags"] = serde_json::json!(["sly"]); // a Defend: not intrinsically Sly
+    let state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    let defend = state.player.draw[1];
+    assert!(state.player.sly_this_combat.contains(&defend));
+    let back = sts2_wire::emit::combat_state_to_value(&state).expect("emits");
+    assert_eq!(back["deck"]["draw_pile"][1]["flags"], serde_json::json!(["sly"]));
+    assert!(back["deck"]["draw_pile"][0].get("flags").is_none());
+}
+
 #[test]
 fn failures_carry_their_path_and_class() {
     let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();

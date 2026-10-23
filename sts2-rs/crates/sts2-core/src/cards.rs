@@ -288,6 +288,12 @@ pub enum VarKey {
     /// so downstream beads don't need to extend this enum just for a
     /// one-off; collisions are caller-managed.
     Generic,
+    /// Per-combat "used" bits of the card's enchantments (Vigorous, Glam,
+    /// Swift, Sown: `enchantment_hooks`). They lived on [`VarKey::Generic`],
+    /// where MadScience keeps its packed TinkerTime variant, so a Glam
+    /// MadScience turned into a Violence one after its first play. Last, so the
+    /// earlier variants keep their discriminants.
+    EnchantmentUsed,
 }
 
 // Bead sts2-rs-k2y (P6-8): persistent card enchantments (`Card::enchantments`).
@@ -781,11 +787,12 @@ impl crate::inline_kv::InlineKvKey for EnchantmentId {
 /// the PROVABLE worst case, not just the typical one: slots are never
 /// reclaimed (clearing a var writes 0 in place — the live prefix is
 /// equality/hash-visible), so a card accumulates one slot per distinct key
-/// it EVER touches in a combat. The maximum distinct-key set is 15: the 10
+/// it EVER touches in a combat. The maximum distinct-key set is 16: the 11
 /// generic flags any card can carry (`FreeThisTurn`, `EtherealThisCombat`,
 /// `StarCostFreeThisCombat`, `SneckoCostDeltaThisTurn`,
 /// `CostAbsolutelySet`, `IsDupe`, `GeneratedInCombat`,
-/// `PendingBatchAutoPlay`, `DampenDowngradedMarker`, `Generic`) + the
+/// `PendingBatchAutoPlay`, `DampenDowngradedMarker`, `Generic`,
+/// `EnchantmentUsed`) + the
 /// wire-reconstruction cost trio + at most 2 card-specific keys on one
 /// card (Thrash's remainder pair; every other card-specific key excludes
 /// the rest). The previous capacity 8 sized for "1–2 scaling keys + a few
@@ -3560,7 +3567,7 @@ mod tests {
     /// seed 41100016, `CostAbsolutelySet` via net_search forks).
     #[test]
     fn combat_vars_capacity_holds_worst_case_distinct_key_set() {
-        // 15 keys: 10 generic + 3 wire trio + Thrash's pair.
+        // 16 keys: 11 generic + 3 wire trio + Thrash's pair.
         let worst_case = [
             VarKey::FreeThisTurn,
             VarKey::EtherealThisCombat,
@@ -3572,6 +3579,7 @@ mod tests {
             VarKey::PendingBatchAutoPlay,
             VarKey::DampenDowngradedMarker,
             VarKey::Generic,
+            VarKey::EnchantmentUsed,
             VarKey::WireTransientCostThisTurn,
             VarKey::WireCostExpiringOnPlay,
             VarKey::WireCostStable,

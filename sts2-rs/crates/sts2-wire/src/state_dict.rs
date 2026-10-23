@@ -3356,13 +3356,30 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
     // the draw pile (length + index) and the enemy roster, so a carried uid
     // would point at a different card or none.
     //
-    // HAND-SCOPED on purpose. Both `card_is_sly` read sites
-    // (`card_effects.rs:1836`, `lib.rs:9167`) and both retain read sites
-    // (`combat_loop.rs:2551`, `:2626`) skip any card not in hand, and the
-    // producers emit flags for hand cards only. A MasterPlanner-marked Skill
-    // sitting in the discard pile therefore loses nothing: the mark is
-    // re-derived from the wire the moment it is drawn back into hand, which
-    // is the moment anything reads it.
+    // The single-turn grants are HAND-SCOPED: they exist only in hand (C#
+    // clears them at end of turn). Keyword Sly from MasterPlanner lasts the
+    // combat and stays on the card in every pile (`MasterPlannerPower.cs`):
+    // a rebuild that kept it only for hand cards lost it on a Sly card in the
+    // draw pile, which then didn't auto-play when discarded after the draw
+    // (Acrobatics). So `sly` is read from every pile, below.
+    let other_piles: [(&[CardUid], &[ParsedCard]); 4] = [
+        (&draw_uids, &parsed.deck.draw_pile),
+        (&discard_uids, &parsed.deck.discard_pile),
+        (&exhaust_uids, &parsed.deck.exhaust_pile),
+        (&play_uids, &parsed.deck.play_pile),
+    ];
+    for (uids, cards) in other_piles {
+        for (&uid, pc) in uids.iter().zip(cards.iter()) {
+            if pc.flags.iter().any(|f| f == "sly")
+                && !state
+                    .cards
+                    .get(uid.0.get() as usize - 1)
+                    .is_some_and(|c| sts2_core::card_effects::card_sly(c.card_id))
+            {
+                state.player.sly_this_combat.push(uid);
+            }
+        }
+    }
     for (&uid, pc) in hand_uids.iter().zip(parsed.deck.hand.iter()) {
         for f in &pc.flags {
             match f.as_str() {
@@ -4033,6 +4050,7 @@ pub const fn var_key_wire_name(k: VarKey) -> &'static str {
         VarKey::WireCostExpiringOnPlay => "wire_cost_expiring_on_play",
         VarKey::WireCostStable => "wire_cost_stable",
         VarKey::Generic => "generic",
+        VarKey::EnchantmentUsed => "enchantment_used",
     }
 }
 
@@ -4064,6 +4082,7 @@ pub fn var_key_from_wire(name: &str) -> Option<VarKey> {
         VarKey::AutoPlayStarX,
         VarKey::WireTransientCostThisTurn,
         VarKey::Generic,
+        VarKey::EnchantmentUsed,
     ];
     ALL.iter().copied().find(|k| var_key_wire_name(*k) == name)
 }

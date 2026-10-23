@@ -23,7 +23,7 @@ use proptest::prelude::*;
 use sts2_core::cards::{CardEnchantments, CombatVars, EnchantmentId, VarKey};
 use sts2_core::inline_kv::{InlineKv, InlineKvKey};
 
-const VAR_KEYS: [VarKey; 26] = [
+const VAR_KEYS: [VarKey; 27] = [
     VarKey::RampageDamage,
     VarKey::ClawBuff,
     VarKey::GeneticAlgorithmBlock,
@@ -50,6 +50,7 @@ const VAR_KEYS: [VarKey; 26] = [
     VarKey::WireCostExpiringOnPlay,
     VarKey::WireCostStable,
     VarKey::Generic,
+    VarKey::EnchantmentUsed,
 ];
 
 const ENCHANTMENT_IDS: [EnchantmentId; 23] = [

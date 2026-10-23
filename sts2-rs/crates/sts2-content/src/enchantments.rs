@@ -169,7 +169,7 @@ pub fn effective_keywords(spec: &CardSpec, card: &Card) -> CardKeywords {
 // Dynamic damage / block / play-count
 // ---------------------------------------------------------------------------
 
-/// Bookkeeping bit-flags packed onto [`VarKey::Generic`] for enchantment
+/// Bookkeeping bit-flags packed onto [`VarKey::EnchantmentUsed`] for enchantment
 /// per-combat "used" flags. The Python source keys these by string
 /// (`_enchant_used_<name>`); our typed `VarKey` arena would otherwise need
 /// one variant per enchantment, so we collapse to a bit-packed `i32` until
@@ -300,19 +300,19 @@ pub fn add_momentum_bonus(card: &mut Card, amount: i32) {
 }
 
 fn glam_used(card: &Card) -> bool {
-    card.combat_var(VarKey::Generic) & GLAM_USED != 0
+    card.combat_var(VarKey::EnchantmentUsed) & GLAM_USED != 0
 }
 
 /// Mark Vigorous as having fired this combat. Idempotent.
 pub fn mark_vigorous_used(card: &mut Card) {
-    let v = card.combat_var(VarKey::Generic) | VIGOROUS_USED;
-    card.set_combat_var(VarKey::Generic, v);
+    let v = card.combat_var(VarKey::EnchantmentUsed) | VIGOROUS_USED;
+    card.set_combat_var(VarKey::EnchantmentUsed, v);
 }
 
 /// Mark Glam as having fired this combat. Idempotent.
 pub fn mark_glam_used(card: &mut Card) {
-    let v = card.combat_var(VarKey::Generic) | GLAM_USED;
-    card.set_combat_var(VarKey::Generic, v);
+    let v = card.combat_var(VarKey::EnchantmentUsed) | GLAM_USED;
+    card.set_combat_var(VarKey::EnchantmentUsed, v);
 }
 
 // ---------------------------------------------------------------------------
@@ -623,10 +623,10 @@ mod tests {
     fn mark_vigorous_used_is_idempotent_when_already_set() {
         let mut c = strike_card();
         mark_vigorous_used(&mut c);
-        let after_first = c.combat_var(VarKey::Generic);
+        let after_first = c.combat_var(VarKey::EnchantmentUsed);
         mark_vigorous_used(&mut c); // OR again: no change; XOR would clear.
         assert_eq!(
-            c.combat_var(VarKey::Generic),
+            c.combat_var(VarKey::EnchantmentUsed),
             after_first,
             "re-marking Vigorous must keep the bit (OR), not toggle it (XOR)"
         );

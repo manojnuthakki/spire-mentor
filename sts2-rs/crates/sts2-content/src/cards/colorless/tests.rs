@@ -5849,3 +5849,45 @@ fn gh663_skill_and_power_mad_science_stay_untargeted() {
         );
     }
 }
+
+/// A riderless Glam MadScience (7 damage) in a state the engine plays from
+/// the hand (`manual`) or auto-plays from the draw pile.
+fn glam_mad_science_state(manual: bool) -> (CombatState, CreatureUid) {
+    crate::cards::dispatch::ensure_installed();
+    let (mut state, enemy) = fresh_state(CardId::MadScience, 7, 0);
+    state.player.play.clear();
+    state.phase = sts2_core::CombatPhase::PlayerPlayPhase;
+    state.player.energy = 3;
+    let card = &mut state.cards[0];
+    card.set_enchantment(sts2_core::cards::EnchantmentId::Glam, 1);
+    if manual {
+        state.player.hand.push(card.uid);
+    } else {
+        state.player.draw.insert(0, card.uid);
+    }
+    (state, enemy)
+}
+
+/// Glam replays a MadScience once, and its "used" bit must not land in the
+/// TinkerTime rider (both lived on `VarKey::Generic`: the replay hit as
+/// Violence, three times, 28 damage instead of 14).
+#[test]
+fn glam_mad_science_replays_once_without_changing_its_rider() {
+    for manual in [true, false] {
+        let (mut state, enemy) = glam_mad_science_state(manual);
+        if manual {
+            let _ = sts2_core::apply(
+                &mut state,
+                sts2_core::Action::PlayCard { hand_index: 0, target: Some(0) },
+            );
+        } else {
+            assert!(sts2_core::combat_loop::auto_play_card_from_draw_top(&mut state, false));
+        }
+        assert_eq!(enemy_hp(&state, enemy), 100 - 14, "manual {manual}: two hits of 7");
+        assert_eq!(
+            mad_science_variant_of(&state.cards[0]),
+            (CardType::Attack, TinkerTimeRider::None),
+            "manual {manual}: the rider is untouched"
+        );
+    }
+}

@@ -152,12 +152,12 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
     // divergences as fresh desyncs. Worth doing deliberately, not as a side
     // effect of this change.
     //
-    // The Sly/Retain trio is emitted only for cards IN HAND, because that is
-    // where the adapter computes flags — the C# producers ship keywords on
-    // pile cards too, but `_flags_for_card` is called for the hand alone. An
-    // asymmetric emit here would manufacture a per-decision desync on every
-    // Well-Laid-Plans / Hand-Trick / MasterPlanner card, which is exactly the
-    // failure the paragraph above records for the free riders. GH #370.
+    // The single-turn grants (`sly_turn`, `retain_turn`) are emitted only for
+    // cards IN HAND, where they exist. Keyword `sly` (intrinsic, or
+    // MasterPlanner's combat-long `AddKeyword`) is emitted in every pile: the
+    // grant stays on the card wherever it goes (`MasterPlannerPower.cs`), and
+    // the parse restores it from every pile, so a rebuild keeps a Sly Defend
+    // Sly when it is drawn. GH #370.
     {
         let mut flags: Vec<&str> = Vec::new();
         // GH #372. Two independent sources make a card Ethereal and the emit
@@ -190,16 +190,17 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
         if sts2_core::card_effects::card_innate_inst(card) {
             flags.push("innate");
         }
+        // Keyword first, then the single-turn halves with the keyword
+        // subtracted, so a card that is BOTH intrinsically Sly and
+        // Hand-Tricked emits `sly` alone — as C# does, since `IsSlyThisTurn`
+        // short-circuits on the keyword.
+        let sly_keyword = sts2_core::card_effects::card_sly(card.card_id)
+            || state.player.sly_this_combat.contains(&card.uid);
+        if sly_keyword {
+            flags.push("sly");
+        }
         if state.player.hand.contains(&card.uid) {
-            // Mirrors the adapter: keyword first, then the single-turn halves
-            // with the keyword subtracted, so a card that is BOTH intrinsically
-            // Sly and Hand-Tricked emits `sly` alone — as C# does, since
-            // `IsSlyThisTurn` short-circuits on the keyword.
-            let sly_keyword = sts2_core::card_effects::card_sly(card.card_id)
-                || state.player.sly_this_combat.contains(&card.uid);
-            if sly_keyword {
-                flags.push("sly");
-            } else if state.player.sly_this_turn.contains(&card.uid) {
+            if !sly_keyword && state.player.sly_this_turn.contains(&card.uid) {
                 flags.push("sly_turn");
             }
             if !sts2_core::card_effects::card_retain_inst(card)
