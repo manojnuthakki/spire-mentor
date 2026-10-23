@@ -152,6 +152,31 @@ fn granted_sly_comes_across_in_every_pile() {
     assert!(back["deck"]["draw_pile"][0].get("flags").is_none());
 }
 
+/// A granted keyword Retain (Snap, Choices Paradox) is the card's for good:
+/// the wire's `retain` flag folds into the permanent keyword set, so the card
+/// stays in hand at the turn's end, in every pile, and is emitted back as
+/// `retain`. The this-turn grant stays `retain_turn` (GH #370).
+#[test]
+fn granted_retain_comes_across_and_round_trips() {
+    let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();
+    value["deck"]["draw_pile"][1]["flags"] = serde_json::json!(["retain"]); // a Defend: not intrinsically Retain
+    value["deck"]["hand"][0]["flags"] = serde_json::json!(["retain"]);
+    let state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    for uid in [state.player.draw[1], state.player.hand[0]] {
+        let card = state.cards.iter().find(|c| c.uid == uid).unwrap();
+        assert!(sts2_core::card_effects::card_retain_inst(card));
+    }
+    assert!(state.player.retain_this_turn.is_empty()); // not a this-turn grant
+    let back = sts2_wire::emit::combat_state_to_value(&state).expect("emits");
+    assert_eq!(back["deck"]["draw_pile"][1]["flags"], serde_json::json!(["retain"]));
+    assert_eq!(back["deck"]["hand"][0]["flags"], serde_json::json!(["retain"]));
+    assert!(back["deck"]["draw_pile"][0].get("flags").is_none());
+    // Round trip: the emitted dict rebuilds to the same flags.
+    let again = state_from_json_str(&back.to_string()).expect("rebuilds again");
+    let back2 = sts2_wire::emit::combat_state_to_value(&again).expect("emits");
+    assert_eq!(back2["deck"]["hand"][0]["flags"], serde_json::json!(["retain"]));
+}
+
 #[test]
 fn failures_carry_their_path_and_class() {
     let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();

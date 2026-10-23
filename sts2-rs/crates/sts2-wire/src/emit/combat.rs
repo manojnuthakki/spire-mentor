@@ -145,12 +145,10 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
     // `('free_turn',)` vs world `()`). The vars still DO their behavioral
     // work; they are just not part of the comparison vocabulary.
     //
-    // The keyword `retain` stays unemitted, as it has since this block
-    // landed. That IS an asymmetry — the adapter maps the C# keyword onto a
-    // `retain` flag — but it is pre-existing, orthogonal to GH #370, and
-    // making it symmetric would start surfacing engine-vs-C# Retain-registry
-    // divergences as fresh desyncs. Worth doing deliberately, not as a side
-    // effect of this change.
+    // The keyword `retain` is emitted in every pile (sts2-agent fork, A4d),
+    // symmetric with the parse, which now folds it into the permanent
+    // override: a granted Retain (Snap, Choices Paradox) round-trips, and an
+    // engine-vs-C# Retain-registry divergence shows as a flag difference.
     //
     // The single-turn grants (`sly_turn`, `retain_turn`) are emitted only for
     // cards IN HAND, where they exist. Keyword `sly` (intrinsic, or
@@ -189,6 +187,9 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
         }
         if sts2_core::card_effects::card_innate_inst(card) {
             flags.push("innate");
+        }
+        if sts2_core::card_effects::card_retain_inst(card) {
+            flags.push("retain");
         }
         // Keyword first, then the single-turn halves with the keyword
         // subtracted, so a card that is BOTH intrinsically Sly and

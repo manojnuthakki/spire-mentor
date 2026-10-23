@@ -874,6 +874,24 @@ impl PyCombatState {
         self.inner.pending_play.is_some()
     }
 
+    /// Set the player's current and max HP in place, nothing else
+    /// (sts2-agent fork, A4d). An evaluator normalizes HP before a search
+    /// (raised-HP states saturate its score); a dump-and-rebuild round trip
+    /// to do it also rebuilt what the wire can't carry exactly (a Buff or
+    /// Debuff intent's power and amount), so the state changed beyond HP.
+    ///
+    /// Raises on `max_hp < 1` or `hp` outside `1..=max_hp`.
+    fn set_player_hp(&mut self, hp: i32, max_hp: i32) -> PyResult<()> {
+        if max_hp < 1 || hp < 1 || hp > max_hp {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "set_player_hp: need 1 <= hp <= max_hp, got hp {hp}, max_hp {max_hp}"
+            )));
+        }
+        self.inner.player.max_hp = max_hp;
+        self.inner.player.current_hp = hp;
+        Ok(())
+    }
+
     /// `true` when a turn-transition walk is SUSPENDED on a player choice —
     /// Well-Laid Plans' retain select inside the end-of-turn flush, a
     /// Stampede auto-play's mid-transition screen, a suspended turn setup /

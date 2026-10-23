@@ -2172,13 +2172,15 @@ fn build_card(parsed: &ParsedCard, uid: CardUid, path: &str) -> WireResult<Card>
     // card-flow records, 1:1 with the flag). `ethereal` maps to the same
     // per-instance var the engine's own GhostSeed arm stamps; the free flags
     // map to their cost riders; `unplayable`/`innate` fold into the keyword
-    // override on top of the effective base set. `retain` is deliberately NOT
-    // folded here — folding a transient grant into the permanent override
-    // would retain the card for the rest of the fight. The wire CAN now tell
-    // an intrinsic Retain from a this-turn one (GH #370 added the
-    // `retain_turn` / `sly_turn` / `sly` flags), and the transient halves are
-    // seeded into the per-turn uid lists at the pile walk instead, where they
-    // expire on schedule. `sly` is likewise handled there, not here.
+    // override on top of the effective base set. `retain` is the card's
+    // Retain KEYWORD (intrinsic, or granted for good by `AddKeyword`:
+    // Snap, Choices Paradox, Steady's enchantment) and folds into the
+    // permanent override like `innate`. It used to be left out because a
+    // producer once sent the this-turn grant as `retain`; the wire now tells
+    // the two apart (GH #370's `retain_turn`, seeded into the per-turn uid
+    // list at the pile walk, where it expires on schedule), so a granted
+    // keyword Retain no longer has to be dropped (sts2-agent fork, A4d).
+    // `sly` is handled at the pile walk, not here.
     if !parsed.flags.is_empty() {
         let fold = |card: &mut Card, bit: sts2_core::cards::KeywordOverride| {
             let base = card
@@ -2193,7 +2195,7 @@ fn build_card(parsed: &ParsedCard, uid: CardUid, path: &str) -> WireResult<Card>
                 "free_once" => card.set_combat_var(VarKey::FreeUntilPlayed, 1),
                 "unplayable" => fold(&mut card, sts2_core::cards::KeywordOverride::UNPLAYABLE),
                 "innate" => fold(&mut card, sts2_core::cards::KeywordOverride::INNATE),
-                // `retain`: see above.
+                "retain" => fold(&mut card, sts2_core::cards::KeywordOverride::RETAIN),
                 _ => {}
             }
         }

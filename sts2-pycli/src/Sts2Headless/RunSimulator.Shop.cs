@@ -371,6 +371,13 @@ public partial class RunSimulator
         try { dict["replay_count"] = card.GetEnchantedReplayCount(); } catch { dict["replay_count"] = 0; }
         dict["sly_this_turn"] = SafeCardBool(() => card.IsSlyThisTurn);
         dict["will_retain"] = SafeCardBool(() => card.ShouldRetainThisTurn);
+        // The card's affliction by model id (Bound, Hexed, Tainted, ...), as the card shows it; the
+        // shared view sends only its localized title.
+        if (card.Affliction != null)
+        {
+            dict["affliction_id"] = card.Affliction.Id.Entry;
+            try { dict["affliction_amount"] = card.Affliction.Amount; } catch { }
+        }
         if (card.Enchantment == null) return;
         dict["enchantment_id"] = card.Enchantment.Id.Entry;
         try { dict["enchantment_amount"] = card.Enchantment.Amount; } catch { }
