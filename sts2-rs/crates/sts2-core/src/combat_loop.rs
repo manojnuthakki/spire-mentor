@@ -6827,7 +6827,9 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
     // `cards::colorless::play_hidden_gem`, and SoldiersStew's TODO no-op
     // (`potions::dispatch::drink_soldiers_stew`) becomes a real `+= 1`
     // increment in a follow-up.
-    let base_replay = card.base_replay_count;
+    // C# adds the enchantment's replays (Spiral, unused Glam) before the
+    // modifiers: `GetEnchantedReplayCount() + 1`.
+    let base_replay = card.base_replay_count + crate::enchantment_hooks::enchant_play_count_bonus(&card);
     let power_extra = hooks::dispatch_modify_card_play_count(state, &count_ctx);
     let live = relic_guarded_channel_live(state, GuardedChannel::RelicModifyCardPlayCount);
     let relic_extra = dispatch_if_live(state, live, 0, |state| {
@@ -9030,7 +9032,8 @@ pub(crate) fn resolve_auto_played_card_at_target(
     let auto_extra_plays: i32 = if skip_dispatch {
         0
     } else {
-        let base_replay = state.cards[top_idx].base_replay_count.max(0);
+        let base_replay = state.cards[top_idx].base_replay_count.max(0)
+            + crate::enchantment_hooks::enchant_play_count_bonus(&state.cards[top_idx]);
         let count_ctx = hooks::CardPlayCountCtx {
             owner: hooks::CreatureRef::Player,
             card_id: Some(top_card_id),

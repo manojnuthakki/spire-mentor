@@ -54,6 +54,25 @@ const GLAM_USED_BIT: i32 = 0b0010;
 const SWIFT_USED_BIT: i32 = 0b0100;
 const SOWN_USED_BIT: i32 = 0b1000;
 
+/// Extra plays a card's enchantment adds: C# `CardModel.GetEnchantedReplayCount`
+/// = `Enchantment.EnchantPlayCount(BaseReplayCount)`, where Spiral adds its fixed
+/// `Times` (1) and Glam the same until it has been used this combat (`Spiral.cs`,
+/// `Glam.cs`). The play count is that + 1, before `Hook.ModifyCardPlayCount`
+/// (`CardModel.cs`, the play's `playCount`). Lives in core so both play paths in
+/// `combat_loop` add it; `sts2_content::enchantments::enchant_play_count_bonus`
+/// delegates here.
+#[must_use]
+pub fn enchant_play_count_bonus(card: &Card) -> i32 {
+    let mut bonus = 0;
+    if card.has_enchantment(EnchantmentId::Spiral) {
+        bonus += 1;
+    }
+    if card.has_enchantment(EnchantmentId::Glam) && card.combat_var(VarKey::Generic) & GLAM_USED_BIT == 0 {
+        bonus += 1;
+    }
+    bonus
+}
+
 /// Additive damage bonus contributed by the *played card's* enchantments,
 /// for a powered attack. Mirrors the C# `*.EnchantDamageAdditive` chain
 /// (`Sharp`/`Inky` flat, `Vigorous` once-per-card, `Momentum` accumulated

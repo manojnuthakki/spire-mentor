@@ -231,8 +231,6 @@ pub fn enchant_block_additive(card: &Card) -> i32 {
 /// `Amount`. Source: `Spiral.cs` / `Glam.cs` `EnchantPlayCount` both return
 /// `originalPlayCount + base.DynamicVars["Times"].IntValue`, and `Times` is a
 /// constant `IntVar("Times", 1m)` independent of the enchantment's `Amount`.
-const SPIRAL_GLAM_REPLAY_TIMES: i32 = 1;
-
 /// Extra-play-count bonus from enchantments.
 ///
 /// C# `CardModel.GetEnchantedReplayCount` calls `Enchantment.EnchantPlayCount`
@@ -245,14 +243,7 @@ const SPIRAL_GLAM_REPLAY_TIMES: i32 = 1;
 /// only one term can ever contribute — but each contributes the fixed +1.
 #[must_use]
 pub fn enchant_play_count_bonus(card: &Card) -> i32 {
-    let mut bonus = 0;
-    if card.has_enchantment(EnchantmentId::Spiral) {
-        bonus += SPIRAL_GLAM_REPLAY_TIMES;
-    }
-    if card.has_enchantment(EnchantmentId::Glam) && !glam_used(card) {
-        bonus += SPIRAL_GLAM_REPLAY_TIMES;
-    }
-    bonus
+    sts2_core::enchantment_hooks::enchant_play_count_bonus(card)
 }
 
 // ---------------------------------------------------------------------------
