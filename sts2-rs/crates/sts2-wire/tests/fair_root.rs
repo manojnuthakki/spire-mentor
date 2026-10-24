@@ -156,3 +156,69 @@ fn other_modes_apply_the_action_once() {
     assert_eq!(samples[0].2, 1600);
     assert!(drew_bludgeon(&samples[0].0), "the true top card");
 }
+
+
+fn played(post: &CombatState, id: &str) -> bool {
+    // The card Havoc played is exhausted (forceExhaust) or, if it opened a choice, in the play pile.
+    post.player.exhaust.iter().chain(post.player.play.iter()).any(|u| {
+        format!("{:?}", post.cards.iter().find(|c| c.uid == *u).unwrap().card_id) == id
+    })
+}
+
+/// Havoc plays the top card of the draw pile, reading the pile's physical top
+/// rather than drawing (no deferred draw). With Armaments and Burning Pact
+/// unseen, the root samples play each about half the time: each sample is a
+/// concrete sampled world. Before (round 2 of the review) the samples only
+/// sorted the pile, and all of them played the canonically first card.
+#[test]
+fn a_root_top_card_autoplay_is_sampled() {
+    let mut v = fixture();
+    v["deck"]["hand"] = json!([
+        {"id": "HAVOC", "kind": "card", "upgraded": false, "stable_idx": 1, "type": "Skill"},
+        {"id": "DEFEND_IRONCLAD", "kind": "card", "upgraded": false, "stable_idx": 2, "type": "Skill"},
+        {"id": "STRIKE_IRONCLAD", "kind": "card", "upgraded": false, "stable_idx": 5, "type": "Attack"}]);
+    v["deck"]["draw_pile"] = json!([
+        {"id": "ARMAMENTS", "kind": "card", "upgraded": false, "stable_idx": 3, "type": "Skill"},
+        {"id": "BURNING_PACT", "kind": "card", "upgraded": false, "stable_idx": 4, "type": "Skill"}]);
+    let state = build(&v);
+    let action = first_play(&state);
+    let (mut armaments, mut pact, mut n) = (0u32, 0u32, 0u32);
+    for seed in 0..40 {
+        for (post, _, _) in fair_root_samples(&state, &action, &params(1600, seed, "beliefdraw")) {
+            armaments += u32::from(played(&post, "Armaments"));
+            pact += u32::from(played(&post, "BurningPact"));
+            n += 1;
+        }
+    }
+    assert_eq!(armaments + pact, n, "every sample played one of the two");
+    let f = f64::from(armaments) / f64::from(n);
+    assert!((f - 0.5).abs() < 0.08, "Armaments played in {f:.3} of {n} samples");
+}
+
+/// The samples shuffle only the unknown middle: a card known on top stays on
+/// top (Havoc plays it in every sample), and one known at the bottom stays at
+/// the bottom.
+#[test]
+fn root_samples_keep_the_known_top_and_bottom_cards() {
+    let mut v = fixture();
+    v["deck"]["hand"] = json!([
+        {"id": "HAVOC", "kind": "card", "upgraded": false, "stable_idx": 1, "type": "Skill"},
+        {"id": "DEFEND_IRONCLAD", "kind": "card", "upgraded": false, "stable_idx": 2, "type": "Skill"}]);
+    v["deck"]["draw_pile"] = json!([
+        {"id": "ARMAMENTS", "kind": "card", "upgraded": false, "stable_idx": 3, "type": "Skill"},
+        {"id": "BURNING_PACT", "kind": "card", "upgraded": false, "stable_idx": 4, "type": "Skill"},
+        {"id": "INFLAME", "kind": "card", "upgraded": false, "stable_idx": 6, "type": "Power"},
+        {"id": "BASH", "kind": "card", "upgraded": false, "stable_idx": 7, "type": "Attack"}]);
+    v["deck"]["pinned_top"] = json!([1]); // Burning Pact known on top
+    v["deck"]["pinned_bottom"] = json!([3]); // Bash known at the bottom
+    let state = build(&v);
+    let action = first_play(&state);
+    for seed in 0..20 {
+        for (post, _, _) in fair_root_samples(&state, &action, &params(1600, seed, "beliefdraw")) {
+            assert!(played(&post, "BurningPact"), "the known top card is played");
+            let last = *post.player.draw.last().unwrap();
+            let card = post.cards.iter().find(|c| c.uid == last).unwrap();
+            assert_eq!(format!("{:?}", card.card_id), "Bash", "the known bottom card stays at the bottom");
+        }
+    }
+}

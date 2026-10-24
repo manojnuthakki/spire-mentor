@@ -443,10 +443,11 @@ const FAIR_ROOT_SALT: u64 = 0xF00D_BEEF_CAFE_00F1;
 
 /// The post-action states a fair evaluation searches for `action`, each with
 /// its search seed and budget. Under `BeliefDraw`: [`FAIR_ROOT_SAMPLES`]
-/// determinizations of the root (each a clone put on the belief
-/// representation by [`sts2_core::blindfold::belief_root`] with a seed
-/// derived from the search seed and the sample's index alone), the action
-/// applied to each, the budget split evenly. Otherwise the action applied to
+/// determinizations of the root (each a clone made a concrete sampled world
+/// by [`sts2_core::blindfold::blindfold_root`]: the unknown draw middle
+/// shuffled, pins kept, the combat streams reseeded, from a seed derived from
+/// the search seed and the sample's index alone), the action applied to each,
+/// the budget split evenly. Otherwise the action applied to
 /// the state itself, with the whole budget.
 #[must_use]
 pub fn fair_root_samples(state: &CombatState, action: &Action, params: &RecommendParams) -> Vec<(CombatState, u64, u32)> {
@@ -461,7 +462,14 @@ pub fn fair_root_samples(state: &CombatState, action: &Action, params: &Recommen
                 seed = sts2_core::run_rng_set::splitmix64(
                     params.seed ^ FAIR_ROOT_SALT ^ u64::from(k).wrapping_mul(0x9E37_79B9_7F4A_7C15),
                 );
-                sts2_core::blindfold::belief_root(&mut post, seed);
+                // A concrete sampled world: the unknown draw middle canonicalized, then shuffled
+                // from the sample's seed alone, pins kept, every combat stream reseeded
+                // (`blindfold_root`). `cards::shuffle` keeps a belief pile's order, so the belief
+                // flag goes first: an action that reads the pile's physical top (Havoc's autoplay)
+                // then plays a sampled card, not the canonically first (review F3 of A4d, round 2).
+                // The search after the action keeps its own belief root.
+                post.player.deferred_draw_order = false;
+                sts2_core::blindfold::blindfold_root(&mut post, seed);
             }
             let _ = apply(&mut post, action.clone());
             (post, seed, budget)
@@ -475,10 +483,10 @@ pub fn fair_root_samples(state: &CombatState, action: &Action, params: &Recommen
 /// must not see hidden information either: a draw it makes, a target or a
 /// generated card it rolls, are outcomes the player can't know. So the
 /// action's budget is split over [`FAIR_ROOT_SAMPLES`] determinizations of
-/// the ROOT: each a clone put on the belief representation
-/// ([`sts2_core::blindfold::belief_root`]: the unknown draw-pile middle
-/// canonicalized and drawn at draw time, pins kept, every combat RNG stream
-/// reseeded from the search seed and the sample's index alone), the action
+/// the ROOT: each a clone made a concrete sampled world
+/// ([`sts2_core::blindfold::blindfold_root`]: the unknown draw-pile middle
+/// shuffled, pins kept, every combat RNG stream reseeded, from the search
+/// seed and the sample's index alone; see [`fair_root_samples`]), the action
 /// applied to it, then its own search with its share of the budget. The
 /// samples are the same for every action (common random numbers across
 /// actions). An action that ends the combat in a sample counts as that
