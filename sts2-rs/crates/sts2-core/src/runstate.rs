@@ -1543,6 +1543,28 @@ pub struct RunState {
     /// pin; the workbench opts in at construction.
     pub direct_event_relic_grant: bool,
 
+    /// Opt-in rewards screen after a won combat (sts2-agent fork). When
+    /// `true`, the room's rewards (gold, a dropped potion, the card reward,
+    /// an elite's relic) are rolled in the same `Rewards`-stream order as
+    /// the auto-collect path but NOT applied: they wait on
+    /// `RunManager::reward_screen`, where the player claims each one
+    /// (`RunAction::ClaimReward`) or leaves the rest (`ProceedRewards`),
+    /// as the game's rewards screen does (C# `RewardsSet` with
+    /// `Reward.OnSelect` per claim, `OnSkipped` on leave). A potion reward
+    /// is unclaimable while the belt is full (C#
+    /// `PotionProcureFailureReason.TooFull`) and stays listed. Default
+    /// `false` keeps the auto-collect path every parity test pins.
+    pub interactive_rewards: bool,
+
+    /// Opt-in potion actions outside the combat search's action set
+    /// (sts2-agent fork): `RunAction::DiscardPotion` in any phase that shows
+    /// the belt (C# `PotionModel.Discard`), and `RunAction::DrinkPotion`
+    /// outside combat for the AnyTime potions the game lets the player drink
+    /// there (Blood Potion, Fruit Juice, Entropic Brew; Foul Potion at the
+    /// merchant). Combat-side `legal_actions` is unchanged, so the search
+    /// never sees a discard. Default `false`.
+    pub interactive_potions: bool,
+
     /// Set on first map-generation, used by Python to guard re-rolling
     /// the layout. Mirrors Python `RunState._rooms_generated: bool`
     /// (`run_state.py:1397`). Currently a flag holder — the actual
@@ -1896,6 +1918,8 @@ impl Default for RunState {
             pending_deck_transforms: Vec::new(),
             pending_deck_enchants: Vec::new(),
             interactive_potion_swap: false,
+            interactive_rewards: false,
+            interactive_potions: false,
             pending_potion_swaps: Vec::new(),
             potions_overflow_dropped: 0,
             direct_event_relic_grant: false,

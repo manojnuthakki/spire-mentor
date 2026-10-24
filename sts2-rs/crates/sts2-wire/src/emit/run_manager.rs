@@ -437,6 +437,9 @@ pub fn generated_rooms(rm: &RunManager) -> Value {
         // M5 event-pool parity (bead `sts2-rs-1hiht`): the per-act
         // `RoomSet.events` shuffled order as `EventId::python_name`s.
         set(&mut d, "events_shuffled", &g.events_shuffled);
+        // sts2-agent fork: the act's opening Ancient (`Neow`, `Orobas`, ...),
+        // the event a host shows for the boss-relic choice.
+        set(&mut d, "ancient", g.ancient.map(|a| format!("{a:?}")));
         list.push(Value::Object(d));
     }
     Value::Array(list)
@@ -477,6 +480,74 @@ pub fn effective_master_deck_indices(rm: &RunManager) -> Vec<usize> {
         }
     }
     keep
+}
+
+/// One card outside combat, in the combat wire's card vocabulary
+/// (sts2-agent fork): `id` (python name), `upgraded`, `base_cost`,
+/// `base_damage`, `base_block`, `type` (title-cased), the instance's keyword
+/// `flags` (`exhaust`, `ethereal`, `unplayable`, `innate`, `retain`), its
+/// first enchantment, its affliction and its own `replay_count`, each only
+/// when present.
+#[must_use]
+pub fn card_value(card: &sts2_core::cards::Card) -> Value {
+    use sts2_core::card_effects as ce;
+    let mut d = obj();
+    set(&mut d, "id", card.card_id.to_python_name());
+    set(&mut d, "upgraded", card.upgraded);
+    set(&mut d, "base_cost", i32::from(card.cost));
+    set(&mut d, "base_damage", card.base_damage);
+    set(&mut d, "base_block", card.base_block);
+    set(&mut d, "type", super::names::card_type_python_name(card.card_type));
+    let mut flags: Vec<&str> = Vec::new();
+    if ce::card_exhausts_inst(card) {
+        flags.push("exhaust");
+    }
+    if ce::card_ethereal_inst(card) {
+        flags.push("ethereal");
+    }
+    if ce::card_unplayable_inst(card) {
+        flags.push("unplayable");
+    }
+    if ce::card_innate_inst(card) {
+        flags.push("innate");
+    }
+    if ce::card_retain_inst(card) {
+        flags.push("retain");
+    }
+    if !flags.is_empty() {
+        set(&mut d, "flags", flags);
+    }
+    if let Some((id, amount)) = card.enchantments.first() {
+        set(&mut d, "enchantment", id.wire_name());
+        set(&mut d, "enchantment_amount", *amount);
+    }
+    if card.base_replay_count != 0 {
+        set(&mut d, "replay_count", card.base_replay_count);
+    }
+    if let Some(aff) = card.affliction {
+        set(&mut d, "affliction", crate::state_dict::card_affliction_kind_wire_name(aff.kind));
+        set(&mut d, "affliction_stacks", aff.stacks);
+    }
+    Value::Object(d)
+}
+
+/// `RunManager.master_deck_cards()` (sts2-agent fork) — the deck view of
+/// [`master_deck`] (in-progress steals excluded) as [`card_value`] dicts,
+/// each with its raw master-deck position as `deck_index`.
+#[must_use]
+pub fn master_deck_cards(rm: &RunManager) -> Value {
+    Value::Array(
+        effective_master_deck_indices(rm)
+            .into_iter()
+            .map(|i| {
+                let mut v = card_value(&rm.run_state.master_deck[i]);
+                if let Value::Object(d) = &mut v {
+                    d.insert("deck_index".to_owned(), Value::from(i));
+                }
+                v
+            })
+            .collect(),
+    )
 }
 
 /// `RunManager.master_deck()` — card ids in `PascalCase` `Debug` form. The
@@ -924,6 +995,59 @@ pub fn event_option_infos(rm: &RunManager) -> Value {
 // Actions
 // ---------------------------------------------------------------------------
 
+/// `RunManager.reward_screen()` (sts2-agent fork) — the open rewards screen
+/// (`RunState::interactive_rewards`) as `[{"type": "gold", "amount"} |
+/// {"type": "potion", "id": "POTION.<UPPER_SNAKE>"} | {"type": "relic", "id":
+/// "RELIC.<UPPER_SNAKE>"} | {"type": "card", "options": [{"id":
+/// "CARD.<UPPER_SNAKE>", "upgraded"}, …]}, …]`, index-aligned with
+/// `claim_reward`'s `idx`; `Null` when no screen is open. A card reward's
+/// options are listed for the host's own bookkeeping: the game shows them only
+/// once the reward is claimed.
+#[must_use]
+pub fn reward_screen(rm: &RunManager) -> Value {
+    use sts2_core::run_manager::ScreenReward;
+    let Some(screen) = rm.reward_screen() else {
+        return Value::Null;
+    };
+    Value::Array(
+        screen
+            .iter()
+            .map(|r| {
+                let mut d = obj();
+                match r {
+                    ScreenReward::Gold { amount } => {
+                        set(&mut d, "type", "gold");
+                        set(&mut d, "amount", *amount);
+                    }
+                    ScreenReward::Potion { kind } => {
+                        set(&mut d, "type", "potion");
+                        set(&mut d, "id", format!("POTION.{}", kind.python_name()));
+                    }
+                    ScreenReward::Relic { relic } => {
+                        set(&mut d, "type", "relic");
+                        set(&mut d, "id", format!("RELIC.{}", relic.relic_id.to_python_name()));
+                    }
+                    ScreenReward::Card { options, upgraded } => {
+                        set(&mut d, "type", "card");
+                        let opts: Vec<Value> = options
+                            .iter()
+                            .enumerate()
+                            .map(|(i, cid)| {
+                                let mut o = obj();
+                                set(&mut o, "id", format!("CARD.{}", cid.to_python_name()));
+                                set(&mut o, "upgraded", upgraded.get(i).copied().unwrap_or(false));
+                                Value::Object(o)
+                            })
+                            .collect();
+                        d.insert("options".to_owned(), Value::Array(opts));
+                    }
+                }
+                Value::Object(d)
+            })
+            .collect(),
+    )
+}
+
 /// `RunManager.available_actions()` — every legal [`RunAction`] as a
 /// run-action dict ([`run_action_to_value`]).
 #[must_use]
@@ -1309,9 +1433,10 @@ mod tests {
         assert_eq!(rooms.len(), rm.run_state.acts.len());
         assert_eq!(
             keys(&rooms[0]),
-            ["boss", "elite", "events_shuffled", "normal", "second_boss"]
+            ["ancient", "boss", "elite", "events_shuffled", "normal", "second_boss"]
         );
         assert_eq!(rooms[0]["second_boss"], Value::Null);
+        assert_eq!(rooms[0]["ancient"], "Neow");
     }
 
     #[test]

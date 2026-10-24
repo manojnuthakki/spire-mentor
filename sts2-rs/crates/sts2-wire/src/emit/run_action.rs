@@ -122,6 +122,18 @@ pub fn run_action_to_value(a: &RunAction) -> Value {
         RunAction::Unhandled => {
             set(&mut d, "action", "unhandled");
         }
+        // sts2-agent fork: the opt-in rewards screen and potion discard.
+        RunAction::ClaimReward { idx } => {
+            set(&mut d, "action", "claim_reward");
+            set(&mut d, "idx", *idx);
+        }
+        RunAction::ProceedRewards => {
+            set(&mut d, "action", "proceed_rewards");
+        }
+        RunAction::DiscardPotion { slot } => {
+            set(&mut d, "action", "discard_potion");
+            set(&mut d, "slot", *slot);
+        }
         _ => {
             set(&mut d, "action", "unknown");
         }
@@ -272,6 +284,14 @@ pub fn run_action_from_value(v: &Value) -> Result<RunAction, EmitError> {
             discard_slot: opt_usize(d, "discard_slot")?,
         },
         "unhandled" => RunAction::Unhandled,
+        // sts2-agent fork: the opt-in rewards screen and potion discard.
+        "claim_reward" => RunAction::ClaimReward {
+            idx: req_usize(d, "idx")?,
+        },
+        "proceed_rewards" => RunAction::ProceedRewards,
+        "discard_potion" => RunAction::DiscardPotion {
+            slot: req_usize(d, "slot")?,
+        },
         other => {
             return Err(EmitError::new(format!("unknown action kind {other:?}")));
         }

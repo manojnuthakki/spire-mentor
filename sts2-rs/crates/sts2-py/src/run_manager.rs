@@ -145,7 +145,7 @@ impl PyRunManager {
 #[pymethods]
 impl PyRunManager {
     #[new]
-    #[pyo3(signature = (seed = 0, character = "Ironclad", deck = None, max_hp = None, string_seed = None, ascension_level = 0, neow_start = false, interactive_card_removal = false, direct_event_relic_grant = false, interactive_card_upgrade = false, interactive_card_transform = false, interactive_potion_swap = false, act1 = "overgrowth"))]
+    #[pyo3(signature = (seed = 0, character = "Ironclad", deck = None, max_hp = None, string_seed = None, ascension_level = 0, neow_start = false, interactive_card_removal = false, direct_event_relic_grant = false, interactive_card_upgrade = false, interactive_card_transform = false, interactive_potion_swap = false, act1 = "overgrowth", interactive_rewards = false, interactive_potions = false))]
     // A PyO3 constructor mirroring the optional-kwarg surface; the arg list
     // tracks the run's configurable knobs (seed forms, deck/hp overrides,
     // neow-start, C#-faithful UI toggles) rather than a bundled options struct.
@@ -167,6 +167,8 @@ impl PyRunManager {
         interactive_card_transform: bool,
         interactive_potion_swap: bool,
         act1: &str,
+        interactive_rewards: bool,
+        interactive_potions: bool,
     ) -> PyResult<Self> {
         let cid = character_from_str(character)?;
         // Bead `sts2-rs-livck`: Ironclad / Silent / Necrobinder / Regent
@@ -270,6 +272,12 @@ impl PyRunManager {
         // Grant Neow blessing relics directly (no extra Take relic/Skip
         // confirmation), matching C#. See `RunState::direct_event_relic_grant`.
         inner.run_state.direct_event_relic_grant = direct_event_relic_grant;
+        // sts2-agent fork: the opt-in rewards screen after a won combat
+        // (claim each reward or leave the rest) and the opt-in potion actions
+        // (discard anywhere the belt shows, AnyTime drinks out of combat).
+        // Default off keeps every existing caller's run unchanged.
+        inner.run_state.interactive_rewards = interactive_rewards;
+        inner.run_state.interactive_potions = interactive_potions;
         // GH #544: which of the two Act-1 models this run walks. Must be set
         // BEFORE `initialize_run_setup`, which pre-generates every act's
         // rooms off `up_front`. Defaults to `"overgrowth"` — the single Act 1
@@ -398,6 +406,98 @@ impl PyRunManager {
             rs.pending_potion_swaps.push(parse(name)?);
         }
         Ok(())
+    }
+
+    /// Construction flag readback (sts2-agent fork).
+    #[getter]
+    fn interactive_rewards(&self) -> bool {
+        self.inner.run_state.interactive_rewards
+    }
+
+    /// Construction flag readback (sts2-agent fork).
+    #[getter]
+    fn interactive_potions(&self) -> bool {
+        self.inner.run_state.interactive_potions
+    }
+
+    /// Construction flag readback (sts2-agent fork).
+    #[getter]
+    fn interactive_card_removal(&self) -> bool {
+        self.inner.run_state.interactive_card_removal
+    }
+
+    /// Construction flag readback (sts2-agent fork).
+    #[getter]
+    fn interactive_card_upgrade(&self) -> bool {
+        self.inner.run_state.interactive_card_upgrade
+    }
+
+    /// Construction flag readback (sts2-agent fork).
+    #[getter]
+    fn interactive_card_transform(&self) -> bool {
+        self.inner.run_state.interactive_card_transform
+    }
+
+    /// Construction flag readback (sts2-agent fork).
+    #[getter]
+    fn direct_event_relic_grant(&self) -> bool {
+        self.inner.run_state.direct_event_relic_grant
+    }
+
+    /// The open rewards screen (sts2-agent fork; `interactive_rewards=True`):
+    /// `[{"type": "gold", "amount"} | {"type": "potion", "id"} | {"type":
+    /// "relic", "id"} | {"type": "card", "options": [{"id", "upgraded"}]}]`,
+    /// index-aligned with `claim_reward`'s `idx`, or `None` when no screen is
+    /// open. While a card reward claimed from it is open,
+    /// `screen_card_claim()` names its index.
+    fn reward_screen(&self, py: Python<'_>) -> PyResult<PyObject> {
+        crate::value_to_py(py, &emit_rm::reward_screen(&self.inner)).map(Bound::unbind)
+    }
+
+    /// The deck as card dicts (sts2-agent fork): `id`, `upgraded`,
+    /// `base_cost`, `base_damage`, `base_block`, `type`, keyword `flags`,
+    /// enchantment, affliction, `replay_count` and the raw `deck_index`, in
+    /// the deck view of `master_deck()` (in-progress steals excluded).
+    fn master_deck_cards(&self, py: Python<'_>) -> PyResult<PyObject> {
+        crate::value_to_py(py, &emit_rm::master_deck_cards(&self.inner)).map(Bound::unbind)
+    }
+
+    /// A fresh card of `card_id` as the deck would hold it (sts2-agent fork),
+    /// in `master_deck_cards()`'s shape: what an offered card (a reward, a
+    /// shop slot, a grant) is before it is taken. Raises `ValueError` for an
+    /// unknown id.
+    #[staticmethod]
+    #[pyo3(signature = (card_id, upgraded = false))]
+    fn card_spec(py: Python<'_>, card_id: &str, upgraded: bool) -> PyResult<PyObject> {
+        let cid = card_id_from_str(card_id)?;
+        let card = sts2_core::lookup_card_factory()
+            .and_then(|f| f(cid, upgraded))
+            .ok_or_else(|| PyValueError::new_err(format!("no card factory for {card_id:?}")))?;
+        crate::value_to_py(py, &emit_rm::card_value(&card)).map(Bound::unbind)
+    }
+
+    /// A potion's target shape (sts2-agent fork): `"Self"`, `"AnyEnemy"`,
+    /// `"AllEnemies"` or `"AnyPlayer"` (the engine's `PotionTargetType`, from the
+    /// content registry), or `None` for an unregistered kind. A host offers an
+    /// `AnyEnemy` potion once per living enemy (`drink_potion`'s `target_index`);
+    /// the combat's own legal actions list it once, untargeted. Raises
+    /// `ValueError` for an unknown potion name (`"FIRE_POTION"`).
+    #[staticmethod]
+    fn potion_target_type(potion: &str) -> PyResult<Option<&'static str>> {
+        use sts2_core::potions::PotionTargetType as T;
+        let kind = crate::state_dict::potion_kind_from_python_name(potion)
+            .ok_or_else(|| PyValueError::new_err(format!("unknown potion {potion:?}")))?;
+        Ok(sts2_core::potion_effects::lookup_target_type(kind).map(|t| match t {
+            T::Self_ => "Self",
+            T::AnyEnemy => "AnyEnemy",
+            T::AllEnemies => "AllEnemies",
+            T::AnyPlayer => "AnyPlayer",
+        }))
+    }
+
+    /// The rewards-screen entry whose card reward is open now (sts2-agent fork).
+    fn screen_card_claim(&self) -> Option<usize> {
+        self.inner.screen_card_claim()
     }
 
     #[getter]

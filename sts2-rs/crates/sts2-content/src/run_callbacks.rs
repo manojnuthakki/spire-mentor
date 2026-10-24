@@ -85,6 +85,10 @@ pub fn ironclad_content_callbacks() -> ContentCallbacks {
         // `RewardsSet` order + apply gold/potion, BEFORE the card reward
         // rolls off the same cursor.
         apply_combat_gold_and_potion: Some(apply_combat_gold_and_potion),
+        // sts2-agent fork: the opt-in rewards screen rolls the same rewards
+        // without applying them; Entropic Brew out of combat rolls its fill.
+        roll_combat_gold_and_potion: Some(roll_combat_gold_and_potion),
+        roll_out_of_combat_potion: Some(roll_out_of_combat_potion),
         // Interactive deck-transform resolve (NewLeaf): roll the
         // replacement off the NICHE stream after the player's pick —
         // C# `NewLeaf.AfterObtained` → select → `CardCmd.TransformToRandom
@@ -490,6 +494,54 @@ fn roll_out_of_combat_potion_kind(rs: &mut RunState) -> Option<sts2_core::potion
 /// `RollRarity` off `Rewards`) is appended separately by the run loop
 /// AFTER the card reward, matching C#'s populate order. Bead
 /// `sts2-rs-jenwp` (M4 live reward stream).
+/// The rewards-screen twin of [`apply_combat_gold_and_potion`]
+/// (`RunState::interactive_rewards`, sts2-agent fork): the same `Rewards`
+/// reads in the same order (potion odds, gold, potion contents) and the same
+/// `modify_rewards` gold bonuses, returned instead of applied. The potion is
+/// returned whatever the belt holds: the screen lists it, unclaimable while
+/// the belt is full, as C# lists a TooFull `PotionReward`.
+fn roll_combat_gold_and_potion(
+    rs: &mut RunState,
+    room_type: RoomType,
+) -> sts2_core::run_manager::RoomRewardRoll {
+    let mut out = sts2_core::run_manager::RoomRewardRoll::default();
+    let potion_drops = rs.roll_potion_reward(room_type);
+    let gold_proportion = rs.last_combat_gold_proportion;
+    if let Some(amount) = rs.roll_encounter_gold(room_type, gold_proportion) {
+        out.gold.push(amount);
+    }
+    if potion_drops {
+        let character = rs.character_id;
+        out.potion = crate::potions::all::create_random_potions_out_of_combat(
+            &mut rs.rng.rewards,
+            character,
+            1,
+        )
+        .into_iter()
+        .next();
+    }
+    out.gold.extend(rs.offer_rewards(room_type, Vec::new()).iter().filter_map(|r| match r {
+        sts2_core::runstate::Reward::Gold { amount } if *amount > 0 => Some(*amount),
+        _ => None,
+    }));
+    out
+}
+
+/// One random potion off the run's `CombatPotionGeneration` stream (C#
+/// `EntropicBrew.OnUse` out of combat:
+/// `PotionFactory.CreateRandomPotionOutOfCombat(owner,
+/// RunState.Rng.CombatPotionGeneration)`). sts2-agent fork.
+fn roll_out_of_combat_potion(rs: &mut RunState) -> Option<sts2_core::potions::PotionKind> {
+    let character = rs.character_id;
+    crate::potions::all::create_random_potions_out_of_combat(
+        &mut rs.rng.combat_potion_generation,
+        character,
+        1,
+    )
+    .into_iter()
+    .next()
+}
+
 fn apply_combat_gold_and_potion(rs: &mut RunState, room_type: RoomType) {
     // (1) potion-odds NextFloat + pity update; `true` ⇒ a potion drops.
     let potion_drops = rs.roll_potion_reward(room_type);

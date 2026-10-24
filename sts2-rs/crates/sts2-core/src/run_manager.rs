@@ -255,6 +255,20 @@ pub enum RunAction {
     /// `TransformDeckCard` fan-out). Phase-agnostic like [`Self::RemoveDeckCard`].
     /// Bead `sts2-rs-gorge-select`.
     GrantDeckCard { idx: usize },
+    /// Rewards screen ([`crate::runstate::RunState::interactive_rewards`]):
+    /// claim the reward at `idx` of [`RunManager::reward_screen`] (C#
+    /// `Reward.OnSelect`). Gold and a relic apply at once, a potion lands in
+    /// the belt (refused while the belt is full), a card reward opens its
+    /// offering, after which the screen returns. sts2-agent fork.
+    ClaimReward { idx: usize },
+    /// Rewards screen: leave it, skipping every reward still listed (C#
+    /// `Reward.OnSkipped`), and continue the run. sts2-agent fork.
+    ProceedRewards,
+    /// Discard the held potion at belt position `slot` (C#
+    /// `PotionModel.Discard`); combat-side belt in a fight, the run belt
+    /// otherwise. Only offered under
+    /// [`crate::runstate::RunState::interactive_potions`]. sts2-agent fork.
+    DiscardPotion { slot: usize },
     /// Catch-all for not-yet-modeled actions. Routes to
     /// [`ActionResult::NotImplemented`].
     Unhandled,
@@ -475,6 +489,17 @@ pub struct ContentCallbacks {
     /// Bead `sts2-rs-jenwp` (M4 live reward stream).
     pub apply_combat_gold_and_potion:
         Option<fn(rs: &mut RunState, room_type: crate::runstate::RoomType)>,
+    /// The rewards-screen twin of [`Self::apply_combat_gold_and_potion`]
+    /// ([`RunState::interactive_rewards`]): the same `Rewards`-stream reads in
+    /// the same order, returning the gold amounts and the dropped potion
+    /// instead of applying them. sts2-agent fork.
+    pub roll_combat_gold_and_potion:
+        Option<fn(rs: &mut RunState, room_type: crate::runstate::RoomType) -> RoomRewardRoll>,
+    /// One random potion off `rs.rng.combat_potion_generation` (C#
+    /// `PotionFactory.CreateRandomPotionOutOfCombat(owner,
+    /// RunState.Rng.CombatPotionGeneration)`), for Entropic Brew drunk out of
+    /// combat. sts2-agent fork.
+    pub roll_out_of_combat_potion: Option<fn(rs: &mut RunState) -> Option<crate::potions::PotionKind>>,
     /// Roll the replacement card for one interactive deck transform
     /// (NewLeaf's `CardCmd.TransformToRandom(item, RunState.Rng.Niche)`).
     /// The callback owns the character transform pool walk (C/U/R,
@@ -571,6 +596,14 @@ impl core::fmt::Debug for ContentCallbacks {
                 &self.apply_combat_gold_and_potion.is_some(),
             )
             .field(
+                "roll_combat_gold_and_potion",
+                &self.roll_combat_gold_and_potion.is_some(),
+            )
+            .field(
+                "roll_out_of_combat_potion",
+                &self.roll_out_of_combat_potion.is_some(),
+            )
+            .field(
                 "roll_transform_replacement",
                 &self.roll_transform_replacement.is_some(),
             )
@@ -581,6 +614,27 @@ impl core::fmt::Debug for ContentCallbacks {
             )
             .finish()
     }
+}
+
+/// What [`ContentCallbacks::roll_combat_gold_and_potion`] rolled for a won
+/// combat room: each gold reward (the room's, then relic bonuses such as
+/// Amethyst Aubergine's) and the dropped potion, if any. sts2-agent fork.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RoomRewardRoll {
+    pub gold: Vec<i32>,
+    pub potion: Option<crate::potions::PotionKind>,
+}
+
+/// One reward on the opt-in rewards screen ([`RunManager::reward_screen`]).
+/// sts2-agent fork.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ScreenReward {
+    Gold { amount: i32 },
+    Potion { kind: crate::potions::PotionKind },
+    Relic { relic: crate::runstate::RelicReward },
+    /// A card reward with its options already rolled (C# populates every
+    /// reward of the set when it is generated).
+    Card { options: Vec<crate::cards::CardId>, upgraded: Vec<bool> },
 }
 
 /// Top-level run orchestrator. Owns the run-side state ([`RunState`])
@@ -675,6 +729,13 @@ pub struct RunManager {
     /// shop is open OR the callback isn't wired (legacy skip-only
     /// behavior). Bead `sts2-rs-if6ry` (W3).
     shop_inventory: Option<crate::shop::ShopInventory>,
+    /// The open rewards screen ([`RunState::interactive_rewards`]), in the
+    /// order the game lists it (gold, potion, relic, card). `None` when no
+    /// screen is open. sts2-agent fork.
+    reward_screen: Option<Vec<ScreenReward>>,
+    /// The screen entry whose card reward is open right now (its options in
+    /// `card_reward_options`). sts2-agent fork.
+    screen_card_claim: Option<usize>,
 }
 
 impl RunManager {
@@ -836,6 +897,8 @@ impl RunManager {
             card_offer_choose_screen: false,
             pending_choose_screen_post_add: Vec::new(),
             shop_inventory: None,
+            reward_screen: None,
+            screen_card_claim: None,
         }
     }
 
@@ -1065,7 +1128,6 @@ impl RunManager {
     /// `sts2-rs-7kl4f`.
     #[must_use]
     pub fn get_available_actions(&self) -> Vec<RunAction> {
-        use crate::runstate::RestSiteOption;
         // Interactive deck removal preempts the current phase's actions:
         // an on-obtain relic (e.g. Precise Scissors) queues removals that
         // the player resolves before the run continues, regardless of which
@@ -1154,6 +1216,71 @@ impl RunManager {
                 )
                 .collect();
         }
+        let mut v = self.phase_actions();
+        self.push_potion_actions(&mut v);
+        v
+    }
+
+    /// Whether the phase's own decision shows the potion belt (the host's
+    /// potion decisions: not a deck pick, a combat choice, a Scroll Boxes
+    /// bundle, a choose-a-card screen or the Smith pick). sts2-agent fork.
+    fn belt_shown(&self) -> bool {
+        match self.phase {
+            Phase::RunOver => false,
+            Phase::Combat => self
+                .combat
+                .as_ref()
+                .is_some_and(|c| !c.is_over && c.pending_choice.is_none()),
+            Phase::CardReward => self.card_reward_bundles.is_none() && !self.card_offer_choose_screen,
+            Phase::RestSite => self
+                .run_state
+                .pending_choice
+                .as_ref()
+                .is_none_or(|pc| pc.kind != crate::ChoiceKind::CardSelect),
+            _ => true,
+        }
+    }
+
+    /// [`RunState::interactive_potions`]: a discard per held potion, and
+    /// outside combat a drink per AnyTime potion the game lets the player
+    /// drink here. Combat drinks come from the combat's own legal actions.
+    /// sts2-agent fork.
+    fn push_potion_actions(&self, v: &mut Vec<RunAction>) {
+        if !self.run_state.interactive_potions || !self.belt_shown() {
+            return;
+        }
+        if self.phase == Phase::Combat {
+            let n = self.combat.as_ref().map_or(0, |c| c.player.potions.len());
+            v.extend((0..n).map(|slot| RunAction::DiscardPotion { slot }));
+            return;
+        }
+        for (slot, &kind) in self.run_state.potions.iter().enumerate() {
+            if self.drinkable_out_of_combat(kind) {
+                v.push(RunAction::DrinkPotion { potion_slot: slot, target: None });
+            }
+        }
+        v.extend((0..self.run_state.potions.len()).map(|slot| RunAction::DiscardPotion { slot }));
+    }
+
+    /// The AnyTime potions' out-of-combat use (C# `PotionUsage.AnyTime` and
+    /// `PassesCustomUsabilityCheck`): Foul Potion only at the merchant
+    /// (`FoulPotion.PassesCustomUsabilityCheck`). sts2-agent fork.
+    fn drinkable_out_of_combat(&self, kind: crate::potions::PotionKind) -> bool {
+        use crate::potions::PotionKind;
+        match kind {
+            PotionKind::BloodPotion | PotionKind::FruitJuice | PotionKind::EntropicBrew => true,
+            PotionKind::FoulPotion => self.phase == Phase::Shop,
+            _ => false,
+        }
+    }
+
+    fn has_open_potion_slot(&self) -> bool {
+        let cap = (self.run_state.max_potion_slots.max(0) as usize).min(crate::potions::MAX_POTIONS);
+        self.run_state.potions.len() < cap
+    }
+
+    fn phase_actions(&self) -> Vec<RunAction> {
+        use crate::runstate::RestSiteOption;
         match self.phase {
             Phase::RunOver => Vec::new(),
             Phase::MapChoice => self
@@ -1274,6 +1401,25 @@ impl RunManager {
                 v
             }
             Phase::CardReward => {
+                // sts2-agent fork: the open rewards screen, unless something it
+                // opened is up (its card reward, a relic a claim queued).
+                if let Some(screen) = &self.reward_screen {
+                    if self.screen_card_claim.is_none()
+                        && self.card_reward_options.is_empty()
+                        && self.card_reward_bundles.is_none()
+                        && self.run_state.relic_rewards.is_empty()
+                    {
+                        let open_slot = self.has_open_potion_slot();
+                        let mut v: Vec<RunAction> = screen
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, r)| open_slot || !matches!(r, ScreenReward::Potion { .. }))
+                            .map(|(idx, _)| RunAction::ClaimReward { idx })
+                            .collect();
+                        v.push(RunAction::ProceedRewards);
+                        return v;
+                    }
+                }
                 // CardReward sub-states fan out from `advance_after_card_reward`:
                 // (a) `card_reward_options` non-empty → PickCardReward{Some(i)}
                 //     for each option + PickCardReward{None} for skip;
@@ -1492,6 +1638,30 @@ impl RunManager {
         // (GH #252).
         if let RunAction::PotionSwap { discard_slot } = action {
             return self.do_potion_swap(discard_slot);
+        }
+        // sts2-agent fork: the rewards screen and the opt-in potion actions,
+        // each accepted only where `get_available_actions` offers it.
+        match action {
+            RunAction::ClaimReward { .. }
+            | RunAction::ProceedRewards
+            | RunAction::DiscardPotion { .. } => {
+                if !self.get_available_actions().contains(&action) {
+                    return ActionResult::InvalidForPhase;
+                }
+                return match action {
+                    RunAction::ClaimReward { idx } => self.do_claim_reward(idx),
+                    RunAction::ProceedRewards => self.do_proceed_rewards(),
+                    RunAction::DiscardPotion { slot } => self.do_discard_potion(slot),
+                    _ => unreachable!(),
+                };
+            }
+            RunAction::DrinkPotion { potion_slot, .. } if self.phase != Phase::Combat => {
+                if !self.get_available_actions().contains(&action) {
+                    return ActionResult::InvalidForPhase;
+                }
+                return self.do_drink_potion_out_of_combat(potion_slot);
+            }
+            _ => {}
         }
         match (self.phase, action) {
             (Phase::MapChoice, RunAction::Move { col }) => self.do_map_move(col),
@@ -1821,6 +1991,16 @@ impl RunManager {
         }
         self.run_state.gain_gold(gold.trunc() as i32);
         if let Some(id) = picked {
+            if self.run_state.interactive_rewards {
+                // sts2-agent fork: the chest's relic is offered, taken or left
+                // (C# `TreasureRoom`: the chest opens with its gold, the relic waits
+                // on the player; `PickRelicReward` takes it, `SkipRelic` leaves the
+                // room without it). Taking it runs the same obtain and follow-up
+                // routing through `do_relic_reward_pick`.
+                self.run_state.relic_rewards.push(crate::runstate::RelicReward::new(id));
+                self.phase = Phase::CardReward;
+                return ActionResult::Advanced;
+            }
             self.run_state.obtain_relic(id);
         }
         // AfterObtained listeners may have queued follow-up rewards
@@ -2178,10 +2358,9 @@ impl RunManager {
                     .run_state
                     .current_room
                     .map_or(crate::runstate::RoomType::Boss, |r| r.room_type);
-                if let Some(apply) = self.callbacks.apply_combat_gold_and_potion {
-                    apply(&mut self.run_state, reward_room_type);
-                }
+                let roll = self.begin_room_rewards(reward_room_type);
                 self.enter_card_reward_phase();
+                self.open_reward_screen(roll);
                 return ActionResult::Advanced;
             }
             // Act-1/2 boss kill: grant the combat card reward FIRST (3
@@ -2219,9 +2398,7 @@ impl RunManager {
                 .run_state
                 .current_room
                 .map_or(crate::runstate::RoomType::Boss, |r| r.room_type);
-            if let Some(apply) = self.callbacks.apply_combat_gold_and_potion {
-                apply(&mut self.run_state, reward_room_type);
-            }
+            let roll = self.begin_room_rewards(reward_room_type);
             // Advance into the next act only AFTER the boss reward chain
             // (card reward, then the boss-relic / Ancient choice) fully
             // drains — `advance_after_card_reward` (empty pool) or
@@ -2229,6 +2406,7 @@ impl RunManager {
             // calls `advance_boss_act`.
             self.pending_boss_act_advance = true;
             self.enter_card_reward_phase();
+            self.open_reward_screen(roll);
             return ActionResult::Advanced;
         }
         // Normal / Elite combat win → combat rewards + CardReward.
@@ -2249,9 +2427,7 @@ impl RunManager {
             .run_state
             .current_room
             .map_or(crate::runstate::RoomType::Monster, |r| r.room_type);
-        if let Some(apply) = self.callbacks.apply_combat_gold_and_potion {
-            apply(&mut self.run_state, reward_room_type);
-        }
+        let roll = self.begin_room_rewards(reward_room_type);
         self.enter_card_reward_phase();
         // Elite rooms append a 5th reward: C# `RewardsSet.GenerateRewardsFor`
         // (Elite case) adds `new RelicReward(player)` LAST, whose `Populate`
@@ -2283,7 +2459,174 @@ impl RunManager {
             // list — and the rewards-stream cursor — in lockstep with the
             // oracle. Without this the relic surfaced one step late, so the
             // card-reward-screen relic-list diff diverged (RP109/RP72).
-            self.run_state.drain_relic_rewards_directly();
+            if !self.run_state.interactive_rewards {
+                self.run_state.drain_relic_rewards_directly();
+            }
+        }
+        self.open_reward_screen(roll);
+        ActionResult::Advanced
+    }
+
+    /// A won combat room's gold and potion: applied at once (the
+    /// auto-collect path), or under [`RunState::interactive_rewards`] rolled
+    /// in the same order and returned for the rewards screen. sts2-agent fork.
+    fn begin_room_rewards(&mut self, room_type: crate::runstate::RoomType) -> Option<RoomRewardRoll> {
+        if self.run_state.interactive_rewards {
+            if let Some(roll) = self.callbacks.roll_combat_gold_and_potion {
+                return Some(roll(&mut self.run_state, room_type));
+            }
+        }
+        if let Some(apply) = self.callbacks.apply_combat_gold_and_potion {
+            apply(&mut self.run_state, room_type);
+        }
+        None
+    }
+
+    /// Open the rewards screen for a won combat room (sts2-agent fork): the
+    /// rolled gold and potion, the relics the room queued (an elite's), and
+    /// the card reward `enter_card_reward_phase` rolled, in the order the
+    /// game lists them (gold, potion, relic, card). No-op without a roll
+    /// (the auto-collect path).
+    fn open_reward_screen(&mut self, roll: Option<RoomRewardRoll>) {
+        let Some(roll) = roll else {
+            return;
+        };
+        let mut screen: Vec<ScreenReward> =
+            roll.gold.into_iter().map(|amount| ScreenReward::Gold { amount }).collect();
+        if let Some(kind) = roll.potion {
+            screen.push(ScreenReward::Potion { kind });
+        }
+        screen.extend(
+            std::mem::take(&mut self.run_state.relic_rewards)
+                .into_iter()
+                .map(|relic| ScreenReward::Relic { relic }),
+        );
+        if !self.card_reward_options.is_empty() {
+            screen.push(ScreenReward::Card {
+                options: std::mem::take(&mut self.card_reward_options),
+                upgraded: std::mem::take(&mut self.card_reward_upgraded),
+            });
+        }
+        self.reward_screen = Some(screen);
+        self.screen_card_claim = None;
+        self.phase = Phase::CardReward;
+    }
+
+    /// Claim one reward of the open screen (C# `Reward.OnSelect`). sts2-agent fork.
+    fn do_claim_reward(&mut self, idx: usize) -> ActionResult {
+        let Some(reward) = self.reward_screen.as_ref().and_then(|s| s.get(idx)).cloned() else {
+            return ActionResult::InvalidForPhase;
+        };
+        match reward {
+            ScreenReward::Gold { amount } => {
+                self.remove_screen_reward(idx);
+                self.run_state.gain_gold(amount);
+            }
+            ScreenReward::Potion { kind } => {
+                // C# `PotionCmd.TryToProcure`: refused on a full belt, and the
+                // reward stays on the screen (not offered then).
+                if !self.run_state.add_potion_to_belt(kind) {
+                    return ActionResult::InvalidForPhase;
+                }
+                self.remove_screen_reward(idx);
+            }
+            ScreenReward::Relic { relic } => {
+                self.remove_screen_reward(idx);
+                // Through the relic-reward queue so `accept_relic_reward`
+                // obtains it (wax flag, `after_obtained`); a follow-up reward it
+                // queues (Small Capsule) is offered before the screen returns.
+                self.run_state.relic_rewards.push(relic);
+                let last = self.run_state.relic_rewards.len() - 1;
+                let _ = self.run_state.accept_relic_reward(last);
+            }
+            ScreenReward::Card { options, upgraded } => {
+                self.card_reward_options = options;
+                self.card_reward_upgraded = upgraded;
+                self.screen_card_claim = Some(idx);
+            }
+        }
+        self.phase = Phase::CardReward;
+        ActionResult::Advanced
+    }
+
+    fn remove_screen_reward(&mut self, idx: usize) {
+        if let Some(screen) = self.reward_screen.as_mut() {
+            if idx < screen.len() {
+                screen.remove(idx);
+            }
+        }
+    }
+
+    /// Leave the rewards screen, skipping what is left (C# `Reward.OnSkipped`),
+    /// and continue as the auto-collect path does after its card reward.
+    /// sts2-agent fork.
+    fn do_proceed_rewards(&mut self) -> ActionResult {
+        self.reward_screen = None;
+        self.screen_card_claim = None;
+        self.advance_after_card_reward();
+        ActionResult::Advanced
+    }
+
+    /// Discard the potion at `slot` (C# `PotionModel.Discard`: the slot is
+    /// emptied, nothing else happens; Belt Buckle, the one discard listener,
+    /// isn't modelled by the engine). sts2-agent fork.
+    fn do_discard_potion(&mut self, slot: usize) -> ActionResult {
+        if self.phase == Phase::Combat {
+            let Some(combat) = self.combat.as_mut() else {
+                return ActionResult::InvalidForPhase;
+            };
+            if slot >= combat.player.potions.len() {
+                return ActionResult::InvalidForPhase;
+            }
+            let _ = combat.player.remove_potion_at(slot);
+        } else {
+            if slot >= self.run_state.potions.len() {
+                return ActionResult::InvalidForPhase;
+            }
+            let _ = self.run_state.remove_potion_from_belt(slot);
+        }
+        ActionResult::Advanced
+    }
+
+    /// Drink an AnyTime potion outside combat (C# `PotionModel.OnUseWrapper`:
+    /// the potion leaves the belt first, then its `OnUse` runs). The four
+    /// potions' out-of-combat effects: `BloodPotion` heals 20% of max HP
+    /// (floored, as the combat dispatch does), `FruitJuice` gains 5 max HP,
+    /// `EntropicBrew` fills every open slot with random potions off
+    /// `CombatPotionGeneration` until a procure fails, `FoulPotion` thrown at
+    /// the merchant gains 100 gold. Their `AfterPotionUsed` listeners
+    /// (`ReptileTrinket`, `BeltBuckle`) act only in combat. sts2-agent fork.
+    fn do_drink_potion_out_of_combat(&mut self, slot: usize) -> ActionResult {
+        use crate::potions::PotionKind;
+        let Some(&kind) = self.run_state.potions.get(slot) else {
+            return ActionResult::InvalidForPhase;
+        };
+        let _ = self.run_state.remove_potion_from_belt(slot);
+        match kind {
+            PotionKind::BloodPotion => {
+                let amount = self.run_state.max_hp.saturating_mul(20) / 100;
+                if amount > 0 {
+                    let _ = self.run_state.heal(amount);
+                }
+            }
+            PotionKind::FruitJuice => self.run_state.gain_max_hp(5),
+            PotionKind::EntropicBrew => {
+                while self.has_open_potion_slot() {
+                    let Some(roll) = self.callbacks.roll_out_of_combat_potion else {
+                        break;
+                    };
+                    let Some(new) = roll(&mut self.run_state) else {
+                        break;
+                    };
+                    if !crate::run_effects::dispatch_should_procure_potion(&mut self.run_state)
+                        || !self.run_state.add_potion_to_belt(new)
+                    {
+                        break;
+                    }
+                }
+            }
+            PotionKind::FoulPotion => self.run_state.gain_gold(100),
+            _ => return ActionResult::InvalidForPhase,
         }
         ActionResult::Advanced
     }
@@ -2305,7 +2648,9 @@ impl RunManager {
         // so this is a no-op for the normal pick path; when empty it
         // surfaces any queued relic-reward, the pre-generated boss-relic
         // choice (boss combats), or finally the map.
-        if self.card_reward_options.is_empty() {
+        // Under the rewards screen (sts2-agent fork) the screen opens next,
+        // empty offering or not.
+        if self.card_reward_options.is_empty() && !self.run_state.interactive_rewards {
             self.advance_after_card_reward();
         }
     }
@@ -2398,6 +2743,17 @@ impl RunManager {
             Some(_) => return ActionResult::InvalidForPhase,
             None => self.card_reward_options.clear(),
         }
+        // sts2-agent fork: a card reward claimed from the rewards screen
+        // returns to it. A pick uses the reward up; the Skip alternative
+        // keeps it claimable (C# `EndSelectionAndDoNotCompleteReward`).
+        if let Some(claim) = self.screen_card_claim.take() {
+            self.card_reward_upgraded.clear();
+            if idx.is_some() {
+                self.remove_screen_reward(claim);
+            }
+            self.phase = Phase::CardReward;
+            return ActionResult::Advanced;
+        }
         // A resolved choose screen (HeftyTablet / LeadPaperweight) appends
         // its deferred cards now — after the chosen card, on pick AND skip —
         // matching C#'s post-select `CardPileCmd.Add([chosen?, Injury], Deck)`.
@@ -2450,6 +2806,7 @@ impl RunManager {
             return ActionResult::InvalidForPhase;
         }
         let count = self.run_state.pael_record_sacrifice();
+        let screen_claim = self.screen_card_claim.take();
         if count % 2 == 0 {
             if let Some(relic) = self
                 .run_state
@@ -2466,6 +2823,13 @@ impl RunManager {
             }
         }
         self.card_reward_options.clear();
+        // sts2-agent fork: SACRIFICE completes a screen's card reward.
+        if let Some(claim) = screen_claim {
+            self.card_reward_upgraded.clear();
+            self.remove_screen_reward(claim);
+            self.phase = Phase::CardReward;
+            return ActionResult::Advanced;
+        }
         // Defensive: a sacrifice consuming a choose screen still owes its
         // post-add cards (HeftyTablet's Injury is unconditional in C#).
         if std::mem::take(&mut self.card_offer_choose_screen) {
@@ -2647,6 +3011,11 @@ impl RunManager {
 
     fn advance_after_card_reward(&mut self) {
         if !self.card_reward_options.is_empty() {
+            return;
+        }
+        // sts2-agent fork: the rewards screen stays until `ProceedRewards`.
+        if self.reward_screen.is_some() {
+            self.phase = Phase::CardReward;
             return;
         }
         if !self.run_state.relic_rewards.is_empty() {
@@ -4364,6 +4733,19 @@ impl RunManager {
 // Lives in a separate `impl` block to avoid touching the dispatch core
 // (which is concurrently being extended by sibling W5b smith work).
 impl RunManager {
+    /// The open rewards screen ([`RunState::interactive_rewards`]), or `None`.
+    /// sts2-agent fork.
+    #[must_use]
+    pub fn reward_screen(&self) -> Option<&[ScreenReward]> {
+        self.reward_screen.as_deref()
+    }
+
+    /// The screen entry whose card reward is open now, if any. sts2-agent fork.
+    #[must_use]
+    pub fn screen_card_claim(&self) -> Option<usize> {
+        self.screen_card_claim
+    }
+
     /// Currently-offered card-reward [`crate::cards::CardId`] list for
     /// the `Phase::CardReward` sub-state. Empty when no card-reward
     /// fan-out is pending (e.g. relic-only reward, or outside the
@@ -4819,6 +5201,220 @@ mod tests {
             [crate::potions::PotionKind::FirePotion],
             "slot 0 (BlockPotion) consumed, FirePotion shifts down",
         );
+    }
+
+    // ── sts2-agent fork: the opt-in rewards screen and potion actions ──
+
+    fn screen_rm(screen: Vec<ScreenReward>) -> RunManager {
+        let mut rm = RunManager::new(0, CharacterId::Ironclad);
+        rm.run_state.interactive_rewards = true;
+        rm.run_state.max_potion_slots = 2;
+        rm.phase = Phase::CardReward;
+        rm.reward_screen = Some(screen);
+        rm
+    }
+
+    /// The screen offers a claim per reward and a proceed; gold applies on
+    /// claim, and the claimed reward leaves the screen.
+    #[test]
+    fn reward_screen_claims_gold_and_proceeds_to_the_map() {
+        let mut rm = screen_rm(vec![ScreenReward::Gold { amount: 17 }]);
+        let gold = rm.run_state.gold;
+        assert_eq!(
+            rm.get_available_actions(),
+            vec![RunAction::ClaimReward { idx: 0 }, RunAction::ProceedRewards]
+        );
+        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::Advanced);
+        assert_eq!(rm.run_state.gold, gold + 17);
+        assert_eq!(rm.reward_screen(), Some(&[][..]));
+        assert_eq!(rm.phase(), Phase::CardReward);
+        assert_eq!(rm.take_action(RunAction::ProceedRewards), ActionResult::Advanced);
+        assert!(rm.reward_screen().is_none());
+        assert_eq!(rm.phase(), Phase::MapChoice);
+    }
+
+    /// Leaving the screen skips what is left: the gold is never gained.
+    #[test]
+    fn reward_screen_proceed_skips_unclaimed_rewards() {
+        let mut rm = screen_rm(vec![ScreenReward::Gold { amount: 17 }]);
+        let gold = rm.run_state.gold;
+        assert_eq!(rm.take_action(RunAction::ProceedRewards), ActionResult::Advanced);
+        assert_eq!(rm.run_state.gold, gold);
+        assert_eq!(rm.phase(), Phase::MapChoice);
+    }
+
+    /// A card reward opens its offering; its Skip returns to the screen with
+    /// the reward still claimable, and a pick uses it up.
+    #[test]
+    fn reward_screen_card_reward_skip_keeps_it_and_pick_uses_it() {
+        use crate::cards::CardId;
+        let options = vec![CardId::Anger, CardId::Bash];
+        let mut rm = screen_rm(vec![ScreenReward::Card { options: options.clone(), upgraded: vec![false, true] }]);
+        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::Advanced);
+        assert_eq!(rm.card_reward_options(), options.as_slice());
+        assert_eq!(rm.screen_card_claim(), Some(0));
+        let actions = rm.get_available_actions();
+        assert!(actions.contains(&RunAction::PickCardReward { idx: None }), "{actions:?}");
+        assert!(!actions.contains(&RunAction::ProceedRewards), "{actions:?}");
+        // Skip: back on the screen, the reward still there.
+        assert_eq!(rm.take_action(RunAction::PickCardReward { idx: None }), ActionResult::Advanced);
+        assert_eq!(rm.reward_screen().map(<[_]>::len), Some(1));
+        assert!(rm.card_reward_options().is_empty());
+        assert_eq!(rm.phase(), Phase::CardReward);
+        // Claim again and pick the second card: added upgraded, reward gone.
+        let deck = rm.run_state.master_deck.len();
+        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::Advanced);
+        assert_eq!(rm.take_action(RunAction::PickCardReward { idx: Some(1) }), ActionResult::Advanced);
+        assert_eq!(rm.run_state.master_deck.len(), deck + 1);
+        let added = rm.run_state.master_deck.last().expect("a card was added");
+        assert_eq!((added.card_id, added.upgraded), (CardId::Bash, true));
+        assert_eq!(rm.reward_screen(), Some(&[][..]));
+        assert_eq!(
+            rm.get_available_actions(),
+            vec![RunAction::ProceedRewards]
+        );
+    }
+
+    /// A potion reward is unclaimable on a full belt and stays listed; a
+    /// discard frees the slot (C# `PotionProcureFailureReason.TooFull`).
+    #[test]
+    fn reward_screen_potion_waits_for_a_free_slot() {
+        use crate::potions::PotionKind;
+        let mut rm = screen_rm(vec![ScreenReward::Potion { kind: PotionKind::FirePotion }]);
+        rm.run_state.interactive_potions = true;
+        rm.run_state.potions = vec![PotionKind::BlockPotion, PotionKind::SwiftPotion];
+        let actions = rm.get_available_actions();
+        assert!(!actions.contains(&RunAction::ClaimReward { idx: 0 }), "{actions:?}");
+        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::InvalidForPhase);
+        assert!(actions.contains(&RunAction::DiscardPotion { slot: 1 }), "{actions:?}");
+        assert_eq!(rm.take_action(RunAction::DiscardPotion { slot: 1 }), ActionResult::Advanced);
+        assert_eq!(rm.run_state.potions, vec![PotionKind::BlockPotion]);
+        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::Advanced);
+        assert_eq!(rm.run_state.potions, vec![PotionKind::BlockPotion, PotionKind::FirePotion]);
+        assert_eq!(rm.reward_screen(), Some(&[][..]));
+    }
+
+    /// Without the flags nothing changes: no screen actions, no discard.
+    #[test]
+    fn potion_actions_are_off_by_default() {
+        use crate::potions::PotionKind;
+        let mut rm = RunManager::new(0, CharacterId::Ironclad);
+        rm.run_state.max_potion_slots = 3;
+        rm.run_state.potions = vec![PotionKind::BloodPotion];
+        let actions = rm.get_available_actions();
+        assert!(
+            actions.iter().all(|a| !matches!(a, RunAction::DiscardPotion { .. } | RunAction::DrinkPotion { .. })),
+            "{actions:?}"
+        );
+        assert_eq!(rm.take_action(RunAction::DiscardPotion { slot: 0 }), ActionResult::InvalidForPhase);
+        assert_eq!(
+            rm.take_action(RunAction::DrinkPotion { potion_slot: 0, target: None }),
+            ActionResult::InvalidForPhase
+        );
+        assert_eq!(rm.run_state.potions, vec![PotionKind::BloodPotion]);
+    }
+
+    /// Out of combat the AnyTime potions are drinkable: Blood Potion heals 20%
+    /// of max HP (floored), Fruit Juice gains 5 max HP; a combat-only potion
+    /// can only be discarded; Foul Potion only at the merchant.
+    #[test]
+    fn anytime_potions_drink_out_of_combat() {
+        use crate::potions::PotionKind;
+        let mut rm = RunManager::new(0, CharacterId::Ironclad);
+        rm.run_state.interactive_potions = true;
+        rm.run_state.max_potion_slots = 4;
+        rm.run_state.max_hp = 83;
+        rm.run_state.current_hp = 40;
+        rm.run_state.potions =
+            vec![PotionKind::BloodPotion, PotionKind::FirePotion, PotionKind::FruitJuice, PotionKind::FoulPotion];
+        let actions = rm.get_available_actions();
+        let drinks: Vec<usize> = actions
+            .iter()
+            .filter_map(|a| match a {
+                RunAction::DrinkPotion { potion_slot, .. } => Some(*potion_slot),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(drinks, vec![0, 2], "Blood Potion and Fruit Juice; Foul Potion only at a shop: {actions:?}");
+        assert_eq!(
+            rm.take_action(RunAction::DrinkPotion { potion_slot: 1, target: None }),
+            ActionResult::InvalidForPhase
+        );
+        assert_eq!(rm.take_action(RunAction::DrinkPotion { potion_slot: 0, target: None }), ActionResult::Advanced);
+        assert_eq!(rm.run_state.current_hp, 40 + 16);
+        assert_eq!(rm.run_state.potions, vec![PotionKind::FirePotion, PotionKind::FruitJuice, PotionKind::FoulPotion]);
+        assert_eq!(rm.take_action(RunAction::DrinkPotion { potion_slot: 1, target: None }), ActionResult::Advanced);
+        assert_eq!((rm.run_state.max_hp, rm.run_state.current_hp), (88, 61));
+        // At the merchant the Foul Potion is thrown for 100 gold.
+        rm.phase = Phase::Shop;
+        let gold = rm.run_state.gold;
+        assert_eq!(rm.take_action(RunAction::DrinkPotion { potion_slot: 1, target: None }), ActionResult::Advanced);
+        assert_eq!(rm.run_state.gold, gold + 100);
+        assert_eq!(rm.run_state.potions, vec![PotionKind::FirePotion]);
+    }
+
+    /// In a fight a discard empties the combat belt's slot; the combat's own
+    /// legal actions (what the search sees) never offer it.
+    #[test]
+    fn discard_potion_in_combat() {
+        use crate::potions::PotionKind;
+        let mut rm = RunManager::new(0, CharacterId::Ironclad);
+        rm.run_state.interactive_potions = true;
+        rm.phase = Phase::Combat;
+        let mut combat = crate::CombatState {
+            phase: crate::CombatPhase::PlayerPlayPhase,
+            ..crate::CombatState::default()
+        };
+        let _ = combat.init_player_creature();
+        combat.player.potions.push(PotionKind::BlockPotion);
+        combat.player.potions.push(PotionKind::FirePotion);
+        rm.combat = Some(combat);
+        let actions = rm.get_available_actions();
+        assert!(actions.contains(&RunAction::DiscardPotion { slot: 0 }), "{actions:?}");
+        assert_eq!(rm.take_action(RunAction::DiscardPotion { slot: 0 }), ActionResult::Advanced);
+        assert_eq!(
+            rm.combat.as_ref().expect("combat").player.potions.as_slice(),
+            [PotionKind::FirePotion]
+        );
+    }
+
+    /// Under the rewards screen the chest's relic is offered (take or leave);
+    /// its gold is gained on opening either way. Without the flag the relic
+    /// is obtained at once.
+    #[test]
+    fn treasure_relic_is_offered_under_interactive_rewards() {
+        use crate::runstate::RelicRarity;
+        let chest = |interactive: bool| {
+            let mut rm = RunManager::new(0, CharacterId::Ironclad);
+            rm.run_state.interactive_rewards = interactive;
+            for rarity in [RelicRarity::Common, RelicRarity::Uncommon, RelicRarity::Rare] {
+                rm.run_state
+                    .shared_relic_grab_bag_by_rarity
+                    .insert(rarity, vec![crate::RelicId::Anchor]);
+            }
+            let gold = rm.run_state.gold;
+            assert_eq!(rm.resolve_treasure_room(), ActionResult::Advanced);
+            assert!(rm.run_state.gold > gold, "the chest's gold is gained on opening");
+            rm
+        };
+        let auto = chest(false);
+        assert!(auto.run_state.relics.contains(&crate::RelicId::Anchor));
+        assert_eq!(auto.phase(), Phase::MapChoice);
+
+        let mut left = chest(true);
+        assert!(!left.run_state.relics.contains(&crate::RelicId::Anchor));
+        assert_eq!(left.phase(), Phase::CardReward);
+        assert_eq!(
+            left.get_available_actions(),
+            vec![RunAction::PickRelicReward, RunAction::SkipRelic]
+        );
+        let mut taken = left.clone();
+        assert_eq!(left.take_action(RunAction::SkipRelic), ActionResult::Advanced);
+        assert!(!left.run_state.relics.contains(&crate::RelicId::Anchor));
+        assert_eq!(left.phase(), Phase::MapChoice);
+        assert_eq!(taken.take_action(RunAction::PickRelicReward), ActionResult::Advanced);
+        assert!(taken.run_state.relics.contains(&crate::RelicId::Anchor));
+        assert_eq!(taken.phase(), Phase::MapChoice);
     }
 
     /// An out-of-range `DrinkPotion` slot is rejected rather than
