@@ -433,6 +433,126 @@ pub fn recommend_output_value(
     })
 }
 
+/// How many root determinizations a fair evaluation spreads each action's
+/// budget over under an honest hidden-information mode (sts2-agent fork).
+pub const FAIR_ROOT_SAMPLES: u32 = 16;
+
+/// Salt deriving a fair evaluation's per-determinization seeds from the
+/// search seed (distinct from every other splitmix64 salt in the engine).
+const FAIR_ROOT_SALT: u64 = 0xF00D_BEEF_CAFE_00F1;
+
+/// The post-action states a fair evaluation searches for `action`, each with
+/// its search seed and budget. Under `BeliefDraw`: [`FAIR_ROOT_SAMPLES`]
+/// determinizations of the root (each a clone put on the belief
+/// representation by [`sts2_core::blindfold::belief_root`] with a seed
+/// derived from the search seed and the sample's index alone), the action
+/// applied to each, the budget split evenly. Otherwise the action applied to
+/// the state itself, with the whole budget.
+#[must_use]
+pub fn fair_root_samples(state: &CombatState, action: &Action, params: &RecommendParams) -> Vec<(CombatState, u64, u32)> {
+    let honest = params.hidden_info == HiddenInfoMode::BeliefDraw;
+    let samples = if honest { FAIR_ROOT_SAMPLES.min(params.sims.max(1)) } else { 1 };
+    (0..samples)
+        .map(|k| {
+            let budget = params.sims / samples + u32::from(k < params.sims % samples);
+            let mut post = state.clone();
+            let mut seed = params.seed;
+            if honest {
+                seed = sts2_core::run_rng_set::splitmix64(
+                    params.seed ^ FAIR_ROOT_SALT ^ u64::from(k).wrapping_mul(0x9E37_79B9_7F4A_7C15),
+                );
+                sts2_core::blindfold::belief_root(&mut post, seed);
+            }
+            let _ = apply(&mut post, action.clone());
+            (post, seed, budget)
+        })
+        .collect()
+}
+
+/// One action's fair score: an independent search after the action.
+///
+/// Under an honest mode (`BeliefDraw`, sts2-agent fork) the action itself
+/// must not see hidden information either: a draw it makes, a target or a
+/// generated card it rolls, are outcomes the player can't know. So the
+/// action's budget is split over [`FAIR_ROOT_SAMPLES`] determinizations of
+/// the ROOT: each a clone put on the belief representation
+/// ([`sts2_core::blindfold::belief_root`]: the unknown draw-pile middle
+/// canonicalized and drawn at draw time, pins kept, every combat RNG stream
+/// reseeded from the search seed and the sample's index alone), the action
+/// applied to it, then its own search with its share of the budget. The
+/// samples are the same for every action (common random numbers across
+/// actions). An action that ends the combat in a sample counts as that
+/// sample's share of outcomes, so terminal and continuing samples weigh by
+/// their probability. Before this the action was applied to the state
+/// itself: a root draw took the true next card, a root roll the state's
+/// real dice (review F3 of A4d). Other modes keep the single application.
+fn fair_action_score(
+    state: &CombatState,
+    action: &Action,
+    params: &RecommendParams,
+    cfg: &MctsConfig,
+    policy: &SharedPolicy,
+) -> RecommendScore {
+    let honest = params.hidden_info == HiddenInfoMode::BeliefDraw;
+    let mut score = RecommendScore {
+        action: action.clone(),
+        visits: 0,
+        wins: 0,
+        losses: 0,
+        ties: 0,
+        value_sum: 0.0,
+        terminal_win: true,
+    };
+    for (post, seed, budget) in fair_root_samples(state, action, params) {
+        let mut kcfg = *cfg;
+        if honest {
+            kcfg.max_simulations = budget.max(1);
+            kcfg.seed = seed;
+        }
+        if legal_actions(&post).is_empty() {
+            // Terminal in this sample: one outcome weighted by the sample's
+            // share of the budget, on the SAME scale as the sibling searches
+            // (`cfg.terminal_eval_mode`, GH#296).
+            let v = sts2_mcts::terminal_state_value(
+                &post,
+                kcfg.terminal_eval_mode,
+                &LeafEval::default(),
+                kcfg.loss_gradient,
+            );
+            let n = if honest { budget.max(1) } else { 1 };
+            score.visits += n;
+            if v > 0.5 {
+                score.wins += n;
+            } else if v < -0.5 {
+                score.losses += n;
+            } else {
+                score.ties += n;
+            }
+            #[allow(clippy::cast_precision_loss)]
+            {
+                score.value_sum += v * n as f32;
+            }
+            score.terminal_win &= post.player_won;
+            continue;
+        }
+        score.terminal_win = false;
+        let (visits, wins, losses, ties, value_sum) = if params.threads <= 1 {
+            let mut m = Mcts::with_policy(post, kcfg, policy.clone());
+            let _ = m.search();
+            aggregate_root(&m.root_outcomes())
+        } else {
+            let r = par_search_with_policy(post, kcfg, params.threads, policy.clone(), LeafEval::default());
+            aggregate_root(&r.outcomes)
+        };
+        score.visits += visits;
+        score.wins += wins;
+        score.losses += losses;
+        score.ties += ties;
+        score.value_sum += value_sum;
+    }
+    score
+}
+
 /// Run the search `mcts_recommend` runs and return its result dict.
 ///
 /// `fair=false` (default): ONE search from `state`, root child counters per
@@ -459,60 +579,7 @@ pub fn recommend_value(
     } else if params.fair {
         let mut scores: Vec<RecommendScore> = Vec::with_capacity(legal.len());
         for action in &legal {
-            let mut post = state.clone();
-            let _ = apply(&mut post, action.clone());
-            let post_acts = legal_actions(&post);
-            if post_acts.is_empty() {
-                // Already terminal — encode as a single-sample outcome
-                // bucketed by terminal value, on the SAME scale as the
-                // sibling searches (`cfg.terminal_eval_mode`, GH#296).
-                let v = sts2_mcts::terminal_state_value(
-                    &post,
-                    cfg.terminal_eval_mode,
-                    &LeafEval::default(),
-                    cfg.loss_gradient,
-                );
-                let (w, l, t) = if v > 0.5 {
-                    (1u32, 0u32, 0u32)
-                } else if v < -0.5 {
-                    (0, 1, 0)
-                } else {
-                    (0, 0, 1)
-                };
-                scores.push(RecommendScore {
-                    action: action.clone(),
-                    visits: 1,
-                    wins: w,
-                    losses: l,
-                    ties: t,
-                    value_sum: v,
-                    terminal_win: post.player_won,
-                });
-                continue;
-            }
-            let (visits, wins, losses, ties, value_sum) = if params.threads <= 1 {
-                let mut m = Mcts::with_policy(post, cfg, policy.clone());
-                let _ = m.search();
-                aggregate_root(&m.root_outcomes())
-            } else {
-                let r = par_search_with_policy(
-                    post,
-                    cfg,
-                    params.threads,
-                    policy.clone(),
-                    LeafEval::default(),
-                );
-                aggregate_root(&r.outcomes)
-            };
-            scores.push(RecommendScore {
-                action: action.clone(),
-                visits,
-                wins,
-                losses,
-                ties,
-                value_sum,
-                terminal_win: false,
-            });
+            scores.push(fair_action_score(state, action, params, &cfg, &policy));
         }
         // No PV for the fair case — each action has its own tree.
         (scores, Vec::new())

@@ -1,0 +1,90 @@
+{
+ "combat_id": 0,
+ "deck": {
+  "deferred_draw_order": false,
+  "discard_pile": [],
+  "draw_pile": [
+   {
+    "id": "BLUDGEON",
+    "kind": "card",
+    "stable_idx": 3,
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "id": "WOUND",
+    "kind": "status",
+    "stable_idx": 4,
+    "type": "Status",
+    "upgraded": false
+   }
+  ],
+  "exhaust_pile": [],
+  "hand": [
+   {
+    "id": "SHRUG_IT_OFF",
+    "kind": "card",
+    "stable_idx": 1,
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "id": "DEFEND_IRONCLAD",
+    "kind": "card",
+    "stable_idx": 2,
+    "type": "Skill",
+    "upgraded": false
+   }
+  ],
+  "master_deck": []
+ },
+ "encounter": [
+  {
+   "block": 0,
+   "hp": 30,
+   "intent_history": [],
+   "intents": [
+    {
+     "amount": 25,
+     "kind": "Attack",
+     "times": 1
+    }
+   ],
+   "is_dead": false,
+   "is_escaped": false,
+   "kind": "FuzzyWurmCrawler",
+   "max_hp": 30,
+   "powers": [],
+   "uid": 1
+  }
+ ],
+ "is_elite": false,
+ "phase": "PlayerPlayPhase",
+ "player": {
+  "block": 0,
+  "class": "ironclad",
+  "energy": 4,
+  "energy_regen_per_turn": 3,
+  "gold": 99,
+  "hp": 20,
+  "max_energy": 3,
+  "max_hp": 80,
+  "potions": [
+   null,
+   null,
+   null
+  ],
+  "powers": [],
+  "relics": [],
+  "stars": 0
+ },
+ "rng": {
+  "ascension": 0,
+  "run_seed": 12345,
+  "seed": 0
+ },
+ "round": 1,
+ "side": "Player",
+ "turn": 1,
+ "wire_version": 1
+}
