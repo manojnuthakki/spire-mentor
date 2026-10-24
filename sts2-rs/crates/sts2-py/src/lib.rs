@@ -880,6 +880,11 @@ impl PyCombatState {
     /// to do it also rebuilt what the wire can't carry exactly (a Buff or
     /// Debuff intent's power and amount), so the state changed beyond HP.
     ///
+    /// Both stores of the player's HP are set: the `PlayerCombatState`
+    /// scalars and, when the combat has one, the player's unified `Creature`
+    /// record, which the search reads first (`player_hp_block` in
+    /// sts2-mcts). Setting only the scalars left the search seeing the old HP.
+    ///
     /// Raises on `max_hp < 1` or `hp` outside `1..=max_hp`.
     fn set_player_hp(&mut self, hp: i32, max_hp: i32) -> PyResult<()> {
         if max_hp < 1 || hp < 1 || hp > max_hp {
@@ -889,6 +894,12 @@ impl PyCombatState {
         }
         self.inner.player.max_hp = max_hp;
         self.inner.player.current_hp = hp;
+        if let Some(uid) = self.inner.player.creature_uid {
+            if let Some(c) = self.inner.creatures.iter_mut().find(|c| c.id == uid.0) {
+                c.max_hp = max_hp;
+                c.current_hp = hp;
+            }
+        }
         Ok(())
     }
 
