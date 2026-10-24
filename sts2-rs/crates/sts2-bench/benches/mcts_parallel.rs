@@ -103,6 +103,7 @@ fn make_power_rich_combat(seed: u64) -> CombatState {
     enemy_uids.push(nibbit_uid);
 
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

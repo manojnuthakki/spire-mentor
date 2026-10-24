@@ -176,6 +176,7 @@ fn cascade_logs_trigger_then_auto_plays_in_order() {
     enemy_uids.push(enemy_uid);
 
     let mut s = CombatState {
+        belt_value: None,
         phase: CombatPhase::PlayerPlayPhase,
         round: 1,
         side: Side::Player,

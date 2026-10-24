@@ -6274,6 +6274,7 @@ mod tests {
             let mut enemy_uids: smallvec::SmallVec<[CreatureUid; 8]> = smallvec::SmallVec::new();
             enemy_uids.push(cultist_uid);
             let mut state = CombatState {
+                belt_value: None,
                 phase: CombatPhase::Setup,
                 round: 0,
                 side: Side::Player,
@@ -6551,6 +6552,7 @@ mod tests {
         enemy_uids.push(cultist_uid);
 
         let mut state = CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,
@@ -6904,6 +6906,7 @@ mod tests {
             enemy_uids.push(cultist_uid);
 
             let mut state = CombatState {
+                belt_value: None,
                 phase: CombatPhase::Setup,
                 round: 0,
                 side: Side::Player,
@@ -7094,6 +7097,7 @@ mod tests {
         let mut enemy_uids: smallvec::SmallVec<[CreatureUid; 8]> = smallvec::SmallVec::new();
         enemy_uids.push(cultist_uid);
         let mut state = CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,
@@ -7265,6 +7269,7 @@ mod tests {
         let mut enemy_uids: smallvec::SmallVec<[CreatureUid; 8]> = smallvec::SmallVec::new();
         enemy_uids.push(cultist_uid);
         let mut state = CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,
@@ -10148,6 +10153,7 @@ mod tests {
         enemy_uids.push(cultist_uid);
 
         CombatState {
+            belt_value: None,
             phase: CombatPhase::PlayerPlayPhase,
             round: 1,
             side: Side::Player,

@@ -98,6 +98,7 @@ fn make_combat(seed: u64, kind: MonsterKind, hp: i32) -> CombatState {
     let mut enemy_uids: SmallVec<[CreatureUid; 8]> = SmallVec::new();
     enemy_uids.push(uid);
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

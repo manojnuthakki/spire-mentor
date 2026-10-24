@@ -136,6 +136,8 @@ pub use relics::{RelicId, RelicKind};
 // the `RelicKind`/`Relic` split established by P4-2. Per-potion
 // factories + on-drink dispatch live in `sts2-content::potions`.
 pub mod potions;
+/// A search's value of the potion belt at its evaluations (sts2-agent fork).
+pub mod belt_value;
 pub use potions::{
     CharacterId, PotionKind, PotionRarity, PotionTargetType, PotionUsageType, MAX_POTIONS,
 };
@@ -3956,6 +3958,14 @@ pub struct CombatState {
     /// `None` when the last draw moved no card. Not in the serialized
     /// parity surface nor the MCTS `state_hash`.
     pub last_drawn_card: Option<crate::CardUid>,
+
+    /// The search's value of the potion belt (sts2-agent fork): when set,
+    /// every evaluation of this state and of the states derived from it (the
+    /// win terminal, both depth-cap leaves) prices the held potions by it
+    /// instead of the process-wide `λ` ([`belt_hp_equiv`]). Set on a search's
+    /// root copy; shared, read-only. Not in the serialized surface nor the
+    /// MCTS `state_hash` (constant within a search).
+    pub belt_value: Option<std::sync::Arc<crate::belt_value::BeltValue>>,
 }
 
 impl Default for CombatState {
@@ -4014,6 +4024,7 @@ impl Default for CombatState {
             cards_drawn: 0,
             pending_run_gold_loss: 0,
             last_drawn_card: None,
+            belt_value: None,
         }
     }
 }
@@ -10703,6 +10714,29 @@ pub fn victory_potion_weight() -> f32 {
     potion_weight()
 }
 
+/// HP-equivalents of the potions `state` holds, as the victory eval prices
+/// them: by the search's [`belt_value::BeltValue`] when the state carries one,
+/// else `potions · λ` ([`potion_weight`]; byte-identical to the deployed eval).
+#[must_use]
+pub fn belt_hp_equiv(state: &CombatState) -> f32 {
+    match &state.belt_value {
+        Some(b) => b.hp_equiv(&state.player.potions),
+        None => state.player.potions.len() as f32 * potion_weight(),
+    }
+}
+
+/// The depth-cap leaves' potion term (tanh scale): the belt's HP-equivalents
+/// at the in-progress weight's ratio to the victory price, so a search's belt
+/// value reaches both leaves in proportion; without one, `potions ·`
+/// [`in_progress_potion_weight`] as deployed.
+#[must_use]
+pub fn in_progress_belt_term(state: &CombatState) -> f32 {
+    match &state.belt_value {
+        Some(b) => b.hp_equiv(&state.player.potions) * (POTIONS_WEIGHT / VICTORY_POTION_HP_EQUIV),
+        None => state.player.potions.len() as f32 * in_progress_potion_weight(),
+    }
+}
+
 /// In-progress (depth-cap leaf) potion price, tanh-scale — used by the narrow
 /// [`evaluate_in_progress_raw`] and the wide `evaluate_in_progress_wide`. The
 /// tuned base [`POTIONS_WEIGHT`] (`= 2.0`, from the `tidt` empirical refit,
@@ -11217,9 +11251,8 @@ const WASTED_BLOCK_NORM: f32 = 50.0;
 #[must_use]
 pub fn evaluate_victory(state: &CombatState) -> f32 {
     let hp = state.player.current_hp.max(0) as f32;
-    let potions = state.player.potions.len() as f32;
     let round = f32::from(state.round);
-    let raw = 100.0 * (35.0 + hp + potions * potion_weight() - round * 0.01);
+    let raw = 100.0 * (35.0 + hp + belt_hp_equiv(state) - round * 0.01);
     let norm = 0.5 + 0.5 * (raw - VICTORY_RAW_MIN) / (VICTORY_RAW_MAX - VICTORY_RAW_MIN);
     norm.clamp(0.5, 1.0)
 }
@@ -11924,7 +11957,6 @@ pub fn evaluate_in_progress_raw(state: &CombatState) -> f32 {
     let damage_dealt = (1.0 - enemy_hp_ratio) * DAMAGE_DEALT_WEIGHT;
     // eval_features[1] = -(alive as f32); dot = -(alive) * ALIVE_WEIGHT.
     let alive_score = -(alive as f32) * ALIVE_WEIGHT;
-    let potions = state.player.potions.len() as f32;
     let round = f32::from(state.round);
     // bead sts2-rs-0962: player_hp_ratio term closes the "5 HP and 80 HP
     // look the same" leaf-eval compression. Weight 4.0 from plan §4.1.4
@@ -12186,7 +12218,7 @@ pub fn evaluate_in_progress_raw(state: &CombatState) -> f32 {
         // in_progress_potion_weight() (default == POTIONS_WEIGHT = 2.0, so the
         // EVAL_FEATURE_WEIGHTS dot-product invariant holds when the env var is
         // unset). Narrow leaf is live only under `eval-strong` / `STS2_RUNAI_LEAF=texel`.
-        + potions * in_progress_potion_weight()
+        + in_progress_belt_term(state)
         + round * ROUND_WEIGHT
         + player_hp_score
         + threat_score

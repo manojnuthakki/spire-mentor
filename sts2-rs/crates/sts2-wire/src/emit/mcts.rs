@@ -39,7 +39,7 @@ pub const PV_MAX_DEPTH: usize = 5;
 
 /// `RecommendConfig` (`sts2_hint/recommender.py`): the knobs of one
 /// recommend / search-tree call, with that class's defaults.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RecommendParams {
     pub sims: u32,
     pub depth: u32,
@@ -70,6 +70,12 @@ pub struct RecommendParams {
     /// (`STS2_RUNAI_POTION_WEIGHT`) should be zeroed to avoid counting it
     /// twice (the run agent's λ-pairing rule, `sts2-runai` `potion_oc`).
     pub potion_charge_hp: Option<[f32; 8]>,
+    /// The search's value of the potion belt (sts2-agent fork): set on the
+    /// search's root copy ([`CombatState::belt_value`]), so every evaluation
+    /// in the search (win terminals, both depth-cap leaves) prices the belt by
+    /// it. The caller's state is untouched. `None` (default) keeps the
+    /// deployed `potions · λ`.
+    pub belt_value: Option<std::sync::Arc<sts2_core::belt_value::BeltValue>>,
 }
 
 impl Default for RecommendParams {
@@ -90,6 +96,7 @@ impl Default for RecommendParams {
             endturn_widening_alpha: None,
             common_random_numbers: false,
             potion_charge_hp: None,
+            belt_value: None,
         }
     }
 }
@@ -458,6 +465,13 @@ pub fn recommend_output_value(
             )
         })
         .collect();
+    // A principal variation is a continuation of the recommended action: one
+    // that starts elsewhere (the root charge or the Q ranking picked another
+    // child than the tree's most visited line) is not returned (sts2-agent fork).
+    let pv: &[Action] = match (pv.first(), scores.first()) {
+        (Some(first), Some(best)) if *first == best.action => pv,
+        _ => &[],
+    };
     let pv: Vec<Value> = pv.iter().map(combat_action_to_value).collect();
     json!({
         "actions": actions,
@@ -618,6 +632,15 @@ pub fn recommend_value(
 ) -> Value {
     let cfg = params.mcts_config();
     let policy = SharedPolicy::uniform();
+    let owned;
+    let state = if let Some(belt) = &params.belt_value {
+        let mut root = state.clone();
+        root.belt_value = Some(std::sync::Arc::clone(belt));
+        owned = root;
+        &owned
+    } else {
+        state
+    };
     let legal = legal_actions(state);
     let (scores, pv): (Vec<RecommendScore>, Vec<Action>) = if legal.is_empty() {
         (Vec::new(), Vec::new())
@@ -959,7 +982,7 @@ mod tests {
                 s(10, 10, 10.0, false, 2),  // q 1.0, more visits but no terminal win
                 s(2, 0, 0.0, false, 3),     // low confidence (below 5% of 100)
             ],
-            &[Action::EndTurn],
+            &[Action::PlayCard { hand_index: 1, target: None }, Action::EndTurn],
             false,
             113,
             1,
@@ -973,9 +996,29 @@ mod tests {
         assert_eq!(acts[3]["low_confidence"], json!(true));
         assert_eq!(acts[0]["low_confidence"], json!(true)); // 1 visit < ceil(5)
         assert_eq!(out["q_saturated"], json!(false));
-        assert_eq!(out["pv"][0]["action"], json!("end_turn"));
+        // The PV continues the recommended action (card 1, then end turn).
+        assert_eq!(out["pv"][0]["card_index"], json!(1));
+        assert_eq!(out["pv"][1]["action"], json!("end_turn"));
         assert_eq!(out["sims"], json!(113));
         assert_eq!(acts[0]["bucket"], json!(hint::win_prob_bucket(1.0)));
+    }
+
+    #[test]
+    fn a_pv_that_starts_elsewhere_than_the_best_action_is_not_returned() {
+        // sts2-agent fork (Codex F4): a charge, or the Q ranking, can recommend
+        // another child than the tree's most visited line.
+        let s = |visits: u32, value_sum: f32, idx: u8| RecommendScore {
+            action: Action::PlayCard { hand_index: idx, target: None },
+            visits,
+            wins: visits,
+            losses: 0,
+            ties: 0,
+            value_sum,
+            terminal_win: false,
+        };
+        let out = recommend_output_value(vec![s(10, 9.0, 0), s(90, 45.0, 1)], &[Action::PlayCard { hand_index: 1, target: None }], false, 100, 1, true);
+        assert_eq!(out["actions"][0]["action"]["card_index"], json!(0));
+        assert_eq!(out["pv"], json!([]));
     }
 
     #[test]

@@ -212,6 +212,7 @@ fn make_combat(
     }
 
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

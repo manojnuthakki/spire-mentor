@@ -146,6 +146,7 @@ pub fn build_handful(
     enemy_uids.push(cultist_uid);
 
     CombatState {
+        belt_value: None,
         phase: CombatPhase::PlayerPlayPhase,
         round: 1,
         side: Side::Player,
@@ -295,6 +296,7 @@ pub fn build_vertical_slice_hp(seed: u64, player_hp: i32, cultist_hp: i32) -> Co
     enemy_uids.push(cultist_uid);
 
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

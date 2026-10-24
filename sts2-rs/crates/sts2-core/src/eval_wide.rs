@@ -727,7 +727,7 @@ pub fn evaluate_in_progress_wide(state: &CombatState) -> f32 {
         .zip(EVAL_FEATURE_WEIGHTS_WIDE.iter())
         .map(|(f, w)| f * w)
         .sum();
-    let potion_term = state.player.potions.len() as f32 * crate::in_progress_potion_weight();
+    let potion_term = crate::in_progress_belt_term(state);
     // HP-repricing knob (2026-07-18 campaign): scale the trained hp_ratio
     // weight (`EVAL_FEATURE_WEIGHTS_WIDE[0]`) by the swept victory knob
     // without touching the Texel table — the extra term is exactly the

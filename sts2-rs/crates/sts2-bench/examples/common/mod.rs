@@ -340,6 +340,7 @@ pub fn build_ironclad_state_with_deck(
     let is_boss = matches!(enc.tier, EncounterTier::Boss);
 
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

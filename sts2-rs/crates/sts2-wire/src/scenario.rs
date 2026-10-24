@@ -433,6 +433,7 @@ pub fn build_scenario_state(
     player.current_hp = player_hp_final;
 
     let mut state = CoreCombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

@@ -145,6 +145,7 @@ pub fn build_state_with_ascension(
     };
 
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

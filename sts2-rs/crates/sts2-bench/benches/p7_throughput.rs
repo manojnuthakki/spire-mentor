@@ -91,6 +91,7 @@ fn make_state(seed: u64) -> CombatState {
     enemy_uids.push(cultist_uid);
 
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

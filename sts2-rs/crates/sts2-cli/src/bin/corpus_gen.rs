@@ -3361,6 +3361,7 @@ fn build_combat_state(
     };
 
     CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

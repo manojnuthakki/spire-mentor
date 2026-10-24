@@ -278,6 +278,7 @@ fn make_combat(seed: u64, variant: CharVariant, ascension: u8, enc_idx: usize) -
     }
 
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,

@@ -283,6 +283,7 @@ fn build_encounter_state(
     }
 
     let mut state = CoreCombatState {
+        belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,
         side: Side::Player,
@@ -2989,6 +2990,38 @@ fn potion_charge_slots(charges: Option<Vec<f32>>) -> PyResult<Option<[f32; 8]>> 
     Ok(Some(out))
 }
 
+/// `belt_value` (a dict: `base`, the belt's potion ids; `table`, a list of
+/// `[potion ids, hp]` giving every sub-multiset of `base` once; `fallback`,
+/// `{potion id: hp}` for a potion beyond the base; `default`, hp for a kind
+/// without a fallback) → the engine's [`sts2_core::belt_value::BeltValue`].
+fn parse_belt_value(d: &Bound<'_, PyDict>) -> PyResult<std::sync::Arc<sts2_core::belt_value::BeltValue>> {
+    use pyo3::exceptions::PyValueError;
+    let kind = |name: String| {
+        sts2_wire::state_dict::potion_kind_from_python_name(&name)
+            .ok_or_else(|| PyValueError::new_err(format!("mcts_recommend: belt_value: unknown potion {name:?}")))
+    };
+    let kinds = |names: Vec<String>| names.into_iter().map(kind).collect::<PyResult<Vec<_>>>();
+    let get = |key: &str| {
+        d.get_item(key)?
+            .ok_or_else(|| PyValueError::new_err(format!("mcts_recommend: belt_value needs {key:?}")))
+    };
+    let base = kinds(get("base")?.extract::<Vec<String>>()?)?;
+    let table = get("table")?
+        .extract::<Vec<(Vec<String>, f32)>>()?
+        .into_iter()
+        .map(|(k, v)| Ok((kinds(k)?, v)))
+        .collect::<PyResult<Vec<_>>>()?;
+    let fallback = get("fallback")?
+        .extract::<std::collections::BTreeMap<String, f32>>()?
+        .into_iter()
+        .map(|(k, v)| Ok((kind(k)?, v)))
+        .collect::<PyResult<Vec<_>>>()?;
+    let default = get("default")?.extract::<f32>()?;
+    sts2_core::belt_value::BeltValue::new(base, table, fallback, default)
+        .map(std::sync::Arc::new)
+        .map_err(|e| PyValueError::new_err(format!("mcts_recommend: {e}")))
+}
+
 /// The victory eval's potion price λ (HP-equivalents per held potion) in
 /// effect for this process: `STS2_RUNAI_POTION_WEIGHT`, else 8. Read once
 /// and latched, by this call or the first search (sts2-agent fork).
@@ -3009,6 +3042,12 @@ fn potion_weight() -> f32 {
 /// reported `q` is lowered by its slot's charge before ranking, and the
 /// result carries `potion_charge_hp`. Pair it with a zero victory-eval
 /// potion price (`STS2_RUNAI_POTION_WEIGHT=0`, see `potion_weight()`).
+///
+/// `belt_value` (sts2-agent fork): the search's value of the potion belt,
+/// carried on its root copy and used by every evaluation in the search (win
+/// terminals and both depth-cap leaves) instead of `potions · λ`, so a line
+/// pays for a drink wherever it drinks; see `parse_belt_value` for its shape.
+/// A returned `pv` always starts with the `is_best` action, else is empty.
 ///
 /// # Modes
 ///
@@ -3048,6 +3087,7 @@ fn potion_weight() -> f32 {
     endturn_widening_c = None,
     endturn_widening_alpha = None,
     potion_charge_hp = None,
+    belt_value = None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn mcts_recommend<'py>(
@@ -3066,6 +3106,7 @@ fn mcts_recommend<'py>(
     endturn_widening_c: Option<f32>,
     endturn_widening_alpha: Option<f32>,
     potion_charge_hp: Option<Vec<f32>>,
+    belt_value: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     // The search config, the ranking and the dict shape all live in
     // `sts2_wire::emit::mcts` — the same code the browser workbench runs, so
@@ -3104,6 +3145,7 @@ fn mcts_recommend<'py>(
         endturn_widening_alpha,
         common_random_numbers,
         potion_charge_hp: potion_charge_slots(potion_charge_hp)?,
+        belt_value: belt_value.map(parse_belt_value).transpose()?,
     };
     let root_state = state.inner.clone();
     // Forward the wire-side trust flag so `--mcts-log` consumers can tell

@@ -657,6 +657,22 @@ fn hash_player_tail<H: Hasher>(p: &PlayerCombatState, h: &mut H, state: &CombatS
         orb.hash(h);
     }
 
+    // The potion belt (sts2-agent fork), when the search prices it (the state
+    // carries a belt value): which potions the player holds, in belt order (the
+    // physical slot indices are left out: a state's index list may be filled
+    // lazily, which would split equal states). Without it, two states differing
+    // only in the potion left (drink the Fire Potion or the Explosive Ampoule)
+    // merged in the MCTS transposition table, which is always on: both drinks
+    // shared one child, its values and visits, so a set-aware belt value could
+    // not tell them apart. Left out without a belt value, as the deployed engine
+    // hashes (its searches and the parity goldens unchanged).
+    if state.belt_value.is_some() {
+        (p.potions.len() as u64).hash(h);
+        for kind in &p.potions {
+            kind.hash(h);
+        }
+    }
+
     // Necrobinder Osty pet: the pet Creature lives in `state.creatures`
     // but is in NEITHER `enemy_uids` NOR `allies`, so no other hash
     // section visits it — without this block two states differing only in

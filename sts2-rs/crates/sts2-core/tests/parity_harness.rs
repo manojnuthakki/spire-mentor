@@ -1491,6 +1491,7 @@ mod vthin1_setup_only {
             deferred_draw_order: false,
         };
         CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,
@@ -1710,6 +1711,7 @@ mod vthin2_vulnerable_damage {
         enemy_uids.push(cultist_uid);
 
         let state = CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,
@@ -2005,6 +2007,7 @@ mod wave_a_fixtures {
         enemies: Vec<EnemySpec>,
     ) -> (CombatState, Vec<CreatureUid>) {
         let mut state = CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,
@@ -2855,6 +2858,7 @@ mod zizk_relic_install {
             deferred_draw_order: false,
         };
         let mut state = CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,
@@ -3062,6 +3066,7 @@ mod s16y_starter_relics {
             deferred_draw_order: false,
         };
         let mut state = CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,
@@ -3266,6 +3271,7 @@ mod vmko_heavenly_drill {
     /// (`energy_spent` is a Card POD field, not a bridge-state field).
     fn build_state_for_x(energy_spent: i32) -> (CombatState, CreatureUid) {
         let mut state = CombatState {
+            belt_value: None,
             phase: CombatPhase::PlayerPlayPhase,
             round: 0,
             side: Side::Player,
@@ -3618,6 +3624,7 @@ mod rggx_act2_tunneler {
         enemy_uids.push(tunneler_uid);
 
         CombatState {
+            belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
             side: Side::Player,

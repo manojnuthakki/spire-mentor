@@ -296,6 +296,7 @@ fn build_state(fixture_initial: &Value, encounter: &str, seed: u64) -> CombatSta
     enemy_uids.push(enemy_uid);
 
     CombatState {
+        belt_value: None,
         // sts2-rs-gvn: `PlayerPlayPhase` so subsequent `Action::EndTurn`
         // dispatches into `combat_loop::end_turn_dispatch` (the apply()
         // arm gates on phase != PlayerPlayPhase → no-op). Setting the

@@ -322,6 +322,7 @@ fn build_state(fixture_initial: &Value, encounter: &str, seed: u64) -> CombatSta
     enemy_uids.push(enemy_uid);
 
     let mut state = CombatState {
+        belt_value: None,
         phase: CombatPhase::PlayerPlayPhase,
         round: 0,
         side: Side::Player,
