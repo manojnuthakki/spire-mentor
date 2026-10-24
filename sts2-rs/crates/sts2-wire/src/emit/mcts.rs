@@ -59,6 +59,17 @@ pub struct RecommendParams {
     /// Explicit EndTurn DPW exponent; `None` keeps the mode's.
     pub endturn_widening_alpha: Option<f32>,
     pub common_random_numbers: bool,
+    /// Root-level potion carry-over charge (sts2-agent fork), in
+    /// HP-equivalents, indexed by the engine's (dense) belt slot: each
+    /// `DrinkPotion` root child's reported Q is lowered by its slot's charge
+    /// ([`sts2_core::victory_hp_equiv_to_q`]), so the returned ranking and
+    /// `is_best` price a drink against carrying the potion on. The same
+    /// charge goes into [`MctsConfig::potion_charge_q`] (the root picker's
+    /// own subtraction). `None` (default) ⇒ byte-identical output. It prices
+    /// the potion at the root, so the victory eval's own potion term
+    /// (`STS2_RUNAI_POTION_WEIGHT`) should be zeroed to avoid counting it
+    /// twice (the run agent's λ-pairing rule, `sts2-runai` `potion_oc`).
+    pub potion_charge_hp: Option<[f32; 8]>,
 }
 
 impl Default for RecommendParams {
@@ -78,6 +89,7 @@ impl Default for RecommendParams {
             endturn_widening_c: None,
             endturn_widening_alpha: None,
             common_random_numbers: false,
+            potion_charge_hp: None,
         }
     }
 }
@@ -245,7 +257,32 @@ impl RecommendParams {
         if let Some(alpha) = self.endturn_widening_alpha {
             cfg.endturn_widening_alpha = alpha;
         }
+        cfg.potion_charge_q = self.potion_charge_q();
         cfg
+    }
+
+    /// [`Self::potion_charge_hp`] in root-Q units.
+    #[must_use]
+    pub fn potion_charge_q(&self) -> Option<[f32; 8]> {
+        self.potion_charge_hp
+            .map(|hp| hp.map(sts2_core::victory_hp_equiv_to_q))
+    }
+}
+
+/// Lower each `DrinkPotion` score by its slot's charge (root-Q units): its
+/// `value_sum` by `charge · visits`, so the continuous Q the ranking reads
+/// (`value_sum / visits`) drops by exactly the charge. Slots past the belt
+/// (`belt_len`) are ignored, as in [`Mcts`]'s root picker.
+pub fn apply_potion_charge(scores: &mut [RecommendScore], charges_q: &[f32; 8], belt_len: usize) {
+    for s in scores.iter_mut() {
+        if let Action::DrinkPotion { potion_slot, .. } = s.action {
+            let slot = usize::from(potion_slot);
+            if slot < belt_len {
+                #[allow(clippy::cast_precision_loss)]
+                let visits = s.visits as f32;
+                s.value_sum -= charges_q.get(slot).copied().unwrap_or(0.0) * visits;
+            }
+        }
     }
 }
 
@@ -609,14 +646,22 @@ pub fn recommend_value(
         // Merged counters but no shared tree — the PV is just the best action.
         (scores, vec![r.best_action])
     };
-    recommend_output_value(
+    let mut scores = scores;
+    if let Some(charges) = params.potion_charge_q() {
+        apply_potion_charge(&mut scores, &charges, state.player.potions.len());
+    }
+    let mut out = recommend_output_value(
         scores,
         &pv,
         params.fair,
         params.sims,
         params.threads,
         intent_damage_known,
-    )
+    );
+    if let Some(hp) = params.potion_charge_hp {
+        out["potion_charge_hp"] = json!(hp.to_vec());
+    }
+    out
 }
 
 /// Terse description of the action on a tree edge, derived purely from the

@@ -10694,6 +10694,15 @@ fn potion_weight() -> f32 {
     })
 }
 
+/// The victory eval's potion price λ in effect for this process (see
+/// [`potion_weight`]): reading it latches the env override, as the first
+/// evaluation would. Lets a caller check the λ-pairing rule (a root potion
+/// charge wants the leaf term at 0) before it searches (sts2-agent fork).
+#[must_use]
+pub fn victory_potion_weight() -> f32 {
+    potion_weight()
+}
+
 /// In-progress (depth-cap leaf) potion price, tanh-scale — used by the narrow
 /// [`evaluate_in_progress_raw`] and the wide `evaluate_in_progress_wide`. The
 /// tuned base [`POTIONS_WEIGHT`] (`= 2.0`, from the `tidt` empirical refit,

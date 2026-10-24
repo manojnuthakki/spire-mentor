@@ -2975,12 +2975,40 @@ pub(crate) fn action_score_pydict<'py>(
     )
 }
 
+/// `potion_charge_hp` (a list of at most 8 finite HP-equivalents, by the
+/// engine's dense belt slot; missing slots 0) → `RecommendParams`' array.
+fn potion_charge_slots(charges: Option<Vec<f32>>) -> PyResult<Option<[f32; 8]>> {
+    let Some(charges) = charges else { return Ok(None) };
+    if charges.len() > 8 || charges.iter().any(|c| !c.is_finite()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(format!(
+            "mcts_recommend: potion_charge_hp must be at most 8 finite values, got {charges:?}"
+        )));
+    }
+    let mut out = [0.0_f32; 8];
+    out[..charges.len()].copy_from_slice(&charges);
+    Ok(Some(out))
+}
+
+/// The victory eval's potion price λ (HP-equivalents per held potion) in
+/// effect for this process: `STS2_RUNAI_POTION_WEIGHT`, else 8. Read once
+/// and latched, by this call or the first search (sts2-agent fork).
+#[pyfunction]
+fn potion_weight() -> f32 {
+    sts2_core::victory_potion_weight()
+}
+
 /// MCTS recommendation surface for the Python hint adapter.
 ///
 /// Returns a list of per-action `ActionScore` dicts ranked by Q (mean
 /// value) descending, with visit count as the secondary tiebreaker —
 /// matching the sort the CLI hint formatter uses. The top row has
 /// `is_best=True`.
+///
+/// `potion_charge_hp` (sts2-agent fork): a potion carry-over charge in
+/// HP-equivalents per dense belt slot (at most 8 values); each drink's
+/// reported `q` is lowered by its slot's charge before ranking, and the
+/// result carries `potion_charge_hp`. Pair it with a zero victory-eval
+/// potion price (`STS2_RUNAI_POTION_WEIGHT=0`, see `potion_weight()`).
 ///
 /// # Modes
 ///
@@ -3019,6 +3047,7 @@ pub(crate) fn action_score_pydict<'py>(
     common_random_numbers = false,
     endturn_widening_c = None,
     endturn_widening_alpha = None,
+    potion_charge_hp = None,
 ))]
 #[allow(clippy::too_many_arguments)]
 fn mcts_recommend<'py>(
@@ -3036,6 +3065,7 @@ fn mcts_recommend<'py>(
     common_random_numbers: bool,
     endturn_widening_c: Option<f32>,
     endturn_widening_alpha: Option<f32>,
+    potion_charge_hp: Option<Vec<f32>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     // The search config, the ranking and the dict shape all live in
     // `sts2_wire::emit::mcts` — the same code the browser workbench runs, so
@@ -3073,6 +3103,7 @@ fn mcts_recommend<'py>(
         endturn_widening_c,
         endturn_widening_alpha,
         common_random_numbers,
+        potion_charge_hp: potion_charge_slots(potion_charge_hp)?,
     };
     let root_state = state.inner.clone();
     // Forward the wire-side trust flag so `--mcts-log` consumers can tell
@@ -3210,6 +3241,7 @@ pub fn sts2_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("WIRE_VERSION", state_dict::WIRE_VERSION)?;
     m.add_function(wrap_pyfunction!(state_dict::parse_state_dict_py, m)?)?;
     m.add_function(wrap_pyfunction!(state_dict::list_registry_names, m)?)?;
+    m.add_function(wrap_pyfunction!(potion_weight, m)?)?;
     // GH#286: per-id (Debug, python_name) forms for the vocab round-trip test.
     m.add_function(wrap_pyfunction!(state_dict::list_registry_id_forms, m)?)?;
     // Bead sts2-rs-osyf (hint-T2): wire-format → CoreCombatState
