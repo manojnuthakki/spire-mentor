@@ -315,6 +315,11 @@ pub struct PendingCardSelect {
     /// deck-tail order (load-bearing for the combat-start shuffle input) is
     /// chosen-then-Injury, and the Injury still lands on a skip.
     pub post_add: Vec<Card>,
+    /// Whether the player may take none (C# `canSkip` /
+    /// `CardSelectorPrefs.Cancelable`). `true` for the choose-a-card screens;
+    /// `false` for a pick the game forces, Brain Leech's Share Knowledge grid
+    /// (`BrainLeech.cs:67-70`, `Cancelable = false`). sts2-agent fork.
+    pub can_skip: bool,
 }
 
 impl PendingCardSelect {
@@ -327,6 +332,7 @@ impl PendingCardSelect {
             options,
             upgraded,
             post_add: Vec::new(),
+            can_skip: true,
         }
     }
 
@@ -340,6 +346,7 @@ impl PendingCardSelect {
             options,
             upgraded,
             post_add,
+            can_skip: true,
         }
     }
 
@@ -357,6 +364,7 @@ impl PendingCardSelect {
             options,
             upgraded,
             post_add: Vec::new(),
+            can_skip: true,
         }
     }
 }

@@ -733,6 +733,10 @@ pub struct RunManager {
     /// [`crate::runstate::PendingCardSelect::post_add`]. Drained on both
     /// the pick and the skip path of `do_card_reward_pick`.
     pending_choose_screen_post_add: Vec<crate::cards::Card>,
+    /// Whether the open choose screen may be skipped
+    /// ([`crate::runstate::PendingCardSelect::can_skip`]); `true` whenever no
+    /// such screen is open. sts2-agent fork.
+    card_offer_can_skip: bool,
     /// Active shop inventory during [`Phase::Shop`], built by
     /// [`ContentCallbacks::generate_shop_inventory`] on Shop-room
     /// entry and drained on [`RunAction::LeaveShop`]. `None` when no
@@ -906,6 +910,7 @@ impl RunManager {
             pending_boss_act_advance: false,
             card_offer_choose_screen: false,
             pending_choose_screen_post_add: Vec::new(),
+            card_offer_can_skip: true,
             shop_inventory: None,
             reward_screen: None,
             screen_card_claim: None,
@@ -1455,6 +1460,11 @@ impl RunManager {
                     let mut v: Vec<RunAction> = (0..self.card_reward_options.len())
                         .map(|i| RunAction::PickCardReward { idx: Some(i) })
                         .collect();
+                    // A forced pick (Brain Leech's grid) offers neither a skip
+                    // nor Pael's Wing's sacrifice (that is a card reward's).
+                    if !self.card_offer_can_skip {
+                        return v;
+                    }
                     v.push(RunAction::PickCardReward { idx: None });
                     // PAELS_WING surface: only offered when the player
                     // owns the relic AND a card-reward is currently up.
@@ -2679,6 +2689,7 @@ impl RunManager {
         self.card_reward_upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
         // A fresh post-combat offering is never a choose screen.
         self.card_offer_choose_screen = false;
+        self.card_offer_can_skip = true;
         self.phase = Phase::CardReward;
         // If the offering came back empty (no card callback wired, or an
         // exhausted pool), route onward immediately rather than stranding
@@ -2741,6 +2752,11 @@ impl RunManager {
             self.advance_after_card_reward();
             return ActionResult::Advanced;
         }
+        // A forced pick (Brain Leech's grid, `Cancelable = false`) can't be
+        // skipped.
+        if idx.is_none() && !self.card_offer_can_skip {
+            return ActionResult::InvalidForPhase;
+        }
         match idx {
             Some(i) if i < self.card_reward_options.len() => {
                 let card_id = self.card_reward_options[i];
@@ -2796,6 +2812,7 @@ impl RunManager {
         // A resolved choose screen (HeftyTablet / LeadPaperweight) appends
         // its deferred cards now — after the chosen card, on pick AND skip —
         // matching C#'s post-select `CardPileCmd.Add([chosen?, Injury], Deck)`.
+        self.card_offer_can_skip = true;
         if std::mem::take(&mut self.card_offer_choose_screen) {
             let post = std::mem::take(&mut self.pending_choose_screen_post_add);
             // Each appended card is a separate `CardPileCmd.Add(.., Deck)` in
@@ -2841,6 +2858,9 @@ impl RunManager {
         if self.card_reward_options.is_empty() {
             return ActionResult::InvalidForPhase;
         }
+        if !self.card_offer_can_skip {
+            return ActionResult::InvalidForPhase;
+        }
         if !self.run_state.owns_active_relic(crate::RelicId::PaelsWing) {
             return ActionResult::InvalidForPhase;
         }
@@ -2871,6 +2891,7 @@ impl RunManager {
         }
         // Defensive: a sacrifice consuming a choose screen still owes its
         // post-add cards (HeftyTablet's Injury is unconditional in C#).
+        self.card_offer_can_skip = true;
         if std::mem::take(&mut self.card_offer_choose_screen) {
             let post = std::mem::take(&mut self.pending_choose_screen_post_add);
             self.run_state.master_deck.extend(post);
@@ -3088,6 +3109,7 @@ impl RunManager {
             self.card_reward_upgraded = select.upgraded;
             self.card_offer_choose_screen = true;
             self.pending_choose_screen_post_add = select.post_add;
+            self.card_offer_can_skip = select.can_skip;
             // Stay in CardReward — get_available_actions now fans out the
             // option picks.
             return;
@@ -4828,6 +4850,14 @@ impl RunManager {
     pub const fn card_offer_choose_screen(&self) -> bool {
         self.card_offer_choose_screen
     }
+
+    /// Whether the open choose screen may be skipped: `false` for a pick the
+    /// game forces (Brain Leech's Share Knowledge grid, `Cancelable = false`),
+    /// `true` otherwise. sts2-agent fork.
+    #[must_use]
+    pub const fn card_offer_can_skip(&self) -> bool {
+        self.card_offer_can_skip
+    }
 }
 
 #[cfg(test)]
@@ -5678,6 +5708,46 @@ mod tests {
             .all(|a| matches!(a, RunAction::PickCardReward { .. })));
         assert!(actions.contains(&RunAction::PickCardReward { idx: Some(0) }));
         assert!(actions.contains(&RunAction::PickCardReward { idx: None }));
+    }
+
+    /// A select the game opens with `Cancelable = false` (Brain Leech's
+    /// Share Knowledge grid, `BrainLeech.cs:67-70`) has no skip: no
+    /// `PickCardReward { idx: None }`, no Pael's Wing sacrifice, and a skip
+    /// taken anyway is refused (S5).
+    #[test]
+    fn a_no_skip_card_select_offers_and_takes_no_skip() {
+        let mut rm = RunManager::new(0, CharacterId::Ironclad);
+        rm.set_phase(Phase::CardReward);
+        rm.run_state.relics.push(crate::RelicId::PaelsWing);
+        let mut select = crate::runstate::PendingCardSelect::from_options(vec![
+            crate::cards::CardId::Bash,
+            crate::cards::CardId::Anger,
+        ]);
+        select.can_skip = false;
+        rm.run_state.pending_card_selects.push(select);
+        rm.advance_after_card_reward();
+        assert!(rm.card_offer_choose_screen());
+        assert!(!rm.card_offer_can_skip());
+        let actions = rm.get_available_actions();
+        assert_eq!(
+            actions,
+            [
+                RunAction::PickCardReward { idx: Some(0) },
+                RunAction::PickCardReward { idx: Some(1) }
+            ]
+        );
+        assert_eq!(
+            rm.take_action(RunAction::PickCardReward { idx: None }),
+            ActionResult::InvalidForPhase
+        );
+        assert_eq!(
+            rm.take_action(RunAction::PickCardReward { idx: Some(1) }),
+            ActionResult::Advanced
+        );
+        assert!(
+            rm.card_offer_can_skip(),
+            "the next offer is skippable again"
+        );
     }
 
     #[test]

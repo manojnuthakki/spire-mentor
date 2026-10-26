@@ -877,6 +877,8 @@ mod tests {
         assert_eq!(rs.pending_rewards.len(), rewards_before);
         assert_eq!(rs.pending_card_selects.len(), 1, "pick-1-of-5 grid queued");
         assert_eq!(rs.pending_card_selects[0].options.len(), 5);
+        // C# `BrainLeech.cs:67-70`: `Cancelable = false`, no skip (S5).
+        assert!(!rs.pending_card_selects[0].can_skip);
         assert!(rs.current_event.is_none());
     }
 

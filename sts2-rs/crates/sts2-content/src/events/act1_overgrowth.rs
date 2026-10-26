@@ -68,11 +68,10 @@ fn brain_leech_share_knowledge(state: &mut RunState) -> EventOutcome {
         .filter_map(|id| crate::cards::spec_index::card_pod_from_id(id, false))
         .collect();
     let option_cards = state.offer_card_reward(option_cards);
-    state
-        .pending_card_selects
-        .push(sts2_core::runstate::PendingCardSelect::from_cards(
-            &option_cards,
-        ));
+    // `Cancelable = false` (`BrainLeech.cs:68`): the grid has no skip.
+    let mut select = sts2_core::runstate::PendingCardSelect::from_cards(&option_cards);
+    select.can_skip = false;
+    state.pending_card_selects.push(select);
     EventOutcome::finished("Pick 1 of 5 character cards to gain.")
 }
 

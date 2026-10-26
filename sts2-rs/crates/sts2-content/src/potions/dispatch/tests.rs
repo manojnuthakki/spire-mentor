@@ -1169,6 +1169,10 @@ fn droplet_of_precognition_moves_chosen_draw_card_to_hand() {
     let pc = state.pending_choice.as_ref().expect("draw choice opened");
     assert_eq!(pc.kind, sts2_core::ChoiceKind::AddFromDrawByType);
     assert_eq!(pc.options.len(), 3, "every draw card is a candidate");
+    // C# `DropletOfPrecognition.cs:22`: `new CardSelectorPrefs(prompt, 1)`,
+    // `Cancelable` false — pick one, no skip (S6).
+    assert_eq!((pc.min_select, pc.max_select), (1, 1));
+    assert!(!pc.can_skip, "Droplet of Precognition can't be skipped");
     resolve_choice_pick(&mut state, 0);
     assert_eq!(state.player.hand.len(), hand_before + 1, "one card to hand");
     assert_eq!(

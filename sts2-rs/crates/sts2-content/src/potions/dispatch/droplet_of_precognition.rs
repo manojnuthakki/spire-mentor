@@ -9,7 +9,7 @@ use super::prelude::*;
 /// chosen uid from `draw` and pushes it onto `hand`) over the whole
 /// draw pile, ordered by (C# rarity ordinal, Entry string) to mirror the
 /// C# grid order (`orderby c.Rarity, c.Id`, DropletOfPrecognition.cs:22-24).
-/// Single-pick, skippable. Empty draw pile ⇒ no-op. Bead `sts2-rs-19hm7`.
+/// Single-pick, not skippable. Empty draw pile ⇒ no-op. Bead `sts2-rs-19hm7`.
 pub(crate) fn drink_droplet_of_precognition(
     state: &mut CombatState,
     _target: Option<u8>,
@@ -66,7 +66,9 @@ pub(crate) fn drink_droplet_of_precognition(
         options,
         1,
         1,
-        true,
+        // `CardSelectorPrefs(prompt, 1)` leaves `Cancelable` false: no skip
+        // (sts2-agent fork; the skip also let the search pick an illegal move).
+        false,
     );
     EffectResult::Resolved
 }

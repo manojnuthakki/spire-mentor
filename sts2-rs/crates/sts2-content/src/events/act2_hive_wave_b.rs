@@ -897,6 +897,7 @@ fn the_future_of_potions_trade(state: &mut RunState, slot: usize) -> EventOutcom
             upgraded: vec![true; count],
             options,
             post_add: Vec::new(),
+            can_skip: true,
         });
     EventOutcome::finished(format!(
         "Fed the machine a potion for {count} upgraded cards to choose from."

@@ -620,6 +620,14 @@ impl PyRunManager {
         self.inner.card_offer_choose_screen()
     }
 
+    /// Whether the open choose screen may be skipped (sts2-agent fork):
+    /// `False` for a pick the game forces, Brain Leech's Share Knowledge grid
+    /// (C# `FromSimpleGridForRewards`, `Cancelable = false`), whose actions
+    /// then hold no `pick_card_reward` skip and no sacrifice.
+    fn card_offer_can_skip(&self) -> bool {
+        self.inner.card_offer_can_skip()
+    }
+
     /// Card ids (PascalCase `Debug` form, e.g. `"Anger"`) of the
     /// upgradeable cards offered by an open Smith rest-site choice, in the
     /// order a `SmithCard{idx}` action indexes them. Empty when no
