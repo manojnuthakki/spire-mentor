@@ -1017,6 +1017,13 @@ impl PyRunManager {
         emit_rm::relics(&self.inner)
     }
 
+    /// The run-side relic state, read-only (sts2-agent fork): `counters` (each
+    /// `relic_counters` entry by relic name), `paels_wing_sacrificed`,
+    /// `paels_tooth_stored`. See `emit::run_manager::run_relic_state`.
+    fn run_relic_state(&self, py: Python<'_>) -> PyResult<PyObject> {
+        crate::value_to_py(py, &emit_rm::run_relic_state(&self.inner)).map(Bound::unbind)
+    }
+
     /// Potion belt — the potions the player currently holds, as
     /// `PascalCase` `PotionKind` debug names (e.g. `"FirePotion"`). The
     /// workbench's `display_maps.loc_id` normalizes these to the

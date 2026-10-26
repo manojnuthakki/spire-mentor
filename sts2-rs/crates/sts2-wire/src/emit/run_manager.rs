@@ -640,6 +640,28 @@ pub fn relics(rm: &RunManager) -> Vec<String> {
         .collect()
 }
 
+/// `RunManager.run_relic_state()` (sts2-agent fork): the run-side relic
+/// state a host shows as relic counters outside a fight and for relics whose
+/// count isn't in a combat relic's `counter`, read-only. `counters`: every
+/// `RunState.relic_counters` entry by the relic's python name (the value the
+/// next fight seeds its combat relic with); `paels_wing_sacrificed`: card
+/// rewards sacrificed to Pael's Wing (C# `PaelsWing.RewardsSacrificed`);
+/// `paels_tooth_stored`: cards Pael's Tooth holds (C# `PaelsTooth`'s
+/// serializable cards, its `DisplayAmount`).
+#[must_use]
+pub fn run_relic_state(rm: &RunManager) -> Value {
+    let rs = &rm.run_state;
+    let mut counters = obj();
+    for (relic, value) in &rs.relic_counters {
+        set(&mut counters, relic.to_python_name(), *value);
+    }
+    let mut d = obj();
+    d.insert("counters".to_owned(), Value::Object(counters));
+    set(&mut d, "paels_wing_sacrificed", rs.pael_sacrificed_count());
+    set(&mut d, "paels_tooth_stored", rs.paels_tooth_stored.len());
+    Value::Object(d)
+}
+
 /// `RunManager.potions()` — the potion belt as `PascalCase` `PotionKind`
 /// debug names (e.g. `"FirePotion"`). The workbench's `display_maps.loc_id`
 /// normalizes these to the SCREAMING_SNAKE loc-key / art stem. Empty when
@@ -1359,6 +1381,26 @@ mod tests {
         assert_eq!(flags(&bane), ["eternal", "ethereal", "unplayable"]);
         let strike = card_value(&fresh_card(CardId::StrikeIronclad));
         assert!(!flags(&strike).contains(&"eternal"));
+    }
+
+    /// The run-side relic state the Python API couldn't read (S2's rest):
+    /// a carried counter, Pael's Wing's sacrifices, Pael's Tooth's cards.
+    #[test]
+    fn run_relic_state_reads_counters_and_pael_trackers() {
+        use sts2_core::RelicId;
+        let mut rm = ironclad_seed_0();
+        let empty = run_relic_state(&rm);
+        assert_eq!(empty["paels_wing_sacrificed"], 0);
+        assert_eq!(empty["paels_tooth_stored"], 0);
+        rm.run_state.relic_counters.insert(RelicId::SwordOfStone, 3);
+        let _ = rm.run_state.pael_record_sacrifice();
+        let _ = rm.run_state.pael_record_sacrifice();
+        let strike = rm.run_state.master_deck[0].clone();
+        rm.run_state.paels_tooth_stored.push(strike);
+        let v = run_relic_state(&rm);
+        assert_eq!(v["counters"]["SWORD_OF_STONE"], 3);
+        assert_eq!(v["paels_wing_sacrificed"], 2);
+        assert_eq!(v["paels_tooth_stored"], 1);
     }
 
     #[test]
