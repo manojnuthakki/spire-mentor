@@ -189,6 +189,35 @@ fn granted_retain_comes_across_and_round_trips() {
     );
 }
 
+/// An X-cost card keeps the energy its last play captured (C#
+/// `CardEnergyCost.CapturedXValue`, what the game shows as its cost in a
+/// pile): the wire carries it as `energy_spent` and a rebuild keeps it. A
+/// non-X card's stamped cost is a per-play transient and stays off the wire
+/// (`observational_energy_spent`). S8: Whirlwind's 1 or 2 in the discard pile.
+#[test]
+fn an_x_cost_cards_energy_spent_comes_across_and_round_trips() {
+    let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();
+    value["deck"]["discard_pile"][0] = serde_json::json!(
+        {"id": "WHIRLWIND", "stable_idx": 3, "kind": "card", "upgraded": false, "energy_spent": 2}
+    );
+    let state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    let uid = state.player.discard[0];
+    let card = state.cards.iter().find(|c| c.uid == uid).unwrap();
+    assert_eq!(card.energy_spent, 2);
+    let back = sts2_wire::emit::combat_state_to_value(&state).expect("emits");
+    assert_eq!(back["deck"]["discard_pile"][0]["energy_spent"], 2);
+    let mut strike = state.clone();
+    let s_uid = strike.player.draw[0];
+    strike
+        .cards
+        .iter_mut()
+        .find(|c| c.uid == s_uid)
+        .unwrap()
+        .energy_spent = 1;
+    let back = sts2_wire::emit::combat_state_to_value(&strike).expect("emits");
+    assert!(back["deck"]["draw_pile"][0].get("energy_spent").is_none());
+}
+
 #[test]
 fn failures_carry_their_path_and_class() {
     let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();

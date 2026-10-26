@@ -228,6 +228,14 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
     if card.base_replay_count != 0 {
         set(&mut d, "replay_count", card.base_replay_count);
     }
+    // An X-cost card's energy captured at its last play (C#
+    // `CardEnergyCost.CapturedXValue`, its shown cost outside the hand once
+    // played; S8). A non-X card's stamped paid cost is a per-play transient,
+    // not part of the card (`observational_energy_spent`). Absent when 0.
+    let energy_spent = sts2_core::cards::observational_energy_spent(card);
+    if energy_spent != 0 {
+        set(&mut d, "energy_spent", energy_spent);
+    }
     // Per-card affliction (Bound/Devoured/…): additive optional fields
     // so afflicted cards survive the round-trip — without them a
     // reconstructed ChainsOfBinding state believes every card playable.

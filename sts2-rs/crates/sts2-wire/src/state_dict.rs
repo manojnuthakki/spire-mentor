@@ -516,6 +516,10 @@ pub struct ParsedCard {
     /// engine adds from the enchantment itself. [`sts2_core::Card::base_replay_count`].
     /// Absent → 0, the value every card had on the wire before the field.
     pub replay_count: i32,
+    /// An X-cost card's energy captured at its last play (C#
+    /// `CardEnergyCost.CapturedXValue`; [`sts2_core::Card::energy_spent`]).
+    /// Absent → 0 (never played, or not an X-cost card). sts2-agent fork.
+    pub energy_spent: i32,
 }
 
 #[derive(Debug, Clone)]
@@ -1434,6 +1438,11 @@ fn parse_card<V: WireValue>(d: &V, path: &str) -> WireResult<ParsedCard> {
         return Err(schema_err(format!("{path}.replay_count"), "must be >= 0"));
     }
 
+    let energy_spent = opt_i32("energy_spent", "`energy_spent` must be int or null")?.unwrap_or(0);
+    if energy_spent < 0 {
+        return Err(schema_err(format!("{path}.energy_spent"), "must be >= 0"));
+    }
+
     Ok(ParsedCard {
         card_id,
         raw_id,
@@ -1457,6 +1466,7 @@ fn parse_card<V: WireValue>(d: &V, path: &str) -> WireResult<ParsedCard> {
         card_type,
         tinker_time_rider,
         replay_count,
+        energy_spent,
     })
 }
 
@@ -2125,7 +2135,7 @@ fn build_card(parsed: &ParsedCard, uid: CardUid, path: &str) -> WireResult<Card>
         // Ironclad seed 3 — 4 damage where the native engine dealt 12), and
         // FastenPower's Defend-sourced block bonus never applied.
         tags: sts2_content::cards::status::tags_for_card_id(card_id),
-        energy_spent: 0,
+        energy_spent: parsed.energy_spent,
         base_replay_count: parsed.replay_count,
         keyword_override: None,
         affliction: None,
