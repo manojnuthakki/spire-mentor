@@ -2504,6 +2504,33 @@ mod tests {
         assert!(card_upgraded(&state, c));
     }
 
+    /// **Bellows #1b** — a card that can't be upgraded stays as it is: C#
+    /// `CardCmd.Upgrade` skips a card whose `IsUpgradable` is false
+    /// (`CardCmd.cs:273`), so Bellows leaves Ascender's Bane (a Curse)
+    /// un-upgraded while it upgrades the rest of the hand (A6c6).
+    #[test]
+    fn listener_bellows_leaves_ascenders_bane_unupgraded() {
+        use sts2_core::relic_effects::dispatch_after_player_turn_start;
+        crate::relics::dispatch::ensure_installed();
+        let mut state = CombatState::default();
+        bellows_setup(&mut state, true, 1);
+        let strike = bellows_push_hand_card(&mut state);
+        let bane = bellows_push_hand_card(&mut state);
+        {
+            let c = &mut state.cards[bane.0.get() as usize - 1];
+            c.card_id = sts2_core::cards::CardId::AscendersBane;
+            c.card_type = sts2_core::cards::CardType::Curse;
+            c.cost = -1;
+            c.base_damage = 0;
+        }
+        let _ = dispatch_after_player_turn_start(&mut state);
+        assert!(card_upgraded(&state, strike));
+        assert!(
+            !card_upgraded(&state, bane),
+            "Ascender's Bane can't be upgraded"
+        );
+    }
+
     /// **Bellows #2** — round 2 inert.
     #[test]
     fn listener_bellows_round_two_no_upgrade() {

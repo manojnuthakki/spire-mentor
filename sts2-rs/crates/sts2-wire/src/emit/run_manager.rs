@@ -485,9 +485,10 @@ pub fn effective_master_deck_indices(rm: &RunManager) -> Vec<usize> {
 /// One card outside combat, in the combat wire's card vocabulary
 /// (sts2-agent fork): `id` (python name), `upgraded`, `base_cost`,
 /// `base_damage`, `base_block`, `type` (title-cased), the instance's keyword
-/// `flags` (`exhaust`, `ethereal`, `unplayable`, `innate`, `retain`), its
-/// first enchantment, its affliction and its own `replay_count`, each only
-/// when present.
+/// `flags` (`eternal`, `exhaust`, `ethereal`, `unplayable`, `innate`,
+/// `retain`), its first enchantment, its affliction and its own
+/// `replay_count`, each only when present. `eternal` is the removability gate
+/// the removal and transform offers read (C# `CardModel.IsRemovable`).
 #[must_use]
 pub fn card_value(card: &sts2_core::cards::Card) -> Value {
     use sts2_core::card_effects as ce;
@@ -503,6 +504,9 @@ pub fn card_value(card: &sts2_core::cards::Card) -> Value {
         super::names::card_type_python_name(card.card_type),
     );
     let mut flags: Vec<&str> = Vec::new();
+    if sts2_core::lookup_card_removable().is_some_and(|removable| !removable(card)) {
+        flags.push("eternal");
+    }
     if ce::card_exhausts_inst(card) {
         flags.push("exhaust");
     }
@@ -1330,6 +1334,31 @@ mod tests {
             .keys()
             .map(String::as_str)
             .collect()
+    }
+
+    fn fresh_card(id: sts2_core::cards::CardId) -> sts2_core::cards::Card {
+        sts2_content::relics::dispatch::ensure_installed();
+        sts2_content::cards::dispatch::ensure_installed();
+        sts2_core::lookup_card_factory().expect("factory")(id, false).expect("card")
+    }
+
+    fn flags(v: &Value) -> Vec<&str> {
+        v.get("flags")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).collect())
+            .unwrap_or_default()
+    }
+
+    /// The game shows Ascender's Bane's Eternal (`AscendersBane.cs`
+    /// `CanonicalKeywords`); the card dict names it, read from the same
+    /// removability gate the removal and transform offers use (S19).
+    #[test]
+    fn card_value_names_eternal() {
+        use sts2_core::cards::CardId;
+        let bane = card_value(&fresh_card(CardId::AscendersBane));
+        assert_eq!(flags(&bane), ["eternal", "ethereal", "unplayable"]);
+        let strike = card_value(&fresh_card(CardId::StrikeIronclad));
+        assert!(!flags(&strike).contains(&"eternal"));
     }
 
     #[test]

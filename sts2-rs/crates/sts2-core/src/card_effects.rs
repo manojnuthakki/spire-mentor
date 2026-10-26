@@ -3310,10 +3310,13 @@ pub fn transform_card_in_place(
 /// Bead `sts2-rs-6ynt.2`.
 pub fn upgrade_card_uid(state: &mut CombatState, uid: CardUid) -> bool {
     let idx = uid.0.get() as usize - 1;
+    // C# `CardCmd.Upgrade` (`CardCmd.cs:273`) skips a card that isn't
+    // `IsUpgradable`: Bellows and Bone Tea upgrade the hand around Ascender's
+    // Bane, never the Bane itself (sts2-agent fork, A6c6).
     state
         .cards
         .get_mut(idx)
-        .is_some_and(crate::cards::Card::upgrade)
+        .is_some_and(|c| c.is_upgradable() && c.upgrade())
 }
 
 /// Clear the `upgraded` flag on the card at `uid`. Returns `true` iff
@@ -6758,11 +6761,9 @@ mod tests {
             rng: crate::dotnet_rng::Rng::new(0_i32),
             ..Default::default()
         };
-        let u = spawn_card_into_pile(
-            &mut state,
-            placeholder_card(crate::cards::CardId::Shiv),
-            PileKind::Hand,
-        );
+        let mut shiv = placeholder_card(crate::cards::CardId::Shiv);
+        shiv.card_type = crate::cards::CardType::Attack;
+        let u = spawn_card_into_pile(&mut state, shiv, PileKind::Hand);
         // Initial state: not upgraded.
         let idx = u.0.get() as usize - 1;
         assert!(!state.cards[idx].upgraded);
@@ -6781,6 +6782,23 @@ mod tests {
         let bogus = CardUid::new(999).expect("non-zero");
         assert!(!upgrade_card_uid(&mut state, bogus));
         assert!(!downgrade_card_uid(&mut state, bogus));
+    }
+
+    /// C# `CardCmd.Upgrade` (`CardCmd.cs:273`) skips a card that isn't
+    /// `IsUpgradable` (a curse, a status, a Quest card), so the combat-side
+    /// upgrade by uid leaves it as it is (A6c6: Bellows upgraded Ascender's
+    /// Bane).
+    #[test]
+    fn upgrade_card_uid_skips_a_card_that_cannot_be_upgraded() {
+        let mut state = CombatState {
+            rng: crate::dotnet_rng::Rng::new(0_i32),
+            ..Default::default()
+        };
+        let mut bane = placeholder_card(crate::cards::CardId::AscendersBane);
+        bane.card_type = crate::cards::CardType::Curse;
+        let u = spawn_card_into_pile(&mut state, bane, PileKind::Hand);
+        assert!(!upgrade_card_uid(&mut state, u));
+        assert!(!state.cards[u.0.get() as usize - 1].upgraded);
     }
 
     #[test]
