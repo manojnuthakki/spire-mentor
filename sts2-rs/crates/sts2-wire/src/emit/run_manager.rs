@@ -1413,7 +1413,7 @@ mod tests {
         rm.run_state.relic_counters.insert(RelicId::SwordOfStone, 3);
         let _ = rm.run_state.pael_record_sacrifice();
         let _ = rm.run_state.pael_record_sacrifice();
-        let strike = rm.run_state.master_deck[0].clone();
+        let strike = rm.run_state.master_deck[0];
         rm.run_state.paels_tooth_stored.push(strike);
         let v = run_relic_state(&rm);
         assert_eq!(v["counters"]["SWORD_OF_STONE"], 3);
