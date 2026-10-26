@@ -653,6 +653,35 @@ pub fn dispatch_after_combat_victory_run(
     }
 }
 
+/// The run-side combat-victory listeners the run manager's combat exit fires
+/// (sts2-agent fork). The channel had no production firing site; firing it
+/// whole would also start War Hammer's elite upgrades (and their Niche draws),
+/// a gameplay change outside the approved fork batch. Only Sword of Stone's
+/// replacement by Sword of Jade is approved; a listener joins this list when
+/// its own fix is.
+pub const LIVE_COMBAT_VICTORY_RUN_LISTENERS: &[RelicId] = &[RelicId::SwordOfStone];
+
+/// [`dispatch_after_combat_victory_run`] restricted to `live`: the listeners
+/// registered for those relics, in the registry's order. The combat exit
+/// passes [`LIVE_COMBAT_VICTORY_RUN_LISTENERS`]. sts2-agent fork.
+pub fn dispatch_after_combat_victory_run_live(
+    run_state: &mut RunState,
+    ctx: &CombatVictoryRunCtx,
+    live: &[RelicId],
+) -> EffectResult {
+    let mut any_resolved = false;
+    for (id, f) in listeners_after_combat_victory_run() {
+        if live.contains(&id) && f(run_state, ctx) == EffectResult::Resolved {
+            any_resolved = true;
+        }
+    }
+    if any_resolved {
+        EffectResult::Resolved
+    } else {
+        EffectResult::NotImplemented
+    }
+}
+
 /// Production firing site for the run-side combat-end channels. Bead
 /// `sts2-rs-elipw` (y8zi4 follow-up — wires the back-edge from the
 /// combat-side dispatch site, which has no `&mut RunState` in scope,

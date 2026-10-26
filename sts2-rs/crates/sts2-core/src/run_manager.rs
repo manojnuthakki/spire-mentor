@@ -2338,12 +2338,14 @@ impl RunManager {
         // C# `Hook.AfterCombatVictory` for the run-side relic models
         // (sts2-agent fork): Sword of Stone's replacement by Sword of Jade at
         // its fifth elite (the combat side counted the elite down and the exit
-        // callback flushed the count) and War Hammer's deck upgrades. This was
-        // the deferred firing site of `dispatch_after_combat_victory_run`.
+        // callback flushed the count). This was the channel's deferred firing
+        // site; only the approved listeners fire
+        // (`LIVE_COMBAT_VICTORY_RUN_LISTENERS`: War Hammer stays inactive).
         let is_elite = self.combat.as_ref().is_some_and(CombatState::is_elite);
-        let _ = crate::run_effects::dispatch_after_combat_victory_run(
+        let _ = crate::run_effects::dispatch_after_combat_victory_run_live(
             &mut self.run_state,
             &crate::run_effects::CombatVictoryRunCtx { is_elite },
+            crate::run_effects::LIVE_COMBAT_VICTORY_RUN_LISTENERS,
         );
         // Event→combat resume (bead `sts2-rs-ck9z6`, GH #166): if this fight
         // was launched from an event option (`EnterCombatWithoutExitingEvent`),

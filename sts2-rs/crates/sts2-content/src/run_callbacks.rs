@@ -1484,23 +1484,30 @@ mod tests {
         );
     }
 
-    /// The same channel carries War Hammer (`WarHammer.cs:19-31`): an elite
-    /// victory upgrades up to four upgradable deck cards; a monster fight
-    /// none.
+    /// War Hammer (`WarHammer.cs:19-31`) is registered on the same channel,
+    /// but its fix isn't in the approved fork batch: the combat exit doesn't
+    /// fire it, so an elite victory upgrades nothing and draws nothing from
+    /// Niche, as before the channel fired. Once approved, it joins
+    /// `LIVE_COMBAT_VICTORY_RUN_LISTENERS` and this test turns around.
     #[test]
-    fn war_hammer_upgrades_four_cards_after_an_elite() {
+    fn war_hammer_stays_inactive_until_approved() {
         use sts2_core::{RelicId, RelicKind};
-        let upgraded = |rm: &RunManager| {
+        let rm = won_fight_with(RelicId::WarHammer, RelicKind::WarHammer, 0, false);
+        let niche_before = rm.run_state.rng.niche.counter();
+        let rm = won_fight_with(RelicId::WarHammer, RelicKind::WarHammer, 0, true);
+        assert_eq!(
             rm.run_state
                 .master_deck
                 .iter()
                 .filter(|c| c.upgraded)
-                .count()
-        };
-        let rm = won_fight_with(RelicId::WarHammer, RelicKind::WarHammer, 0, true);
-        assert_eq!(upgraded(&rm), 4);
-        let rm = won_fight_with(RelicId::WarHammer, RelicKind::WarHammer, 0, false);
-        assert_eq!(upgraded(&rm), 0);
+                .count(),
+            0
+        );
+        assert_eq!(
+            rm.run_state.rng.niche.counter(),
+            niche_before,
+            "no Niche draw"
+        );
     }
 
     /// Guardrail #4 (Addendum 23): the shared run setup that EVERY full-run
