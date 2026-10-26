@@ -487,12 +487,14 @@ impl PyRunManager {
         use sts2_core::potions::PotionTargetType as T;
         let kind = crate::state_dict::potion_kind_from_python_name(potion)
             .ok_or_else(|| PyValueError::new_err(format!("unknown potion {potion:?}")))?;
-        Ok(sts2_core::potion_effects::lookup_target_type(kind).map(|t| match t {
-            T::Self_ => "Self",
-            T::AnyEnemy => "AnyEnemy",
-            T::AllEnemies => "AllEnemies",
-            T::AnyPlayer => "AnyPlayer",
-        }))
+        Ok(
+            sts2_core::potion_effects::lookup_target_type(kind).map(|t| match t {
+                T::Self_ => "Self",
+                T::AnyEnemy => "AnyEnemy",
+                T::AllEnemies => "AllEnemies",
+                T::AnyPlayer => "AnyPlayer",
+            }),
+        )
     }
 
     /// The rewards-screen entry whose card reward is open now (sts2-agent fork).

@@ -135,9 +135,9 @@ pub use relics::{RelicId, RelicKind};
 // Phase 7 (bead sts2-rs-13q P7-6): potion discriminant + POD. Mirrors
 // the `RelicKind`/`Relic` split established by P4-2. Per-potion
 // factories + on-drink dispatch live in `sts2-content::potions`.
-pub mod potions;
 /// A search's value of the potion belt at its evaluations (sts2-agent fork).
 pub mod belt_value;
+pub mod potions;
 pub use potions::{
     CharacterId, PotionKind, PotionRarity, PotionTargetType, PotionUsageType, MAX_POTIONS,
 };

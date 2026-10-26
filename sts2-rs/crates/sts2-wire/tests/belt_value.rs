@@ -23,7 +23,8 @@ fn fight(attack: i64, potions: &[&str]) -> CombatState {
     sts2_content::potions::dispatch::ensure_installed();
     let mut v: Value = serde_json::from_str(
         &std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fair_root_draw.json"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/fair_root_draw.json"),
         )
         .unwrap(),
     )
@@ -43,9 +44,18 @@ fn fight(attack: i64, potions: &[&str]) -> CombatState {
 fn table(base: &[PotionKind], value: impl Fn(&[PotionKind]) -> f32) -> Arc<BeltValue> {
     let mut keys: Vec<Vec<PotionKind>> = vec![vec![]];
     for k in base {
-        keys = keys.iter().flat_map(|s| [s.clone(), [s.clone(), vec![*k]].concat()]).collect();
+        keys = keys
+            .iter()
+            .flat_map(|s| [s.clone(), [s.clone(), vec![*k]].concat()])
+            .collect();
     }
-    let rows = keys.into_iter().map(|k| { let v = value(&k); (k, v) }).collect();
+    let rows = keys
+        .into_iter()
+        .map(|k| {
+            let v = value(&k);
+            (k, v)
+        })
+        .collect();
     Arc::new(BeltValue::new(base.to_vec(), rows, vec![], 8.0).unwrap())
 }
 
@@ -55,13 +65,23 @@ fn additive(base: &[PotionKind], each: f32) -> Arc<BeltValue> {
 }
 
 fn params(sims: u32, seed: u64, threads: u32, belt: Option<Arc<BeltValue>>) -> RecommendParams {
-    let mut p = RecommendParams::from_config(&json!({"sims": sims, "seed": seed, "threads": threads}), "test").unwrap();
+    let mut p = RecommendParams::from_config(
+        &json!({"sims": sims, "seed": seed, "threads": threads}),
+        "test",
+    )
+    .unwrap();
     p.belt_value = belt;
     p
 }
 
 fn best(out: &Value) -> Value {
-    out["actions"].as_array().unwrap().iter().find(|a| a["is_best"] == true).unwrap()["action"].clone()
+    out["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["is_best"] == true)
+        .unwrap()["action"]
+        .clone()
 }
 
 /// The production seed schedule's first seeds (`splitmix64(agent_seed · 2^32 + n)`, agent seed 0).
@@ -82,8 +102,17 @@ fn a_drink_costs_the_same_whenever_it_happens_so_the_search_doesnt_delay_it() {
     // later. Priced by the belt value in every evaluation, waiting only loses HP.
     let state = fight(4, &["FIRE_POTION"]);
     for seed in seeds() {
-        let out = recommend_value(&state, &params(5000, seed, 1, Some(additive(&[F], 8.0))), true);
-        assert_eq!(best(&out)["action"], "drink_potion", "seed {seed}: {}", best(&out));
+        let out = recommend_value(
+            &state,
+            &params(5000, seed, 1, Some(additive(&[F], 8.0))),
+            true,
+        );
+        assert_eq!(
+            best(&out)["action"],
+            "drink_potion",
+            "seed {seed}: {}",
+            best(&out)
+        );
     }
 }
 
@@ -92,8 +121,16 @@ fn a_fight_lost_unless_the_search_drinks_is_won_by_drinking() {
     // The enemy's attack kills the player; only the potion wins, however much it is worth kept.
     let state = fight(200, &["FIRE_POTION"]);
     for each in [8.0, 200.0] {
-        let out = recommend_value(&state, &params(2000, seeds()[0], 1, Some(additive(&[F], each))), true);
-        assert_eq!(best(&out)["action"], "drink_potion", "kept potion worth {each}");
+        let out = recommend_value(
+            &state,
+            &params(2000, seeds()[0], 1, Some(additive(&[F], each))),
+            true,
+        );
+        assert_eq!(
+            best(&out)["action"],
+            "drink_potion",
+            "kept potion worth {each}"
+        );
     }
 }
 
@@ -108,12 +145,40 @@ fn a_non_additive_table_changes_which_potion_is_drunk() {
     // Fire Potion 4, and both together no more than the Ampoule alone (not
     // additive): drink the Fire Potion. The mirror table: drink the Ampoule.
     let state = fight(4, &["FIRE_POTION", "EXPLOSIVE_AMPOULE"]);
-    let keep_ampoule = table(&[F, E], |k| if k.contains(&E) { 20.0 } else if k.contains(&F) { 4.0 } else { 0.0 });
-    let keep_fire = table(&[F, E], |k| if k.contains(&F) { 20.0 } else if k.contains(&E) { 4.0 } else { 0.0 });
+    let keep_ampoule = table(&[F, E], |k| {
+        if k.contains(&E) {
+            20.0
+        } else if k.contains(&F) {
+            4.0
+        } else {
+            0.0
+        }
+    });
+    let keep_fire = table(&[F, E], |k| {
+        if k.contains(&F) {
+            20.0
+        } else if k.contains(&E) {
+            4.0
+        } else {
+            0.0
+        }
+    });
     for threads in [1, 2] {
-        let a = recommend_value(&state, &params(3000, seeds()[0], threads, Some(keep_ampoule.clone())), true);
-        let b = recommend_value(&state, &params(3000, seeds()[0], threads, Some(keep_fire.clone())), true);
-        assert_eq!((drunk(&state, &a), drunk(&state, &b)), (F, E), "threads {threads}");
+        let a = recommend_value(
+            &state,
+            &params(3000, seeds()[0], threads, Some(keep_ampoule.clone())),
+            true,
+        );
+        let b = recommend_value(
+            &state,
+            &params(3000, seeds()[0], threads, Some(keep_fire.clone())),
+            true,
+        );
+        assert_eq!(
+            (drunk(&state, &a), drunk(&state, &b)),
+            (F, E),
+            "threads {threads}"
+        );
     }
 }
 
@@ -121,15 +186,38 @@ fn a_non_additive_table_changes_which_potion_is_drunk() {
 fn interleaved_searches_with_different_tables_dont_interfere() {
     let state = fight(4, &["FIRE_POTION", "EXPLOSIVE_AMPOULE"]);
     let before = state.clone();
-    let keep_ampoule = table(&[F, E], |k| if k.contains(&E) { 20.0 } else if k.contains(&F) { 4.0 } else { 0.0 });
-    let keep_fire = table(&[F, E], |k| if k.contains(&F) { 20.0 } else if k.contains(&E) { 4.0 } else { 0.0 });
-    let a1 = recommend_value(&state, &params(2000, 5, 1, Some(keep_ampoule.clone())), true);
+    let keep_ampoule = table(&[F, E], |k| {
+        if k.contains(&E) {
+            20.0
+        } else if k.contains(&F) {
+            4.0
+        } else {
+            0.0
+        }
+    });
+    let keep_fire = table(&[F, E], |k| {
+        if k.contains(&F) {
+            20.0
+        } else if k.contains(&E) {
+            4.0
+        } else {
+            0.0
+        }
+    });
+    let a1 = recommend_value(
+        &state,
+        &params(2000, 5, 1, Some(keep_ampoule.clone())),
+        true,
+    );
     let b = recommend_value(&state, &params(2000, 5, 1, Some(keep_fire)), true);
     let plain = recommend_value(&state, &params(2000, 5, 1, None), true);
     let a2 = recommend_value(&state, &params(2000, 5, 1, Some(keep_ampoule)), true);
     assert_eq!(a1, a2);
     assert_ne!(a1, b);
-    assert_eq!(plain, recommend_value(&state, &params(2000, 5, 1, None), true));
+    assert_eq!(
+        plain,
+        recommend_value(&state, &params(2000, 5, 1, None), true)
+    );
     assert_eq!(state, before);
     assert!(state.belt_value.is_none());
 }
@@ -140,7 +228,14 @@ fn no_belt_value_leaves_the_deployed_evaluation() {
     let state = fight(4, &["FIRE_POTION"]);
     let plain = recommend_value(&state, &params(1000, 9, 1, None), true);
     let table8 = recommend_value(&state, &params(1000, 9, 1, Some(additive(&[F], 8.0))), true);
-    let q = |o: &Value| o["actions"].as_array().unwrap().iter().map(|a| (a["action"].to_string(), a["visits"].clone())).collect::<Vec<_>>();
+    let q = |o: &Value| {
+        o["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| (a["action"].to_string(), a["visits"].clone()))
+            .collect::<Vec<_>>()
+    };
     assert_eq!(q(&plain), q(&table8));
 }
 
@@ -169,7 +264,13 @@ fn a_search_with_a_belt_value_tells_states_with_different_belts_apart() {
     let state = fight(4, &["FIRE_POTION", "EXPLOSIVE_AMPOULE"]);
     let drink = |s: &CombatState, slot| {
         let mut s = s.clone();
-        sts2_core::apply(&mut s, sts2_core::Action::DrinkPotion { potion_slot: slot, target: None });
+        sts2_core::apply(
+            &mut s,
+            sts2_core::Action::DrinkPotion {
+                potion_slot: slot,
+                target: None,
+            },
+        );
         s
     };
     let (a, b) = (drink(&state, 0), drink(&state, 1));
@@ -188,14 +289,30 @@ fn two_drinks_that_leave_different_potions_stay_separate_children_with_a_belt_va
     // alike (the belt wasn't hashed), shared one child and reported the same
     // visits and value, whatever the table said.
     let state = fight(4, &["FIRE_POTION", "EXPLOSIVE_AMPOULE"]);
-    let keep_ampoule = table(&[F, E], |k| if k.contains(&E) { 20.0 } else if k.contains(&F) { 4.0 } else { 0.0 });
+    let keep_ampoule = table(&[F, E], |k| {
+        if k.contains(&E) {
+            20.0
+        } else if k.contains(&F) {
+            4.0
+        } else {
+            0.0
+        }
+    });
     let out = recommend_value(&state, &params(3000, 1, 1, Some(keep_ampoule)), true);
     let drink = |slot: u64| {
-        out["actions"].as_array().unwrap().iter()
-            .find(|a| a["action"]["action"] == "drink_potion" && a["action"]["slot"] == slot).unwrap().clone()
+        out["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|a| a["action"]["action"] == "drink_potion" && a["action"]["slot"] == slot)
+            .unwrap()
+            .clone()
     };
     let (fire, ampoule) = (drink(0), drink(1));
-    assert!(fire["q"].as_f64().unwrap() > ampoule["q"].as_f64().unwrap() + 0.01, "{fire} {ampoule}");
+    assert!(
+        fire["q"].as_f64().unwrap() > ampoule["q"].as_f64().unwrap() + 0.01,
+        "{fire} {ampoule}"
+    );
     let visits = |a: &Value| a["visits"].as_u64().unwrap();
     let total: u64 = out["actions"].as_array().unwrap().iter().map(visits).sum();
     assert_eq!(total, 3000, "each simulation goes through one root child");

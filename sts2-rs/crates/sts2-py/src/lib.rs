@@ -2979,7 +2979,9 @@ pub(crate) fn action_score_pydict<'py>(
 /// `potion_charge_hp` (a list of at most 8 finite HP-equivalents, by the
 /// engine's dense belt slot; missing slots 0) → `RecommendParams`' array.
 fn potion_charge_slots(charges: Option<Vec<f32>>) -> PyResult<Option<[f32; 8]>> {
-    let Some(charges) = charges else { return Ok(None) };
+    let Some(charges) = charges else {
+        return Ok(None);
+    };
     if charges.len() > 8 || charges.iter().any(|c| !c.is_finite()) {
         return Err(pyo3::exceptions::PyValueError::new_err(format!(
             "mcts_recommend: potion_charge_hp must be at most 8 finite values, got {charges:?}"
@@ -2994,16 +2996,22 @@ fn potion_charge_slots(charges: Option<Vec<f32>>) -> PyResult<Option<[f32; 8]>> 
 /// `[potion ids, hp]` giving every sub-multiset of `base` once; `fallback`,
 /// `{potion id: hp}` for a potion beyond the base; `default`, hp for a kind
 /// without a fallback) → the engine's [`sts2_core::belt_value::BeltValue`].
-fn parse_belt_value(d: &Bound<'_, PyDict>) -> PyResult<std::sync::Arc<sts2_core::belt_value::BeltValue>> {
+fn parse_belt_value(
+    d: &Bound<'_, PyDict>,
+) -> PyResult<std::sync::Arc<sts2_core::belt_value::BeltValue>> {
     use pyo3::exceptions::PyValueError;
     let kind = |name: String| {
-        sts2_wire::state_dict::potion_kind_from_python_name(&name)
-            .ok_or_else(|| PyValueError::new_err(format!("mcts_recommend: belt_value: unknown potion {name:?}")))
+        sts2_wire::state_dict::potion_kind_from_python_name(&name).ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "mcts_recommend: belt_value: unknown potion {name:?}"
+            ))
+        })
     };
     let kinds = |names: Vec<String>| names.into_iter().map(kind).collect::<PyResult<Vec<_>>>();
     let get = |key: &str| {
-        d.get_item(key)?
-            .ok_or_else(|| PyValueError::new_err(format!("mcts_recommend: belt_value needs {key:?}")))
+        d.get_item(key)?.ok_or_else(|| {
+            PyValueError::new_err(format!("mcts_recommend: belt_value needs {key:?}"))
+        })
     };
     let base = kinds(get("base")?.extract::<Vec<String>>()?)?;
     let table = get("table")?

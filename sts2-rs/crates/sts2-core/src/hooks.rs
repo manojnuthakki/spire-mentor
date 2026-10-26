@@ -12476,13 +12476,16 @@ const MODIFY_MAX_ENERGY_KINDS: crate::PowerKindSet = crate::PowerKindSet::from_k
 pub const BRILLIANT_SCARF_FREE_AFTER: i32 = 4;
 
 #[must_use]
-pub fn brilliant_scarf_makes_free(state: &CombatState, _card: &crate::cards::Card, card_uid: CardUid) -> bool {
-    state
-            .relics
-            .iter()
-            .any(|r| !r.is_melted && r.kind == crate::RelicKind::BrilliantScarf
-                && r.counter == BRILLIANT_SCARF_FREE_AFTER)
-        && (state.player.hand.contains(&card_uid) || state.player.play.contains(&card_uid))
+pub fn brilliant_scarf_makes_free(
+    state: &CombatState,
+    _card: &crate::cards::Card,
+    card_uid: CardUid,
+) -> bool {
+    state.relics.iter().any(|r| {
+        !r.is_melted
+            && r.kind == crate::RelicKind::BrilliantScarf
+            && r.counter == BRILLIANT_SCARF_FREE_AFTER
+    }) && (state.player.hand.contains(&card_uid) || state.player.play.contains(&card_uid))
 }
 
 #[must_use]

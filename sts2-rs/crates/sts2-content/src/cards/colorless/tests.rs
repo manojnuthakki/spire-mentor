@@ -5878,12 +5878,21 @@ fn glam_mad_science_replays_once_without_changing_its_rider() {
         if manual {
             let _ = sts2_core::apply(
                 &mut state,
-                sts2_core::Action::PlayCard { hand_index: 0, target: Some(0) },
+                sts2_core::Action::PlayCard {
+                    hand_index: 0,
+                    target: Some(0),
+                },
             );
         } else {
-            assert!(sts2_core::combat_loop::auto_play_card_from_draw_top(&mut state, false));
+            assert!(sts2_core::combat_loop::auto_play_card_from_draw_top(
+                &mut state, false
+            ));
         }
-        assert_eq!(enemy_hp(&state, enemy), 100 - 14, "manual {manual}: two hits of 7");
+        assert_eq!(
+            enemy_hp(&state, enemy),
+            100 - 14,
+            "manual {manual}: two hits of 7"
+        );
         assert_eq!(
             mad_science_variant_of(&state.cards[0]),
             (CardType::Attack, TinkerTimeRider::None),

@@ -6846,7 +6846,8 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
     // increment in a follow-up.
     // C# adds the enchantment's replays (Spiral, unused Glam) before the
     // modifiers: `GetEnchantedReplayCount() + 1`.
-    let base_replay = card.base_replay_count + crate::enchantment_hooks::enchant_play_count_bonus(&card);
+    let base_replay =
+        card.base_replay_count + crate::enchantment_hooks::enchant_play_count_bonus(&card);
     let power_extra = hooks::dispatch_modify_card_play_count(state, &count_ctx);
     let live = relic_guarded_channel_live(state, GuardedChannel::RelicModifyCardPlayCount);
     let relic_extra = dispatch_if_live(state, live, 0, |state| {

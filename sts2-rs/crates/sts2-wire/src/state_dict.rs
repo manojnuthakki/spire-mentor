@@ -3938,7 +3938,8 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
             .filter(|(i, _)| *i < ovi_pos && parsed.encounter[*i].kind == MonsterKind::ToughEgg)
             .map(|(_, uid)| *uid)
             .collect();
-        let first = OVICOPTER_SLOT.saturating_sub(u8::try_from(eggs.len()).unwrap_or(OVICOPTER_SLOT));
+        let first =
+            OVICOPTER_SLOT.saturating_sub(u8::try_from(eggs.len()).unwrap_or(OVICOPTER_SLOT));
         for (k, uid) in eggs.iter().enumerate() {
             state.set_enemy_slot(*uid, first + u8::try_from(k).unwrap_or(0));
         }

@@ -67,7 +67,9 @@ pub fn enchant_play_count_bonus(card: &Card) -> i32 {
     if card.has_enchantment(EnchantmentId::Spiral) {
         bonus += 1;
     }
-    if card.has_enchantment(EnchantmentId::Glam) && card.combat_var(VarKey::EnchantmentUsed) & GLAM_USED_BIT == 0 {
+    if card.has_enchantment(EnchantmentId::Glam)
+        && card.combat_var(VarKey::EnchantmentUsed) & GLAM_USED_BIT == 0
+    {
         bonus += 1;
     }
     bonus
@@ -1009,7 +1011,10 @@ mod tests {
         );
         // Idempotent: a second after_card_played leaves the bit set.
         dispatch_after_card_played(&mut state, uid(1));
-        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b01, 0b01);
+        assert_eq!(
+            state.cards[0].combat_var(VarKey::EnchantmentUsed) & 0b01,
+            0b01
+        );
     }
 
     /// Sharp: pure query-side enchantment; on_card_played MUST NOT
@@ -1028,7 +1033,10 @@ mod tests {
             state.cards[0].combat_var(VarKey::RampageDamage),
             rampage_before
         );
-        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed), generic_before);
+        assert_eq!(
+            state.cards[0].combat_var(VarKey::EnchantmentUsed),
+            generic_before
+        );
     }
 
     /// Favored: pure query-side multiplier; on_card_played MUST NOT
@@ -1285,7 +1293,10 @@ mod tests {
         assert_eq!(state.player.energy, energy_before);
         assert_eq!(state.player.block, block_before);
         assert_eq!(state.cards[0].cost, cost_before);
-        assert_eq!(state.cards[0].combat_var(VarKey::EnchantmentUsed), generic_before);
+        assert_eq!(
+            state.cards[0].combat_var(VarKey::EnchantmentUsed),
+            generic_before
+        );
         assert_eq!(shuffle, vec![uid(1)]);
     }
 

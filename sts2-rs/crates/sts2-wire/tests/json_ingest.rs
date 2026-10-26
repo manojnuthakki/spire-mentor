@@ -148,7 +148,10 @@ fn granted_sly_comes_across_in_every_pile() {
     let defend = state.player.draw[1];
     assert!(state.player.sly_this_combat.contains(&defend));
     let back = sts2_wire::emit::combat_state_to_value(&state).expect("emits");
-    assert_eq!(back["deck"]["draw_pile"][1]["flags"], serde_json::json!(["sly"]));
+    assert_eq!(
+        back["deck"]["draw_pile"][1]["flags"],
+        serde_json::json!(["sly"])
+    );
     assert!(back["deck"]["draw_pile"][0].get("flags").is_none());
 }
 
@@ -168,13 +171,22 @@ fn granted_retain_comes_across_and_round_trips() {
     }
     assert!(state.player.retain_this_turn.is_empty()); // not a this-turn grant
     let back = sts2_wire::emit::combat_state_to_value(&state).expect("emits");
-    assert_eq!(back["deck"]["draw_pile"][1]["flags"], serde_json::json!(["retain"]));
-    assert_eq!(back["deck"]["hand"][0]["flags"], serde_json::json!(["retain"]));
+    assert_eq!(
+        back["deck"]["draw_pile"][1]["flags"],
+        serde_json::json!(["retain"])
+    );
+    assert_eq!(
+        back["deck"]["hand"][0]["flags"],
+        serde_json::json!(["retain"])
+    );
     assert!(back["deck"]["draw_pile"][0].get("flags").is_none());
     // Round trip: the emitted dict rebuilds to the same flags.
     let again = state_from_json_str(&back.to_string()).expect("rebuilds again");
     let back2 = sts2_wire::emit::combat_state_to_value(&again).expect("emits");
-    assert_eq!(back2["deck"]["hand"][0]["flags"], serde_json::json!(["retain"]));
+    assert_eq!(
+        back2["deck"]["hand"][0]["flags"],
+        serde_json::json!(["retain"])
+    );
 }
 
 #[test]
@@ -264,22 +276,31 @@ fn brilliant_scarf_makes_the_fifth_card_free() {
     let cost = |state: &sts2_core::CombatState, i: usize| {
         sts2_core::hooks::effective_card_cost(state, state.player.hand[i])
     };
-    let mut state = state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(0)).to_string()).unwrap();
+    let mut state =
+        state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(0)).to_string()).unwrap();
     play(&mut state, 0, Some(0));
     assert_eq!(state.relics[0].counter, 1, "one play counts once");
 
     let state = state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(3)).to_string()).unwrap();
     assert_eq!(cost(&state, 0), 2, "the 4th play pays");
 
-    let mut state = state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(4)).to_string()).unwrap();
-    assert_eq!((cost(&state, 0), cost(&state, 1)), (0, 0), "the 5th is free, whichever it is");
+    let mut state =
+        state_from_json_str(&small_fight(&["BASH", "BASH"], scarf(4)).to_string()).unwrap();
+    assert_eq!(
+        (cost(&state, 0), cost(&state, 1)),
+        (0, 0),
+        "the 5th is free, whichever it is"
+    );
     play(&mut state, 0, Some(0));
     assert_eq!(state.player.energy, 3, "the free Bash cost nothing");
     assert_eq!(state.relics[0].counter, 5);
     assert_eq!(cost(&state, 0), 2, "the 6th pays again");
 
     let _ = sts2_core::apply(&mut state, sts2_core::Action::EndTurn);
-    assert_eq!(state.relics[0].counter, 0, "reset at the player's turn start");
+    assert_eq!(
+        state.relics[0].counter, 0,
+        "reset at the player's turn start"
+    );
 }
 
 /// `OvicopterNormal.Slots = [egg1..egg5, ovicopter]`: a rebuilt Ovicopter holds
@@ -289,13 +310,22 @@ fn brilliant_scarf_makes_the_fifth_card_free() {
 fn an_ovicopter_fight_rebuilds_with_its_egg_slots() {
     sts2_content::cards::dispatch::ensure_installed();
     let mut value = small_fight(&["STRIKE_IRONCLAD"], serde_json::json!([]));
-    let enemy = |kind: &str, uid: i32, mv: &str| serde_json::json!({"kind": kind, "uid": uid, "hp": 20,
+    let enemy = |kind: &str, uid: i32, mv: &str| {
+        serde_json::json!({"kind": kind, "uid": uid, "hp": 20,
         "max_hp": 20, "block": 0, "powers": [], "intents": [], "intent_history": [], "move_state": mv,
-        "is_dead": false, "is_escaped": false});
-    value["encounter"] = serde_json::json!([enemy("ToughEgg", 1, "HATCH_MOVE"), enemy("ToughEgg", 2, "HATCH_MOVE"),
-                                            enemy("Ovicopter", 3, "SMASH_MOVE")]);
+        "is_dead": false, "is_escaped": false})
+    };
+    value["encounter"] = serde_json::json!([
+        enemy("ToughEgg", 1, "HATCH_MOVE"),
+        enemy("ToughEgg", 2, "HATCH_MOVE"),
+        enemy("Ovicopter", 3, "SMASH_MOVE")
+    ]);
     let state = state_from_json_str(&value.to_string()).expect("rebuilds");
-    let slots: Vec<Option<u8>> = state.enemy_uids.iter().map(|uid| state.enemy_slot(*uid)).collect();
+    let slots: Vec<Option<u8>> = state
+        .enemy_uids
+        .iter()
+        .map(|uid| state.enemy_slot(*uid))
+        .collect();
     assert_eq!(slots, [Some(3), Some(4), Some(5)]);
 }
 
@@ -305,13 +335,22 @@ fn an_ovicopter_fight_rebuilds_with_its_egg_slots() {
 fn brilliant_scarf_does_not_count_an_auto_play() {
     sts2_content::cards::dispatch::ensure_installed();
     sts2_content::relics::dispatch::ensure_installed();
-    let mut value = small_fight(&["HAVOC", "BASH"], serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": 2}]));
+    let mut value = small_fight(
+        &["HAVOC", "BASH"],
+        serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": 2}]),
+    );
     value["deck"]["draw_pile"] = serde_json::json!([{"id": "STRIKE_IRONCLAD", "stable_idx": 10, "kind": "card",
                                                      "upgraded": false}]);
     let mut state = state_from_json_str(&value.to_string()).unwrap();
     play(&mut state, 0, None);
-    assert_eq!(state.relics[0].counter, 3, "Havoc counts, its auto-played Strike doesn't");
-    assert_eq!(sts2_core::hooks::effective_card_cost(&state, state.player.hand[0]), 2);
+    assert_eq!(
+        state.relics[0].counter, 3,
+        "Havoc counts, its auto-played Strike doesn't"
+    );
+    assert_eq!(
+        sts2_core::hooks::effective_card_cost(&state, state.player.hand[0]),
+        2
+    );
 }
 
 /// C# `BrilliantScarf.TryModifyStarCost`: the fifth card costs no stars either.
@@ -320,10 +359,17 @@ fn brilliant_scarf_makes_the_fifth_card_free_in_stars() {
     sts2_content::cards::dispatch::ensure_installed();
     sts2_content::relics::dispatch::ensure_installed();
     for (counter, playable) in [(3, false), (4, true)] {
-        let value = small_fight(&["CRESCENT_SPEAR"], serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": counter}]));
+        let value = small_fight(
+            &["CRESCENT_SPEAR"],
+            serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": counter}]),
+        );
         let state = state_from_json_str(&value.to_string()).unwrap();
         let card = &state.cards[state.player.hand[0].get() as usize - 1];
-        assert_eq!(sts2_core::effective_star_cost_in_combat(&state, card) == 0, playable, "counter {counter}");
+        assert_eq!(
+            sts2_core::effective_star_cost_in_combat(&state, card) == 0,
+            playable,
+            "counter {counter}"
+        );
         let plays = sts2_core::legal_actions(&state)
             .iter()
             .any(|a| matches!(a, sts2_core::Action::PlayCard { hand_index: 0, .. }));
@@ -341,14 +387,21 @@ fn brilliant_scarf_makes_the_fifth_card_free_in_stars() {
 fn brilliant_scarf_counts_each_replay_as_it_ends() {
     sts2_content::cards::dispatch::ensure_installed();
     sts2_content::relics::dispatch::ensure_installed();
-    let mut value = small_fight(&["HELIX_DRILL"], serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": 3}]));
+    let mut value = small_fight(
+        &["HELIX_DRILL"],
+        serde_json::json!([{"id": "BRILLIANT_SCARF", "counter": 3}]),
+    );
     let helix = &mut value["deck"]["hand"][0];
     helix["base_cost"] = serde_json::json!(1);
     helix["cost_override"] = serde_json::json!(1);
     helix["replay_count"] = serde_json::json!(1);
     let mut state = state_from_json_str(&value.to_string()).unwrap();
     play(&mut state, 0, Some(0));
-    let nibbit = state.creatures.iter().find(|c| c.id == state.enemy_uids[0].0).unwrap();
+    let nibbit = state
+        .creatures
+        .iter()
+        .find(|c| c.id == state.enemy_uids[0].0)
+        .unwrap();
     assert_eq!(nibbit.current_hp, 100 - 3, "the replay, free, hits once");
     assert_eq!(state.relics[0].counter, 5);
 }

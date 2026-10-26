@@ -3,7 +3,9 @@
 //! auto-collect path, read for read on the `Rewards` stream, and claiming
 //! every reward then leaving lands the run where auto-collect does.
 
-use sts2_content::run_callbacks::{initialize_run_setup, new_run_manager_for_character_with_ascension};
+use sts2_content::run_callbacks::{
+    initialize_run_setup, new_run_manager_for_character_with_ascension,
+};
 use sts2_core::run_manager::{Phase, RunAction, RunManager, ScreenReward};
 use sts2_core::CharacterId;
 
@@ -55,7 +57,10 @@ fn screen_rolls_what_auto_collect_applies() {
             screen.run_state.rng.rewards.counter(),
             "seed {seed}: the screen reads the Rewards stream as auto-collect does"
         );
-        let listed = screen.reward_screen().expect("a won fight opens the screen").to_vec();
+        let listed = screen
+            .reward_screen()
+            .expect("a won fight opens the screen")
+            .to_vec();
         let gold: i32 = listed
             .iter()
             .filter_map(|r| match r {
@@ -63,7 +68,11 @@ fn screen_rolls_what_auto_collect_applies() {
                 _ => None,
             })
             .sum();
-        assert_eq!(screen.run_state.gold + gold, auto.run_state.gold, "seed {seed}: gold");
+        assert_eq!(
+            screen.run_state.gold + gold,
+            auto.run_state.gold,
+            "seed {seed}: gold"
+        );
         let potions: Vec<_> = listed
             .iter()
             .filter_map(|r| match r {
@@ -81,18 +90,18 @@ fn screen_rolls_what_auto_collect_applies() {
                 _ => None,
             })
             .collect();
-        assert_eq!(cards, vec![auto.card_reward_options().to_vec()], "seed {seed}: card reward");
+        assert_eq!(
+            cards,
+            vec![auto.card_reward_options().to_vec()],
+            "seed {seed}: card reward"
+        );
 
         // Claim everything (the card: its first option) and leave; the
         // auto-collect run picks the same card.
-        while let Some(idx) = screen
-            .get_available_actions()
-            .iter()
-            .find_map(|a| match a {
-                RunAction::ClaimReward { idx } => Some(*idx),
-                _ => None,
-            })
-        {
+        while let Some(idx) = screen.get_available_actions().iter().find_map(|a| match a {
+            RunAction::ClaimReward { idx } => Some(*idx),
+            _ => None,
+        }) {
             screen.take_action(RunAction::ClaimReward { idx });
             if screen.screen_card_claim().is_some() {
                 screen.take_action(RunAction::PickCardReward { idx: Some(0) });
@@ -100,12 +109,26 @@ fn screen_rolls_what_auto_collect_applies() {
         }
         screen.take_action(RunAction::ProceedRewards);
         auto.take_action(RunAction::PickCardReward { idx: Some(0) });
-        assert_eq!(screen.phase(), auto.phase(), "seed {seed}: phase after the rewards");
+        assert_eq!(
+            screen.phase(),
+            auto.phase(),
+            "seed {seed}: phase after the rewards"
+        );
         assert_eq!(screen.run_state.gold, auto.run_state.gold, "seed {seed}");
-        assert_eq!(screen.run_state.potions, auto.run_state.potions, "seed {seed}");
-        assert_eq!(screen.run_state.relics, auto.run_state.relics, "seed {seed}");
+        assert_eq!(
+            screen.run_state.potions, auto.run_state.potions,
+            "seed {seed}"
+        );
+        assert_eq!(
+            screen.run_state.relics, auto.run_state.relics,
+            "seed {seed}"
+        );
         let deck = |rm: &RunManager| {
-            rm.run_state.master_deck.iter().map(|c| (c.card_id, c.upgraded)).collect::<Vec<_>>()
+            rm.run_state
+                .master_deck
+                .iter()
+                .map(|c| (c.card_id, c.upgraded))
+                .collect::<Vec<_>>()
         };
         assert_eq!(deck(&screen), deck(&auto), "seed {seed}");
     }

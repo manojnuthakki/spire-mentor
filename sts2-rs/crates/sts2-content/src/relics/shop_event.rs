@@ -10099,11 +10099,19 @@ mod tests {
             }
         };
         let get = |state: &CombatState| {
-            state.relics.iter().find(|r| r.kind == RelicKind::BrilliantScarf).map_or(99, |r| r.counter)
+            state
+                .relics
+                .iter()
+                .find(|r| r.kind == RelicKind::BrilliantScarf)
+                .map_or(99, |r| r.counter)
         };
         set(&mut state, 4);
         let _ = dispatch_before_side_turn_start(&mut state, Side::Enemy);
-        assert_eq!(get(&state), 4, "Enemy-turn start must not reset the counter");
+        assert_eq!(
+            get(&state),
+            4,
+            "Enemy-turn start must not reset the counter"
+        );
         let _ = dispatch_before_side_turn_start(&mut state, Side::Player);
         assert_eq!(get(&state), 0);
     }

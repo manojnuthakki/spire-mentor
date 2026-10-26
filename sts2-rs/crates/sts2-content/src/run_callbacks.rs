@@ -520,10 +520,14 @@ fn roll_combat_gold_and_potion(
         .into_iter()
         .next();
     }
-    out.gold.extend(rs.offer_rewards(room_type, Vec::new()).iter().filter_map(|r| match r {
-        sts2_core::runstate::Reward::Gold { amount } if *amount > 0 => Some(*amount),
-        _ => None,
-    }));
+    out.gold.extend(
+        rs.offer_rewards(room_type, Vec::new())
+            .iter()
+            .filter_map(|r| match r {
+                sts2_core::runstate::Reward::Gold { amount } if *amount > 0 => Some(*amount),
+                _ => None,
+            }),
+    );
     out
 }
 

@@ -4414,7 +4414,8 @@ fn ench_onplay_order_swift_burning_pact_selects_pre_draw_hand() {
 
     // Swift is a first-play-only enchantment: the consumed bit is set.
     assert_ne!(
-        state.cards[pact.0.get() as usize - 1].combat_var(sts2_core::cards::VarKey::EnchantmentUsed)
+        state.cards[pact.0.get() as usize - 1]
+            .combat_var(sts2_core::cards::VarKey::EnchantmentUsed)
             & 0b0100,
         0,
         "Swift-used bit set after the play finished"

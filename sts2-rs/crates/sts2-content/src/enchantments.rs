@@ -299,10 +299,6 @@ pub fn add_momentum_bonus(card: &mut Card, amount: i32) {
     card.set_combat_var(VarKey::RampageDamage, v);
 }
 
-fn glam_used(card: &Card) -> bool {
-    card.combat_var(VarKey::EnchantmentUsed) & GLAM_USED != 0
-}
-
 /// Mark Vigorous as having fired this combat. Idempotent.
 pub fn mark_vigorous_used(card: &mut Card) {
     let v = card.combat_var(VarKey::EnchantmentUsed) | VIGOROUS_USED;

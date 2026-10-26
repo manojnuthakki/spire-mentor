@@ -501,9 +501,17 @@ const FAIR_ROOT_SALT: u64 = 0xF00D_BEEF_CAFE_00F1;
 /// the budget split evenly. Otherwise the action applied to
 /// the state itself, with the whole budget.
 #[must_use]
-pub fn fair_root_samples(state: &CombatState, action: &Action, params: &RecommendParams) -> Vec<(CombatState, u64, u32)> {
+pub fn fair_root_samples(
+    state: &CombatState,
+    action: &Action,
+    params: &RecommendParams,
+) -> Vec<(CombatState, u64, u32)> {
     let honest = params.hidden_info == HiddenInfoMode::BeliefDraw;
-    let samples = if honest { FAIR_ROOT_SAMPLES.min(params.sims.max(1)) } else { 1 };
+    let samples = if honest {
+        FAIR_ROOT_SAMPLES.min(params.sims.max(1))
+    } else {
+        1
+    };
     (0..samples)
         .map(|k| {
             let budget = params.sims / samples + u32::from(k < params.sims % samples);
@@ -600,7 +608,13 @@ fn fair_action_score(
             let _ = m.search();
             aggregate_root(&m.root_outcomes())
         } else {
-            let r = par_search_with_policy(post, kcfg, params.threads, policy.clone(), LeafEval::default());
+            let r = par_search_with_policy(
+                post,
+                kcfg,
+                params.threads,
+                policy.clone(),
+                LeafEval::default(),
+            );
             aggregate_root(&r.outcomes)
         };
         score.visits += visits;
@@ -982,7 +996,13 @@ mod tests {
                 s(10, 10, 10.0, false, 2),  // q 1.0, more visits but no terminal win
                 s(2, 0, 0.0, false, 3),     // low confidence (below 5% of 100)
             ],
-            &[Action::PlayCard { hand_index: 1, target: None }, Action::EndTurn],
+            &[
+                Action::PlayCard {
+                    hand_index: 1,
+                    target: None,
+                },
+                Action::EndTurn,
+            ],
             false,
             113,
             1,
@@ -1008,7 +1028,10 @@ mod tests {
         // sts2-agent fork (Codex F4): a charge, or the Q ranking, can recommend
         // another child than the tree's most visited line.
         let s = |visits: u32, value_sum: f32, idx: u8| RecommendScore {
-            action: Action::PlayCard { hand_index: idx, target: None },
+            action: Action::PlayCard {
+                hand_index: idx,
+                target: None,
+            },
             visits,
             wins: visits,
             losses: 0,
@@ -1016,7 +1039,17 @@ mod tests {
             value_sum,
             terminal_win: false,
         };
-        let out = recommend_output_value(vec![s(10, 9.0, 0), s(90, 45.0, 1)], &[Action::PlayCard { hand_index: 1, target: None }], false, 100, 1, true);
+        let out = recommend_output_value(
+            vec![s(10, 9.0, 0), s(90, 45.0, 1)],
+            &[Action::PlayCard {
+                hand_index: 1,
+                target: None,
+            }],
+            false,
+            100,
+            1,
+            true,
+        );
         assert_eq!(out["actions"][0]["action"]["card_index"], json!(0));
         assert_eq!(out["pv"], json!([]));
     }

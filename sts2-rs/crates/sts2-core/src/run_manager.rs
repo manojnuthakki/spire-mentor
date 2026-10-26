@@ -499,7 +499,8 @@ pub struct ContentCallbacks {
     /// `PotionFactory.CreateRandomPotionOutOfCombat(owner,
     /// RunState.Rng.CombatPotionGeneration)`), for Entropic Brew drunk out of
     /// combat. sts2-agent fork.
-    pub roll_out_of_combat_potion: Option<fn(rs: &mut RunState) -> Option<crate::potions::PotionKind>>,
+    pub roll_out_of_combat_potion:
+        Option<fn(rs: &mut RunState) -> Option<crate::potions::PotionKind>>,
     /// Roll the replacement card for one interactive deck transform
     /// (NewLeaf's `CardCmd.TransformToRandom(item, RunState.Rng.Niche)`).
     /// The callback owns the character transform pool walk (C/U/R,
@@ -629,12 +630,21 @@ pub struct RoomRewardRoll {
 /// sts2-agent fork.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ScreenReward {
-    Gold { amount: i32 },
-    Potion { kind: crate::potions::PotionKind },
-    Relic { relic: crate::runstate::RelicReward },
+    Gold {
+        amount: i32,
+    },
+    Potion {
+        kind: crate::potions::PotionKind,
+    },
+    Relic {
+        relic: crate::runstate::RelicReward,
+    },
     /// A card reward with its options already rolled (C# populates every
     /// reward of the set when it is generated).
-    Card { options: Vec<crate::cards::CardId>, upgraded: Vec<bool> },
+    Card {
+        options: Vec<crate::cards::CardId>,
+        upgraded: Vec<bool>,
+    },
 }
 
 /// Top-level run orchestrator. Owns the run-side state ([`RunState`])
@@ -1231,12 +1241,14 @@ impl RunManager {
                 .combat
                 .as_ref()
                 .is_some_and(|c| !c.is_over && c.pending_choice.is_none()),
-            Phase::CardReward => self.card_reward_bundles.is_none() && !self.card_offer_choose_screen,
+            Phase::CardReward => {
+                self.card_reward_bundles.is_none() && !self.card_offer_choose_screen
+            }
             Phase::RestSite => self
                 .run_state
                 .pending_choice
                 .as_ref()
-                .is_none_or(|pc| pc.kind != crate::ChoiceKind::CardSelect),
+                .map_or(true, |pc| pc.kind != crate::ChoiceKind::CardSelect),
             _ => true,
         }
     }
@@ -1256,7 +1268,10 @@ impl RunManager {
         }
         for (slot, &kind) in self.run_state.potions.iter().enumerate() {
             if self.drinkable_out_of_combat(kind) {
-                v.push(RunAction::DrinkPotion { potion_slot: slot, target: None });
+                v.push(RunAction::DrinkPotion {
+                    potion_slot: slot,
+                    target: None,
+                });
             }
         }
         v.extend((0..self.run_state.potions.len()).map(|slot| RunAction::DiscardPotion { slot }));
@@ -1275,7 +1290,8 @@ impl RunManager {
     }
 
     fn has_open_potion_slot(&self) -> bool {
-        let cap = (self.run_state.max_potion_slots.max(0) as usize).min(crate::potions::MAX_POTIONS);
+        let cap =
+            (self.run_state.max_potion_slots.max(0) as usize).min(crate::potions::MAX_POTIONS);
         self.run_state.potions.len() < cap
     }
 
@@ -1997,7 +2013,9 @@ impl RunManager {
                 // on the player; `PickRelicReward` takes it, `SkipRelic` leaves the
                 // room without it). Taking it runs the same obtain and follow-up
                 // routing through `do_relic_reward_pick`.
-                self.run_state.relic_rewards.push(crate::runstate::RelicReward::new(id));
+                self.run_state
+                    .relic_rewards
+                    .push(crate::runstate::RelicReward::new(id));
                 self.phase = Phase::CardReward;
                 return ActionResult::Advanced;
             }
@@ -2470,7 +2488,10 @@ impl RunManager {
     /// A won combat room's gold and potion: applied at once (the
     /// auto-collect path), or under [`RunState::interactive_rewards`] rolled
     /// in the same order and returned for the rewards screen. sts2-agent fork.
-    fn begin_room_rewards(&mut self, room_type: crate::runstate::RoomType) -> Option<RoomRewardRoll> {
+    fn begin_room_rewards(
+        &mut self,
+        room_type: crate::runstate::RoomType,
+    ) -> Option<RoomRewardRoll> {
         if self.run_state.interactive_rewards {
             if let Some(roll) = self.callbacks.roll_combat_gold_and_potion {
                 return Some(roll(&mut self.run_state, room_type));
@@ -2491,8 +2512,11 @@ impl RunManager {
         let Some(roll) = roll else {
             return;
         };
-        let mut screen: Vec<ScreenReward> =
-            roll.gold.into_iter().map(|amount| ScreenReward::Gold { amount }).collect();
+        let mut screen: Vec<ScreenReward> = roll
+            .gold
+            .into_iter()
+            .map(|amount| ScreenReward::Gold { amount })
+            .collect();
         if let Some(kind) = roll.potion {
             screen.push(ScreenReward::Potion { kind });
         }
@@ -2514,7 +2538,12 @@ impl RunManager {
 
     /// Claim one reward of the open screen (C# `Reward.OnSelect`). sts2-agent fork.
     fn do_claim_reward(&mut self, idx: usize) -> ActionResult {
-        let Some(reward) = self.reward_screen.as_ref().and_then(|s| s.get(idx)).cloned() else {
+        let Some(reward) = self
+            .reward_screen
+            .as_ref()
+            .and_then(|s| s.get(idx))
+            .cloned()
+        else {
             return ActionResult::InvalidForPhase;
         };
         match reward {
@@ -5224,11 +5253,17 @@ mod tests {
             rm.get_available_actions(),
             vec![RunAction::ClaimReward { idx: 0 }, RunAction::ProceedRewards]
         );
-        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 0 }),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.gold, gold + 17);
         assert_eq!(rm.reward_screen(), Some(&[][..]));
         assert_eq!(rm.phase(), Phase::CardReward);
-        assert_eq!(rm.take_action(RunAction::ProceedRewards), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::ProceedRewards),
+            ActionResult::Advanced
+        );
         assert!(rm.reward_screen().is_none());
         assert_eq!(rm.phase(), Phase::MapChoice);
     }
@@ -5238,7 +5273,10 @@ mod tests {
     fn reward_screen_proceed_skips_unclaimed_rewards() {
         let mut rm = screen_rm(vec![ScreenReward::Gold { amount: 17 }]);
         let gold = rm.run_state.gold;
-        assert_eq!(rm.take_action(RunAction::ProceedRewards), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::ProceedRewards),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.gold, gold);
         assert_eq!(rm.phase(), Phase::MapChoice);
     }
@@ -5249,30 +5287,45 @@ mod tests {
     fn reward_screen_card_reward_skip_keeps_it_and_pick_uses_it() {
         use crate::cards::CardId;
         let options = vec![CardId::Anger, CardId::Bash];
-        let mut rm = screen_rm(vec![ScreenReward::Card { options: options.clone(), upgraded: vec![false, true] }]);
-        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::Advanced);
+        let mut rm = screen_rm(vec![ScreenReward::Card {
+            options: options.clone(),
+            upgraded: vec![false, true],
+        }]);
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 0 }),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.card_reward_options(), options.as_slice());
         assert_eq!(rm.screen_card_claim(), Some(0));
         let actions = rm.get_available_actions();
-        assert!(actions.contains(&RunAction::PickCardReward { idx: None }), "{actions:?}");
+        assert!(
+            actions.contains(&RunAction::PickCardReward { idx: None }),
+            "{actions:?}"
+        );
         assert!(!actions.contains(&RunAction::ProceedRewards), "{actions:?}");
         // Skip: back on the screen, the reward still there.
-        assert_eq!(rm.take_action(RunAction::PickCardReward { idx: None }), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::PickCardReward { idx: None }),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.reward_screen().map(<[_]>::len), Some(1));
         assert!(rm.card_reward_options().is_empty());
         assert_eq!(rm.phase(), Phase::CardReward);
         // Claim again and pick the second card: added upgraded, reward gone.
         let deck = rm.run_state.master_deck.len();
-        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::Advanced);
-        assert_eq!(rm.take_action(RunAction::PickCardReward { idx: Some(1) }), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 0 }),
+            ActionResult::Advanced
+        );
+        assert_eq!(
+            rm.take_action(RunAction::PickCardReward { idx: Some(1) }),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.master_deck.len(), deck + 1);
         let added = rm.run_state.master_deck.last().expect("a card was added");
         assert_eq!((added.card_id, added.upgraded), (CardId::Bash, true));
         assert_eq!(rm.reward_screen(), Some(&[][..]));
-        assert_eq!(
-            rm.get_available_actions(),
-            vec![RunAction::ProceedRewards]
-        );
+        assert_eq!(rm.get_available_actions(), vec![RunAction::ProceedRewards]);
     }
 
     /// A potion reward is unclaimable on a full belt and stays listed; a
@@ -5280,17 +5333,37 @@ mod tests {
     #[test]
     fn reward_screen_potion_waits_for_a_free_slot() {
         use crate::potions::PotionKind;
-        let mut rm = screen_rm(vec![ScreenReward::Potion { kind: PotionKind::FirePotion }]);
+        let mut rm = screen_rm(vec![ScreenReward::Potion {
+            kind: PotionKind::FirePotion,
+        }]);
         rm.run_state.interactive_potions = true;
         rm.run_state.potions = vec![PotionKind::BlockPotion, PotionKind::SwiftPotion];
         let actions = rm.get_available_actions();
-        assert!(!actions.contains(&RunAction::ClaimReward { idx: 0 }), "{actions:?}");
-        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::InvalidForPhase);
-        assert!(actions.contains(&RunAction::DiscardPotion { slot: 1 }), "{actions:?}");
-        assert_eq!(rm.take_action(RunAction::DiscardPotion { slot: 1 }), ActionResult::Advanced);
+        assert!(
+            !actions.contains(&RunAction::ClaimReward { idx: 0 }),
+            "{actions:?}"
+        );
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 0 }),
+            ActionResult::InvalidForPhase
+        );
+        assert!(
+            actions.contains(&RunAction::DiscardPotion { slot: 1 }),
+            "{actions:?}"
+        );
+        assert_eq!(
+            rm.take_action(RunAction::DiscardPotion { slot: 1 }),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.potions, vec![PotionKind::BlockPotion]);
-        assert_eq!(rm.take_action(RunAction::ClaimReward { idx: 0 }), ActionResult::Advanced);
-        assert_eq!(rm.run_state.potions, vec![PotionKind::BlockPotion, PotionKind::FirePotion]);
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 0 }),
+            ActionResult::Advanced
+        );
+        assert_eq!(
+            rm.run_state.potions,
+            vec![PotionKind::BlockPotion, PotionKind::FirePotion]
+        );
         assert_eq!(rm.reward_screen(), Some(&[][..]));
     }
 
@@ -5303,12 +5376,21 @@ mod tests {
         rm.run_state.potions = vec![PotionKind::BloodPotion];
         let actions = rm.get_available_actions();
         assert!(
-            actions.iter().all(|a| !matches!(a, RunAction::DiscardPotion { .. } | RunAction::DrinkPotion { .. })),
+            actions.iter().all(|a| !matches!(
+                a,
+                RunAction::DiscardPotion { .. } | RunAction::DrinkPotion { .. }
+            )),
             "{actions:?}"
         );
-        assert_eq!(rm.take_action(RunAction::DiscardPotion { slot: 0 }), ActionResult::InvalidForPhase);
         assert_eq!(
-            rm.take_action(RunAction::DrinkPotion { potion_slot: 0, target: None }),
+            rm.take_action(RunAction::DiscardPotion { slot: 0 }),
+            ActionResult::InvalidForPhase
+        );
+        assert_eq!(
+            rm.take_action(RunAction::DrinkPotion {
+                potion_slot: 0,
+                target: None
+            }),
             ActionResult::InvalidForPhase
         );
         assert_eq!(rm.run_state.potions, vec![PotionKind::BloodPotion]);
@@ -5325,8 +5407,12 @@ mod tests {
         rm.run_state.max_potion_slots = 4;
         rm.run_state.max_hp = 83;
         rm.run_state.current_hp = 40;
-        rm.run_state.potions =
-            vec![PotionKind::BloodPotion, PotionKind::FirePotion, PotionKind::FruitJuice, PotionKind::FoulPotion];
+        rm.run_state.potions = vec![
+            PotionKind::BloodPotion,
+            PotionKind::FirePotion,
+            PotionKind::FruitJuice,
+            PotionKind::FoulPotion,
+        ];
         let actions = rm.get_available_actions();
         let drinks: Vec<usize> = actions
             .iter()
@@ -5335,20 +5421,52 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(drinks, vec![0, 2], "Blood Potion and Fruit Juice; Foul Potion only at a shop: {actions:?}");
         assert_eq!(
-            rm.take_action(RunAction::DrinkPotion { potion_slot: 1, target: None }),
+            drinks,
+            vec![0, 2],
+            "Blood Potion and Fruit Juice; Foul Potion only at a shop: {actions:?}"
+        );
+        assert_eq!(
+            rm.take_action(RunAction::DrinkPotion {
+                potion_slot: 1,
+                target: None
+            }),
             ActionResult::InvalidForPhase
         );
-        assert_eq!(rm.take_action(RunAction::DrinkPotion { potion_slot: 0, target: None }), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::DrinkPotion {
+                potion_slot: 0,
+                target: None
+            }),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.current_hp, 40 + 16);
-        assert_eq!(rm.run_state.potions, vec![PotionKind::FirePotion, PotionKind::FruitJuice, PotionKind::FoulPotion]);
-        assert_eq!(rm.take_action(RunAction::DrinkPotion { potion_slot: 1, target: None }), ActionResult::Advanced);
+        assert_eq!(
+            rm.run_state.potions,
+            vec![
+                PotionKind::FirePotion,
+                PotionKind::FruitJuice,
+                PotionKind::FoulPotion
+            ]
+        );
+        assert_eq!(
+            rm.take_action(RunAction::DrinkPotion {
+                potion_slot: 1,
+                target: None
+            }),
+            ActionResult::Advanced
+        );
         assert_eq!((rm.run_state.max_hp, rm.run_state.current_hp), (88, 61));
         // At the merchant the Foul Potion is thrown for 100 gold.
         rm.phase = Phase::Shop;
         let gold = rm.run_state.gold;
-        assert_eq!(rm.take_action(RunAction::DrinkPotion { potion_slot: 1, target: None }), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::DrinkPotion {
+                potion_slot: 1,
+                target: None
+            }),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.gold, gold + 100);
         assert_eq!(rm.run_state.potions, vec![PotionKind::FirePotion]);
     }
@@ -5370,10 +5488,21 @@ mod tests {
         combat.player.potions.push(PotionKind::FirePotion);
         rm.combat = Some(combat);
         let actions = rm.get_available_actions();
-        assert!(actions.contains(&RunAction::DiscardPotion { slot: 0 }), "{actions:?}");
-        assert_eq!(rm.take_action(RunAction::DiscardPotion { slot: 0 }), ActionResult::Advanced);
+        assert!(
+            actions.contains(&RunAction::DiscardPotion { slot: 0 }),
+            "{actions:?}"
+        );
         assert_eq!(
-            rm.combat.as_ref().expect("combat").player.potions.as_slice(),
+            rm.take_action(RunAction::DiscardPotion { slot: 0 }),
+            ActionResult::Advanced
+        );
+        assert_eq!(
+            rm.combat
+                .as_ref()
+                .expect("combat")
+                .player
+                .potions
+                .as_slice(),
             [PotionKind::FirePotion]
         );
     }
@@ -5387,14 +5516,21 @@ mod tests {
         let chest = |interactive: bool| {
             let mut rm = RunManager::new(0, CharacterId::Ironclad);
             rm.run_state.interactive_rewards = interactive;
-            for rarity in [RelicRarity::Common, RelicRarity::Uncommon, RelicRarity::Rare] {
+            for rarity in [
+                RelicRarity::Common,
+                RelicRarity::Uncommon,
+                RelicRarity::Rare,
+            ] {
                 rm.run_state
                     .shared_relic_grab_bag_by_rarity
                     .insert(rarity, vec![crate::RelicId::Anchor]);
             }
             let gold = rm.run_state.gold;
             assert_eq!(rm.resolve_treasure_room(), ActionResult::Advanced);
-            assert!(rm.run_state.gold > gold, "the chest's gold is gained on opening");
+            assert!(
+                rm.run_state.gold > gold,
+                "the chest's gold is gained on opening"
+            );
             rm
         };
         let auto = chest(false);
@@ -5409,10 +5545,16 @@ mod tests {
             vec![RunAction::PickRelicReward, RunAction::SkipRelic]
         );
         let mut taken = left.clone();
-        assert_eq!(left.take_action(RunAction::SkipRelic), ActionResult::Advanced);
+        assert_eq!(
+            left.take_action(RunAction::SkipRelic),
+            ActionResult::Advanced
+        );
         assert!(!left.run_state.relics.contains(&crate::RelicId::Anchor));
         assert_eq!(left.phase(), Phase::MapChoice);
-        assert_eq!(taken.take_action(RunAction::PickRelicReward), ActionResult::Advanced);
+        assert_eq!(
+            taken.take_action(RunAction::PickRelicReward),
+            ActionResult::Advanced
+        );
         assert!(taken.run_state.relics.contains(&crate::RelicId::Anchor));
         assert_eq!(taken.phase(), Phase::MapChoice);
     }

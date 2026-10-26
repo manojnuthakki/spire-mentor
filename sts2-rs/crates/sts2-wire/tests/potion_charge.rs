@@ -13,7 +13,8 @@ use sts2_wire::state_from_json_str;
 fn with_potion() -> CombatState {
     let mut v: Value = serde_json::from_str(
         &std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fair_root_draw.json"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/fair_root_draw.json"),
         )
         .unwrap(),
     )
@@ -23,17 +24,29 @@ fn with_potion() -> CombatState {
 }
 
 fn params(charge: Option<f32>) -> RecommendParams {
-    let mut p = RecommendParams::from_config(&json!({"sims": 400, "seed": 3, "threads": 1}), "test").unwrap();
+    let mut p =
+        RecommendParams::from_config(&json!({"sims": 400, "seed": 3, "threads": 1}), "test")
+            .unwrap();
     p.potion_charge_hp = charge.map(|c| [c; 8]);
     p
 }
 
 fn drink(out: &Value) -> &Value {
-    out["actions"].as_array().unwrap().iter().find(|a| a["action"]["action"] == "drink_potion").expect("a drink")
+    out["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["action"]["action"] == "drink_potion")
+        .expect("a drink")
 }
 
 fn best(out: &Value) -> String {
-    let a = out["actions"].as_array().unwrap().iter().find(|a| a["is_best"] == true).unwrap();
+    let a = out["actions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|a| a["is_best"] == true)
+        .unwrap();
     a["action"]["action"].as_str().unwrap().to_string()
 }
 
@@ -41,7 +54,14 @@ fn best(out: &Value) -> String {
 fn no_charge_leaves_the_output_unchanged() {
     let state = with_potion();
     let a = recommend_value(&state, &params(None), true);
-    let b = recommend_value(&state, &RecommendParams { potion_charge_hp: None, ..params(None) }, true);
+    let b = recommend_value(
+        &state,
+        &RecommendParams {
+            potion_charge_hp: None,
+            ..params(None)
+        },
+        true,
+    );
     assert_eq!(a, b);
     assert!(a.get("potion_charge_hp").is_none());
 }
@@ -57,13 +77,29 @@ fn a_charge_lowers_the_drinks_q_by_exactly_the_charge_and_changes_the_pick() {
     assert_eq!(best(&bonus), "drink_potion");
     let q = |o: &Value| drink(o)["q"].as_f64().unwrap();
     let c = f64::from(victory_hp_equiv_to_q(1000.0));
-    assert!((q(&raw) - c - q(&charged)).abs() < 1e-4, "{} {} {}", q(&raw), c, q(&charged));
+    assert!(
+        (q(&raw) - c - q(&charged)).abs() < 1e-4,
+        "{} {} {}",
+        q(&raw),
+        c,
+        q(&charged)
+    );
     assert_eq!(drink(&raw)["visits"], drink(&charged)["visits"]); // the search itself is the same
     assert_eq!(charged["potion_charge_hp"], json!(vec![1000.0_f32; 8]));
     // Every other action's numbers are untouched.
     let others = |o: &Value| {
-        o["actions"].as_array().unwrap().iter().filter(|a| a["action"]["action"] != "drink_potion")
-            .map(|a| (a["action"].to_string(), a["q"].to_string(), a["visits"].to_string()))
+        o["actions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|a| a["action"]["action"] != "drink_potion")
+            .map(|a| {
+                (
+                    a["action"].to_string(),
+                    a["q"].to_string(),
+                    a["visits"].to_string(),
+                )
+            })
             .collect::<std::collections::BTreeSet<_>>()
     };
     assert_eq!(others(&raw), others(&charged));

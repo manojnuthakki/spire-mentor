@@ -497,7 +497,11 @@ pub fn card_value(card: &sts2_core::cards::Card) -> Value {
     set(&mut d, "base_cost", i32::from(card.cost));
     set(&mut d, "base_damage", card.base_damage);
     set(&mut d, "base_block", card.base_block);
-    set(&mut d, "type", super::names::card_type_python_name(card.card_type));
+    set(
+        &mut d,
+        "type",
+        super::names::card_type_python_name(card.card_type),
+    );
     let mut flags: Vec<&str> = Vec::new();
     if ce::card_exhausts_inst(card) {
         flags.push("exhaust");
@@ -525,7 +529,11 @@ pub fn card_value(card: &sts2_core::cards::Card) -> Value {
         set(&mut d, "replay_count", card.base_replay_count);
     }
     if let Some(aff) = card.affliction {
-        set(&mut d, "affliction", crate::state_dict::card_affliction_kind_wire_name(aff.kind));
+        set(
+            &mut d,
+            "affliction",
+            crate::state_dict::card_affliction_kind_wire_name(aff.kind),
+        );
         set(&mut d, "affliction_stacks", aff.stacks);
     }
     Value::Object(d)
@@ -1025,7 +1033,11 @@ pub fn reward_screen(rm: &RunManager) -> Value {
                     }
                     ScreenReward::Relic { relic } => {
                         set(&mut d, "type", "relic");
-                        set(&mut d, "id", format!("RELIC.{}", relic.relic_id.to_python_name()));
+                        set(
+                            &mut d,
+                            "id",
+                            format!("RELIC.{}", relic.relic_id.to_python_name()),
+                        );
                     }
                     ScreenReward::Card { options, upgraded } => {
                         set(&mut d, "type", "card");
@@ -1035,7 +1047,11 @@ pub fn reward_screen(rm: &RunManager) -> Value {
                             .map(|(i, cid)| {
                                 let mut o = obj();
                                 set(&mut o, "id", format!("CARD.{}", cid.to_python_name()));
-                                set(&mut o, "upgraded", upgraded.get(i).copied().unwrap_or(false));
+                                set(
+                                    &mut o,
+                                    "upgraded",
+                                    upgraded.get(i).copied().unwrap_or(false),
+                                );
                                 Value::Object(o)
                             })
                             .collect();
@@ -1433,7 +1449,14 @@ mod tests {
         assert_eq!(rooms.len(), rm.run_state.acts.len());
         assert_eq!(
             keys(&rooms[0]),
-            ["ancient", "boss", "elite", "events_shuffled", "normal", "second_boss"]
+            [
+                "ancient",
+                "boss",
+                "elite",
+                "events_shuffled",
+                "normal",
+                "second_boss"
+            ]
         );
         assert_eq!(rooms[0]["second_boss"], Value::Null);
         assert_eq!(rooms[0]["ancient"], "Neow");

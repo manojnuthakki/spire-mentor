@@ -5,7 +5,9 @@
 
 use serde_json::{json, Value};
 use sts2_core::{legal_actions, Action, CombatState};
-use sts2_wire::emit::mcts::{fair_root_samples, recommend_value, RecommendParams, FAIR_ROOT_SAMPLES};
+use sts2_wire::emit::mcts::{
+    fair_root_samples, recommend_value, RecommendParams, FAIR_ROOT_SAMPLES,
+};
 use sts2_wire::state_from_json_str;
 
 fn fixture() -> Value {
@@ -13,7 +15,8 @@ fn fixture() -> Value {
     // order: concrete, not a belief), an enemy attacking for 25 at 20 HP.
     serde_json::from_str(
         &std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fair_root_draw.json"),
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/fair_root_draw.json"),
         )
         .unwrap(),
     )
@@ -38,7 +41,13 @@ fn q(v: &Value, sims: u32, hidden: &str) -> Vec<(String, f64, u64)> {
         .as_array()
         .unwrap()
         .iter()
-        .map(|a| (a["action"].to_string(), a["q"].as_f64().unwrap(), a["visits"].as_u64().unwrap()))
+        .map(|a| {
+            (
+                a["action"].to_string(),
+                a["q"].as_f64().unwrap(),
+                a["visits"].as_u64().unwrap(),
+            )
+        })
         .collect();
     rows.sort_by(|a, b| a.0.cmp(&b.0));
     rows
@@ -53,7 +62,10 @@ fn first_play(state: &CombatState) -> Action {
 
 fn drew_bludgeon(post: &CombatState) -> bool {
     post.player.hand.iter().any(|u| {
-        format!("{:?}", post.cards.iter().find(|c| c.uid == *u).unwrap().card_id) == "Bludgeon"
+        format!(
+            "{:?}",
+            post.cards.iter().find(|c| c.uid == *u).unwrap().card_id
+        ) == "Bludgeon"
     })
 }
 
@@ -75,12 +87,19 @@ fn a_root_draw_is_sampled_whatever_the_hidden_order() {
         for seed in 0..40 {
             let samples = fair_root_samples(&state, &action, &params(1600, seed, "beliefdraw"));
             assert_eq!(samples.len() as u32, FAIR_ROOT_SAMPLES);
-            assert_eq!(samples.iter().map(|s| s.2).sum::<u32>(), 1600, "the budget split whole");
+            assert_eq!(
+                samples.iter().map(|s| s.2).sum::<u32>(),
+                1600,
+                "the budget split whole"
+            );
             bludgeon += samples.iter().filter(|s| drew_bludgeon(&s.0)).count() as u32;
             n += samples.len() as u32;
         }
         let f = f64::from(bludgeon) / f64::from(n);
-        assert!((f - 0.5).abs() < 0.08, "reverse={reverse}: Bludgeon drawn in {f:.3} of the samples");
+        assert!(
+            (f - 0.5).abs() < 0.08,
+            "reverse={reverse}: Bludgeon drawn in {f:.3} of the samples"
+        );
     }
 }
 
@@ -119,10 +138,16 @@ fn boomerang_at(hp: u32) -> Value {
 fn fair_values_dont_depend_on_the_states_dice() {
     let a = boomerang_at(20);
     let base = q(&a, 1600, "beliefdraw");
-    for n in 1..=6 {  // several cursors: one of them rolls another hit pattern (8 patterns of 3 hits)
+    for n in 1..=6 {
+        // several cursors: one of them rolls another hit pattern (8 patterns of 3 hits)
         let mut b = a.clone();
-        b["rng"]["counters"] = json!({"shuffle": n, "monster_ai": n, "combat_targets": n, "niche": n});
-        assert_eq!(base, q(&b, 1600, "beliefdraw"), "combat stream cursors at {n}");
+        b["rng"]["counters"] =
+            json!({"shuffle": n, "monster_ai": n, "combat_targets": n, "niche": n});
+        assert_eq!(
+            base,
+            q(&b, 1600, "beliefdraw"),
+            "combat stream cursors at {n}"
+        );
     }
 }
 
@@ -138,9 +163,14 @@ fn root_samples_that_end_the_combat_weigh_their_share() {
     let state = build(&v);
     let action = first_play(&state);
     let samples = fair_root_samples(&state, &action, &params(1600, 5, "beliefdraw"));
-    assert!(samples.iter().all(|s| legal_actions(&s.0).is_empty() && s.0.player_won));
+    assert!(samples
+        .iter()
+        .all(|s| legal_actions(&s.0).is_empty() && s.0.player_won));
     let rows = q(&v, 1600, "beliefdraw");
-    let (_, value, visits) = rows.iter().find(|r| r.0.contains("\"card_index\":0")).unwrap();
+    let (_, value, visits) = rows
+        .iter()
+        .find(|r| r.0.contains("\"card_index\":0"))
+        .unwrap();
     assert_eq!(*visits, 1600, "every sample's share of the budget");
     assert!(*value > 0.5, "a win: {value}");
 }
@@ -157,12 +187,18 @@ fn other_modes_apply_the_action_once() {
     assert!(drew_bludgeon(&samples[0].0), "the true top card");
 }
 
-
 fn played(post: &CombatState, id: &str) -> bool {
     // The card Havoc played is exhausted (forceExhaust) or, if it opened a choice, in the play pile.
-    post.player.exhaust.iter().chain(post.player.play.iter()).any(|u| {
-        format!("{:?}", post.cards.iter().find(|c| c.uid == *u).unwrap().card_id) == id
-    })
+    post.player
+        .exhaust
+        .iter()
+        .chain(post.player.play.iter())
+        .any(|u| {
+            format!(
+                "{:?}",
+                post.cards.iter().find(|c| c.uid == *u).unwrap().card_id
+            ) == id
+        })
 }
 
 /// Havoc plays the top card of the draw pile, reading the pile's physical top
@@ -192,7 +228,10 @@ fn a_root_top_card_autoplay_is_sampled() {
     }
     assert_eq!(armaments + pact, n, "every sample played one of the two");
     let f = f64::from(armaments) / f64::from(n);
-    assert!((f - 0.5).abs() < 0.08, "Armaments played in {f:.3} of {n} samples");
+    assert!(
+        (f - 0.5).abs() < 0.08,
+        "Armaments played in {f:.3} of {n} samples"
+    );
 }
 
 /// The samples shuffle only the unknown middle: a card known on top stays on
@@ -218,7 +257,11 @@ fn root_samples_keep_the_known_top_and_bottom_cards() {
             assert!(played(&post, "BurningPact"), "the known top card is played");
             let last = *post.player.draw.last().unwrap();
             let card = post.cards.iter().find(|c| c.uid == last).unwrap();
-            assert_eq!(format!("{:?}", card.card_id), "Bash", "the known bottom card stays at the bottom");
+            assert_eq!(
+                format!("{:?}", card.card_id),
+                "Bash",
+                "the known bottom card stays at the bottom"
+            );
         }
     }
 }

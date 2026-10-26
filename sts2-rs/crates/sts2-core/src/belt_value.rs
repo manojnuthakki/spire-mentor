@@ -30,8 +30,13 @@ pub struct BeltValue {
 
 impl PartialEq for BeltValue {
     fn eq(&self, other: &Self) -> bool {
-        let bits = |t: &[(Vec<PotionKind>, f32)]| t.iter().map(|(k, v)| (k.clone(), v.to_bits())).collect::<Vec<_>>();
-        let fb = |t: &[(PotionKind, f32)]| t.iter().map(|(k, v)| (*k, v.to_bits())).collect::<Vec<_>>();
+        let bits = |t: &[(Vec<PotionKind>, f32)]| {
+            t.iter()
+                .map(|(k, v)| (k.clone(), v.to_bits()))
+                .collect::<Vec<_>>()
+        };
+        let fb =
+            |t: &[(PotionKind, f32)]| t.iter().map(|(k, v)| (*k, v.to_bits())).collect::<Vec<_>>();
         self.base == other.base
             && bits(&self.table) == bits(&other.table)
             && fb(&self.fallback) == fb(&other.fallback)
@@ -92,7 +97,8 @@ impl BeltValue {
         default: f32,
     ) -> Result<Self, String> {
         let base = sorted(base);
-        let mut table: Vec<(Vec<PotionKind>, f32)> = table.into_iter().map(|(k, v)| (sorted(k), v)).collect();
+        let mut table: Vec<(Vec<PotionKind>, f32)> =
+            table.into_iter().map(|(k, v)| (sorted(k), v)).collect();
         table.sort_by(|a, b| a.0.cmp(&b.0)); // keys are Vecs: compared, not copied
         let mut wanted = sub_multisets(&base);
         wanted.sort();
@@ -105,14 +111,23 @@ impl BeltValue {
                 keys.len()
             ));
         }
-        let values = table.iter().map(|(_, v)| *v).chain(fallback.iter().map(|(_, v)| *v)).chain([default]);
+        let values = table
+            .iter()
+            .map(|(_, v)| *v)
+            .chain(fallback.iter().map(|(_, v)| *v))
+            .chain([default]);
         if values.into_iter().any(|v| !v.is_finite()) {
             return Err("belt value: every value must be finite".to_string());
         }
         let mut fallback = fallback;
         fallback.sort_by_key(|f| f.0);
         fallback.dedup_by(|a, b| a.0 == b.0);
-        Ok(Self { base, table, fallback, default })
+        Ok(Self {
+            base,
+            table,
+            fallback,
+            default,
+        })
     }
 
     /// The belt the table is over.
@@ -175,14 +190,35 @@ mod tests {
     fn every_sub_multiset_once() {
         let mut s = sub_multisets(&sorted(vec![F, F, B]));
         s.sort();
-        assert_eq!(s, vec![vec![], vec![F], vec![F, F], vec![B], vec![F, B], vec![F, F, B]].into_iter().map(sorted).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>());
+        assert_eq!(
+            s,
+            vec![
+                vec![],
+                vec![F],
+                vec![F, F],
+                vec![B],
+                vec![F, B],
+                vec![F, F, B]
+            ]
+            .into_iter()
+            .map(sorted)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+        );
     }
 
     #[test]
+    #[allow(clippy::float_cmp)] // exact-by-construction: sums of small integers.
     fn a_belt_is_valued_by_what_remains_of_the_base_plus_the_fallback() {
         let v = BeltValue::new(
             vec![F, B],
-            vec![(vec![], 0.0), (vec![F], 5.0), (vec![B], 3.0), (vec![B, F], 6.0)],
+            vec![
+                (vec![], 0.0),
+                (vec![F], 5.0),
+                (vec![B], 3.0),
+                (vec![B, F], 6.0),
+            ],
             vec![(F, 7.0)],
             2.0,
         )
@@ -197,8 +233,26 @@ mod tests {
     #[test]
     fn an_incomplete_or_infinite_table_is_refused() {
         assert!(BeltValue::new(vec![F], vec![(vec![F], 1.0)], vec![], 0.0).is_err());
-        assert!(BeltValue::new(vec![F], vec![(vec![], 0.0), (vec![F], f32::NAN)], vec![], 0.0).is_err());
-        assert!(BeltValue::new(vec![F], vec![(vec![], 0.0), (vec![F], 1.0), (vec![B], 1.0)], vec![], 0.0).is_err());
-        assert!(BeltValue::new(vec![F], vec![(vec![], 0.0), (vec![F], 1.0)], vec![], f32::INFINITY).is_err());
+        assert!(BeltValue::new(
+            vec![F],
+            vec![(vec![], 0.0), (vec![F], f32::NAN)],
+            vec![],
+            0.0
+        )
+        .is_err());
+        assert!(BeltValue::new(
+            vec![F],
+            vec![(vec![], 0.0), (vec![F], 1.0), (vec![B], 1.0)],
+            vec![],
+            0.0
+        )
+        .is_err());
+        assert!(BeltValue::new(
+            vec![F],
+            vec![(vec![], 0.0), (vec![F], 1.0)],
+            vec![],
+            f32::INFINITY
+        )
+        .is_err());
     }
 }
