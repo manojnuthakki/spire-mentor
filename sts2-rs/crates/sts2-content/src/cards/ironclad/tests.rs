@@ -4421,3 +4421,34 @@ fn ench_onplay_order_swift_burning_pact_selects_pre_draw_hand() {
         "Swift-used bit set after the play finished"
     );
 }
+
+/// C# `CardCmd.Exhaust` (`CardCmd.cs:239`) does nothing once the combat is
+/// over or ending, so a card Cinder exhausts after its hit kills the last
+/// enemy fires no `AfterCardExhausted`: Joss Paper keeps its count (seed
+/// GVPEJ1K5D1 at A5: 4 on the game, the engine counted a fifth and wrapped
+/// to 0; fidelity.md S2's rest).
+#[test]
+fn cinder_killing_blow_exhausts_nothing_joss_paper_counts() {
+    crate::relics::dispatch::ensure_installed();
+    let (mut state, enemy) = fresh_state_with_enemy(5);
+    state.relics.push(sts2_core::Relic {
+        id: NonZeroU32::new(1).expect("non-zero"),
+        kind: sts2_core::RelicKind::JossPaper,
+        counter: 4,
+        is_wax: false,
+        is_melted: false,
+    });
+    let _ = push_play_card(&mut state, CardId::Cinder, 18, 0);
+    let _ = push_hand_card(&mut state, CardId::StrikeIronclad);
+    let _ = play_cinder(&mut state, Some(enemy));
+    let counter = state
+        .relics
+        .iter()
+        .find(|r| r.kind == sts2_core::RelicKind::JossPaper)
+        .map(|r| r.counter);
+    assert_eq!(
+        counter,
+        Some(4),
+        "no exhaust is counted once the fight is ending"
+    );
+}

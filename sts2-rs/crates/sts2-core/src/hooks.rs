@@ -15144,6 +15144,12 @@ pub fn dispatch_after_card_exhausted(
     ctx: &CardCtx,
     caused_by_ethereal: bool,
 ) {
+    // C# `CardCmd.Exhaust` (`CardCmd.cs:239`) is a no-op once the combat is
+    // over or ending: a card exhausted after the killing blow (Cinder's
+    // random exhaust) fires no `AfterCardExhausted` (sts2-agent fork).
+    if crate::combat_loop::combat_is_ending(state) {
+        return;
+    }
     // Bead `sts2-rs-xsvp9`: bump the per-turn exhaust counter at the
     // single dispatch site every exhaust path funnels through
     // (`exhaust_card_uid`, `exhaust_from_draw_pile`, the in-play
@@ -23933,6 +23939,9 @@ mod tests {
     #[test]
     fn feel_no_pain_grants_block_on_exhaust() {
         let (mut state, _uid) = state_with_player_power(PowerKind::FeelNoPain, 3);
+        // A living player: a dead one makes the combat "ending", where C# fires no
+        // `AfterCardExhausted` (`CardCmd.cs:239`).
+        state.player.current_hp = 80;
         let starting_block = state.player.block;
         dispatch_after_card_exhausted(&mut state, &CardCtx::default(), false);
         assert_eq!(
@@ -23950,6 +23959,9 @@ mod tests {
     fn dark_embrace_draws_on_exhaust() {
         use crate::cards::{CardId, CardType, TargetType};
         let (mut state, _uid) = state_with_player_power(PowerKind::DarkEmbrace, 1);
+        // A living player: a dead one makes the combat "ending", where C# fires no
+        // `AfterCardExhausted` (`CardCmd.cs:239`).
+        state.player.current_hp = 80;
 
         // Seed one card in the draw pile so the draw has something to
         // pop. (CardId::Strike is fine — the body only needs *something*
@@ -24000,6 +24012,9 @@ mod tests {
     fn dark_embrace_defers_ethereal_exhaust_to_turn_end() {
         use crate::cards::{CardId, CardType, TargetType};
         let (mut state, de_uid) = state_with_player_power(PowerKind::DarkEmbrace, 1);
+        // A living player: a dead one makes the combat "ending", where C# fires no
+        // `AfterCardExhausted` (`CardCmd.cs:239`).
+        state.player.current_hp = 80;
 
         // Seed several cards in the draw pile so each draw has something
         // to pop.
@@ -24085,6 +24100,9 @@ mod tests {
     #[test]
     fn feel_no_pain_gains_block_on_ethereal_exhaust() {
         let (mut state, _uid) = state_with_player_power(PowerKind::FeelNoPain, 3);
+        // A living player: a dead one makes the combat "ending", where C# fires no
+        // `AfterCardExhausted` (`CardCmd.cs:239`).
+        state.player.current_hp = 80;
         let block_before = state.player.block;
         // Ethereal-caused exhaust still grants block.
         dispatch_after_card_exhausted(&mut state, &CardCtx::default(), true);
@@ -24264,6 +24282,12 @@ mod tests {
         use crate::cards::{CardId, CardType, TargetType};
 
         let mut state = CombatState::default();
+
+        // A living player: a dead one makes the combat "ending", where C# fires no
+
+        // `AfterCardExhausted` (`CardCmd.cs:239`).
+
+        state.player.current_hp = 80;
         // FeelNoPain(2)
         let fnp_uid = power_uid(1);
         state.powers.push(Power {

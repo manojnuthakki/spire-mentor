@@ -6674,6 +6674,12 @@ mod tests {
             rng: crate::dotnet_rng::Rng::new(0_i32),
             ..Default::default()
         };
+
+        // A living player: a dead one makes the combat "ending", where C# fires no
+
+        // `AfterCardExhausted` (`CardCmd.cs:239`).
+
+        state.player.current_hp = 80;
         state.init_player_creature();
         // Give player FeelNoPain(4) so the hooks-bus post-walk reaction
         // (block gain) is observable; this proves the hooks bus fired

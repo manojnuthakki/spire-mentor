@@ -18767,6 +18767,12 @@ mod tests {
         register_after_card_exhausted(RelicId::BlackBlood, h as AfterCardExhaustedFn);
 
         let mut state = CombatState::default();
+
+        // A living player: a dead one makes the combat "ending", where C# fires no
+
+        // `AfterCardExhausted` (`CardCmd.cs:239`).
+
+        state.player.current_hp = 80;
         state.init_player_creature();
         // Give the player a FeelNoPain (amount=4): the hooks-bus
         // post-walk reaction in `dispatch_after_card_exhausted` will

@@ -2720,7 +2720,10 @@ pub fn dispatch_before_card_played(state: &mut CombatState, ctx: &CardEventCtx) 
 
 /// Dispatch `after_card_exhausted` to every registered listener.
 pub fn dispatch_after_card_exhausted(state: &mut CombatState, ctx: &CardEventCtx) -> EffectResult {
-    if is_empty_after_card_exhausted() {
+    // C# `CardCmd.Exhaust` (`CardCmd.cs:239`) is a no-op once the combat is
+    // over or ending: no relic sees an exhaust after the killing blow (Joss
+    // Paper's count; sts2-agent fork).
+    if is_empty_after_card_exhausted() || crate::combat_loop::combat_is_ending(state) {
         return EffectResult::NotImplemented;
     }
     walk_guarded_event(
