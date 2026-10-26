@@ -3146,6 +3146,9 @@ pub fn move_card_to_pile(
 /// hand card) and any future event/relic that needs to surgically
 /// exhaust a non-top-of-draw card.
 pub fn exhaust_card_uid(state: &mut CombatState, uid: CardUid) -> bool {
+    if !crate::combat_loop::exhaust_may_begin(state) {
+        return false;
+    }
     let Some(src) = find_card_pile(state, uid) else {
         return false;
     };

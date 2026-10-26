@@ -7785,6 +7785,9 @@ impl CombatState {
     /// for both the top-card path and the skip-Innate path
     /// ([`Self::exhaust_top_from_draw_skipping_innate`]).
     fn exhaust_one_from_draw_at(&mut self, idx: usize) {
+        if !crate::combat_loop::exhaust_may_begin(self) {
+            return;
+        }
         let uid = self.player.draw.remove(idx);
         self.player.exhaust.push(uid);
 
@@ -18696,6 +18699,9 @@ mod tests {
     #[test]
     fn exhaust_from_draw_pile_pops_top_count_into_exhaust() {
         let mut state = CombatState::default();
+        // A living player: an exhaust doesn't begin once the combat is ending
+        // (`exhaust_may_begin`), and a dead player is ending.
+        state.player.current_hp = 80;
         let a = push_draw_test_card(&mut state);
         let b = push_draw_test_card(&mut state);
         let c = push_draw_test_card(&mut state);
@@ -18708,6 +18714,9 @@ mod tests {
     #[test]
     fn exhaust_from_draw_pile_reshuffles_discard_when_draw_empty() {
         let mut state = CombatState::default();
+        // A living player: an exhaust doesn't begin once the combat is ending
+        // (`exhaust_may_begin`), and a dead player is ending.
+        state.player.current_hp = 80;
         let a = push_draw_test_card(&mut state);
         // Move `a` to discard so draw is empty.
         state.player.draw.clear();

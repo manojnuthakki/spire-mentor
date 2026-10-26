@@ -2532,6 +2532,9 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
         })
         .collect();
     for uid in ethereal {
+        if !exhaust_may_begin(state) {
+            break;
+        }
         // Move from hand -> exhaust. The unwrap is safe because we
         // collected the uid from the hand pile in this same scope
         // and no intervening mutation has occurred.
@@ -5795,6 +5798,17 @@ pub fn combat_is_ending(state: &CombatState) -> bool {
     any_primary_present && alive_primary == 0 && !adaptable_corpse
 }
 
+/// Whether an exhaust may begin: C# `CardCmd.Exhaust` (`CardCmd.cs:239`) does
+/// nothing once the combat is over or ending, and once begun it moves the card
+/// and walks every `AfterCardExhausted` listener (`Hook.cs`) to the end, even
+/// if a reaction ends the combat meanwhile (Dark Embrace drawing a Hellraiser
+/// kill). Every exhaust path asks this ONCE, before its first mutation or bus,
+/// and then fires both buses unconditionally (sts2-agent fork).
+#[must_use]
+pub fn exhaust_may_begin(state: &CombatState) -> bool {
+    !combat_is_ending(state)
+}
+
 /// [`apply`]: crate::apply
 pub fn check_combat_end(state: &mut CombatState) -> StepResult {
     // Idempotency: a second invocation on an already-resolved combat
@@ -6304,6 +6318,11 @@ fn fire_after_card_exhausted(
     card_tags: cards::CardTags,
     card_type: cards::CardType,
 ) {
+    // The callers have moved the card already; a pile move can't end the
+    // combat, so this is the exhaust's one entry check (`exhaust_may_begin`).
+    if !exhaust_may_begin(state) {
+        return;
+    }
     let exhaust_ctx = crate::relic_effects::CardEventCtx {
         card_id,
         card_uid: Some(card_uid),
@@ -13163,6 +13182,9 @@ mod tests {
         };
         state.phase = CombatPhase::PlayerEndTurnPhaseOne;
         state.round = 1;
+        // A living player: an exhaust doesn't begin once the combat is ending
+        // (`exhaust_may_begin`), and a dead player is ending.
+        state.player.current_hp = 80;
         // Two plain (non-ethereal) Strike cards in hand.
         for i in 1..=2u32 {
             let uid = CardUid::new(i).expect("non-zero");
@@ -13350,6 +13372,9 @@ mod tests {
         };
         state.phase = CombatPhase::PlayerEndTurnPhaseOne;
         state.round = 1;
+        // A living player: an exhaust doesn't begin once the combat is ending
+        // (`exhaust_may_begin`), and a dead player is ending.
+        state.player.current_hp = 80;
         let mut uids = Vec::with_capacity(entries.len());
         for (idx, (card_id, is_ethereal)) in entries.iter().enumerate() {
             let uid =

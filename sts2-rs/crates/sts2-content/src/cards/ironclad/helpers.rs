@@ -200,7 +200,7 @@ pub(crate) fn enemy_vulnerable(state: &CombatState, target: CreatureUid) -> i32 
 /// [`sts2_core::combat_loop`]; used by FiendFire / Thrash which exhaust
 /// hand cards mid-play. No-op if `uid` is not in hand.
 pub(crate) fn exhaust_hand_card(state: &mut CombatState, uid: sts2_core::CardUid) {
-    if !state.player.hand.contains(&uid) {
+    if !state.player.hand.contains(&uid) || !sts2_core::combat_loop::exhaust_may_begin(state) {
         return;
     }
     let idx = uid.0.get() as usize - 1;

@@ -4452,3 +4452,55 @@ fn cinder_killing_blow_exhausts_nothing_joss_paper_counts() {
         "no exhaust is counted once the fight is ending"
     );
 }
+
+/// The other half of the exhaust rule (C# `CardCmd.Exhaust`, `CardCmd.cs:239`;
+/// `Hook.AfterCardExhausted`): an exhaust that began while the combat was live
+/// notifies every listener, even if one listener's reaction ends the combat.
+/// Dark Embrace (the powers bus, first) draws a Strike that Hellraiser
+/// auto-plays into the last enemy; Joss Paper (the relics bus, after) still
+/// counts the exhaust. The entry check is asked once, not per bus.
+#[test]
+fn an_exhaust_whose_reaction_kills_still_reaches_joss_paper() {
+    install_pool();
+    crate::cards::dispatch::ensure_installed();
+    crate::relics::dispatch::ensure_installed();
+    let (mut state, enemy) = fresh_state_with_enemy(5);
+    state.init_player_creature();
+    state.relics.push(sts2_core::Relic {
+        id: NonZeroU32::new(1).expect("non-zero"),
+        kind: sts2_core::RelicKind::JossPaper,
+        counter: 0,
+        is_wax: false,
+        is_melted: false,
+    });
+    for power in [CardId::HellraiserCard, CardId::DarkEmbraceCard] {
+        let _ = push_play_card(&mut state, power, 0, 0);
+        let _ = dispatch(&mut state, power, None);
+    }
+    assert_eq!(state.player_power_amount(PowerKind::DarkEmbrace), 1);
+    push_draw_tail(&mut state, CardId::StrikeIronclad, CardType::Attack, 6);
+    let defend = push_hand_card(&mut state, CardId::DefendIronclad);
+    assert!(sts2_core::card_effects::exhaust_card_uid(
+        &mut state, defend
+    ));
+    let enemy_hp = state
+        .creatures
+        .iter()
+        .find(|c| CreatureUid(c.id) == enemy)
+        .map(|c| c.current_hp);
+    assert_eq!(
+        enemy_hp,
+        Some(0),
+        "the drawn Strike was auto-played into the enemy"
+    );
+    let counter = state
+        .relics
+        .iter()
+        .find(|r| r.kind == sts2_core::RelicKind::JossPaper)
+        .map(|r| r.counter);
+    assert_eq!(
+        counter,
+        Some(1),
+        "the exhaust began live: Joss Paper counts it"
+    );
+}

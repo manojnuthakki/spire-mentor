@@ -309,9 +309,6 @@ fn after_card_exhausted_register_and_dispatch_roundtrip() {
         h_after_card_exhausted as AfterCardExhaustedFn,
     );
     let mut state = CombatState::default();
-    // A living player: a dead one makes the combat "ending", where C# fires no
-    // `AfterCardExhausted` (`CardCmd.cs:239`).
-    state.player.current_hp = 80;
     let ctx = fake_ctx_card();
     let result = dispatch_after_card_exhausted(&mut state, &ctx);
     assert_eq!(result, EffectResult::Resolved);

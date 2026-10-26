@@ -1363,7 +1363,8 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
     // simply removed (PileType.None — the dangling `state.cards` instance
     // is unreferenced and harmless).
     let corruption_exhausts_dupe = dupe_card_type == sts2_core::cards::CardType::Skill
-        && state.player_power_amount(sts2_core::PowerKind::Corruption) > 0;
+        && state.player_power_amount(sts2_core::PowerKind::Corruption) > 0
+        && sts2_core::combat_loop::exhaust_may_begin(state);
     if corruption_exhausts_dupe {
         let _ = sts2_core::cards::move_card(
             &mut state.player,
