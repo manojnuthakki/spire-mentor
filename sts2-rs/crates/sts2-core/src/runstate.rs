@@ -1573,6 +1573,15 @@ pub struct RunState {
     /// never sees a discard. Default `false`.
     pub interactive_potions: bool,
 
+    /// C# `Player.CanRemovePotions == false`: the belt is locked (no drink, no
+    /// discard). The Future of Potions and Stone of All Time set it in
+    /// `BeforeEventStarted` and clear it in `OnEventFinished`
+    /// (`TheFutureOfPotions.cs:90-99`, `StoneOfAllTime.cs:64-73`). Set when
+    /// either event's room is entered, cleared by the next room's entry; the
+    /// run manager reads it as locked until the run is back on the map
+    /// ([`crate::run_manager::RunManager::potions_locked`]). sts2-agent fork.
+    pub potions_locked: bool,
+
     /// Set on first map-generation, used by Python to guard re-rolling
     /// the layout. Mirrors Python `RunState._rooms_generated: bool`
     /// (`run_state.py:1397`). Currently a flag holder — the actual
@@ -1882,6 +1891,7 @@ impl Default for RunState {
             wax_relics: std::collections::BTreeSet::new(),
             melted_relics: std::collections::BTreeSet::new(),
             current_event: None,
+            potions_locked: false,
             event_state: crate::events::MultiPageEventState::default(),
             event_combat: None,
             neow_offers: None,
@@ -2411,6 +2421,9 @@ impl RunState {
     /// type).
     pub fn enter_room(&mut self, room: Room) {
         let room_type = room.room_type;
+        // A new room ends any event's belt lock (`enter_event_room` sets it
+        // after this for the two events that lock it).
+        self.potions_locked = false;
         // Bead `sts2-rs-2mjei`: when the room carries a map-coord +
         // node-type (i.e. was constructed via `Room::at`), auto-bump
         // the map-traversal trackers — `visited_map_coords`,
@@ -2473,6 +2486,11 @@ impl RunState {
             _ => Room::new(RoomType::Event),
         };
         self.enter_room(room);
+        // `BeforeEventStarted`: `Owner.CanRemovePotions = false`.
+        self.potions_locked = matches!(
+            event_id,
+            crate::events::EventId::TheFutureOfPotions | crate::events::EventId::StoneOfAllTime
+        );
     }
 
     /// Roll the run-start Neow offers if not already cached. Idempotent:

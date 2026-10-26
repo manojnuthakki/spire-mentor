@@ -628,6 +628,13 @@ impl PyRunManager {
         self.inner.card_offer_can_skip()
     }
 
+    /// Whether the belt is locked (sts2-agent fork; C#
+    /// `Player.CanRemovePotions == false`): during The Future of Potions and
+    /// Stone of All Time, no potion can be drunk or discarded.
+    fn potions_locked(&self) -> bool {
+        self.inner.potions_locked()
+    }
+
     /// Card ids (PascalCase `Debug` form, e.g. `"Anger"`) of the
     /// upgradeable cards offered by an open Smith rest-site choice, in the
     /// order a `SmithCard{idx}` action indexes them. Empty when no

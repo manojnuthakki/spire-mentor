@@ -1263,7 +1263,7 @@ impl RunManager {
     /// drink here. Combat drinks come from the combat's own legal actions.
     /// sts2-agent fork.
     fn push_potion_actions(&self, v: &mut Vec<RunAction>) {
-        if !self.run_state.interactive_potions || !self.belt_shown() {
+        if !self.run_state.interactive_potions || !self.belt_shown() || self.potions_locked() {
             return;
         }
         if self.phase == Phase::Combat {
@@ -4851,6 +4851,15 @@ impl RunManager {
         self.card_offer_choose_screen
     }
 
+    /// Whether the belt is locked (C# `Player.CanRemovePotions == false`): from
+    /// The Future of Potions' or Stone of All Time's start until the event is
+    /// done, its reward or deck pick included; back on the map it is free.
+    /// No drink or discard is offered while it is. sts2-agent fork.
+    #[must_use]
+    pub const fn potions_locked(&self) -> bool {
+        self.run_state.potions_locked && !matches!(self.phase, Phase::MapChoice | Phase::RunOver)
+    }
+
     /// Whether the open choose screen may be skipped: `false` for a pick the
     /// game forces (Brain Leech's Share Knowledge grid, `Cancelable = false`),
     /// `true` otherwise. sts2-agent fork.
@@ -5405,6 +5414,57 @@ mod tests {
             vec![PotionKind::BlockPotion, PotionKind::FirePotion]
         );
         assert_eq!(rm.reward_screen(), Some(&[][..]));
+    }
+
+    /// The Future of Potions and Stone of All Time lock the belt from the
+    /// event's start until it finishes (`Player.CanRemovePotions = false` in
+    /// `BeforeEventStarted`, true in `OnEventFinished`): no drink, no
+    /// discard, through The Future of Potions' card reward too. Back on the
+    /// map, or in another event, the belt is free (S13).
+    #[test]
+    fn two_events_lock_the_belt_until_they_finish() {
+        use crate::events::EventId;
+        use crate::potions::PotionKind;
+        let potion_actions = |rm: &RunManager| {
+            rm.get_available_actions()
+                .into_iter()
+                .filter(|a| {
+                    matches!(
+                        a,
+                        RunAction::DiscardPotion { .. } | RunAction::DrinkPotion { .. }
+                    )
+                })
+                .count()
+        };
+        for event in [EventId::TheFutureOfPotions, EventId::StoneOfAllTime] {
+            let mut rm = RunManager::new(0, CharacterId::Ironclad);
+            rm.run_state.interactive_potions = true;
+            rm.run_state.max_potion_slots = 3;
+            rm.run_state.potions = vec![PotionKind::BloodPotion, PotionKind::FirePotion];
+            rm.run_state.enter_event_room(event);
+            rm.set_phase(Phase::Event);
+            assert!(rm.potions_locked(), "{event:?}");
+            assert_eq!(potion_actions(&rm), 0, "{event:?}");
+            assert_eq!(
+                rm.take_action(RunAction::DiscardPotion { slot: 0 }),
+                ActionResult::InvalidForPhase
+            );
+            // The finished page's reward (The Future of Potions' card reward):
+            // still locked until the event is done.
+            let _ = rm.run_state.exit_event_room();
+            rm.set_phase(Phase::CardReward);
+            assert!(rm.potions_locked(), "{event:?}");
+            rm.set_phase(Phase::MapChoice);
+            assert!(!rm.potions_locked(), "{event:?}");
+            assert_eq!(potion_actions(&rm), 3, "{event:?}: one drink, two discards");
+        }
+        let mut rm = RunManager::new(0, CharacterId::Ironclad);
+        rm.run_state.interactive_potions = true;
+        rm.run_state.potions = vec![PotionKind::FirePotion];
+        rm.run_state.enter_event_room(EventId::BrainLeech);
+        rm.set_phase(Phase::Event);
+        assert!(!rm.potions_locked());
+        assert_eq!(potion_actions(&rm), 1);
     }
 
     /// Without the flags nothing changes: no screen actions, no discard.
