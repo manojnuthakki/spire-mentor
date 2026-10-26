@@ -1429,6 +1429,80 @@ mod tests {
     use sts2_core::potions::CharacterId;
     use sts2_core::run_manager::RunManager;
 
+    /// An Ironclad run in a won fight of `room`, holding `relic` with the
+    /// combat-side `counter` the fight left it at (the combat bus has run its
+    /// own `AfterCombatVictory`), resolved through the deployed exit path.
+    fn won_fight_with(
+        relic: sts2_core::RelicId,
+        kind: sts2_core::RelicKind,
+        counter: i32,
+        elite: bool,
+    ) -> RunManager {
+        use sts2_core::runstate::RoomType;
+        crate::relics::dispatch::ensure_installed();
+        let mut rm = new_ironclad_run_manager(0);
+        rm.run_state.relics.push(relic);
+        rm.run_state.relic_counters.insert(relic, counter + 1);
+        let mut combat = sts2_core::CombatState::default();
+        combat.player.current_hp = 80;
+        combat.player.max_hp = 80;
+        combat.is_elite = elite;
+        combat.relics.push(sts2_core::Relic {
+            id: std::num::NonZeroU32::new(1).expect("non-zero"),
+            kind,
+            counter,
+            is_wax: false,
+            is_melted: false,
+        });
+        let room = if elite {
+            RoomType::Elite
+        } else {
+            RoomType::Monster
+        };
+        rm.debug_enter_combat(combat, room);
+        let _ = rm.resolve_combat_fast(0.0, true);
+        rm
+    }
+
+    /// C# `SwordOfStone.AfterCombatVictory` (`SwordOfStone.cs:40-51`): the
+    /// fifth elite replaces it with Sword of Jade (`RelicCmd.Replace`). The
+    /// combat side counts the elites down; the run side now fires its
+    /// victory channel at the combat's exit and replaces the relic once the
+    /// flushed count reaches 0 (S2's rest: the engine never did).
+    #[test]
+    fn sword_of_stone_becomes_sword_of_jade_after_its_fifth_elite() {
+        use sts2_core::{RelicId, RelicKind};
+        let rm = won_fight_with(RelicId::SwordOfStone, RelicKind::SwordOfStone, 0, true);
+        assert!(rm.run_state.relics.contains(&RelicId::SwordOfJade));
+        assert!(!rm.run_state.relics.contains(&RelicId::SwordOfStone));
+        // Four elites in: still Sword of Stone, its count kept.
+        let rm = won_fight_with(RelicId::SwordOfStone, RelicKind::SwordOfStone, 1, true);
+        assert!(rm.run_state.relics.contains(&RelicId::SwordOfStone));
+        assert_eq!(
+            rm.run_state.relic_counters.get(&RelicId::SwordOfStone),
+            Some(&1)
+        );
+    }
+
+    /// The same channel carries War Hammer (`WarHammer.cs:19-31`): an elite
+    /// victory upgrades up to four upgradable deck cards; a monster fight
+    /// none.
+    #[test]
+    fn war_hammer_upgrades_four_cards_after_an_elite() {
+        use sts2_core::{RelicId, RelicKind};
+        let upgraded = |rm: &RunManager| {
+            rm.run_state
+                .master_deck
+                .iter()
+                .filter(|c| c.upgraded)
+                .count()
+        };
+        let rm = won_fight_with(RelicId::WarHammer, RelicKind::WarHammer, 0, true);
+        assert_eq!(upgraded(&rm), 4);
+        let rm = won_fight_with(RelicId::WarHammer, RelicKind::WarHammer, 0, false);
+        assert_eq!(upgraded(&rm), 0);
+    }
+
     /// Guardrail #4 (Addendum 23): the shared run setup that EVERY full-run
     /// driver must call. The bare factory leaves the relic/room pools empty;
     /// `initialize_run_setup` must stock them all — the exact omission that

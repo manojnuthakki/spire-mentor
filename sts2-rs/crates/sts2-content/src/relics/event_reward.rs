@@ -2246,26 +2246,17 @@ fn listener_sword_of_stone(state: &mut CombatState) -> EffectResult {
     EffectResult::Resolved
 }
 
-/// `SwordOfStone::after_combat_victory` — run-side transform arm
-/// (bead `sts2-rs-y8zi4`, jvk3 follow-up). Mirrors the Python
-/// pin's `if self.counter <= 0: owner.run_state.transform_relic(
-/// self, SwordOfJade)` clause at
-/// `sts2-rl-agent@01c094d:sts2_env/relics/event_reward.py`.
+/// `SwordOfStone::after_combat_victory` — run-side transform arm. C#
+/// `SwordOfStone.AfterCombatVictory` (`SwordOfStone.cs:40-51`) counts an
+/// elite and, at the fifth, `RelicCmd.Replace`s itself with Sword of Jade.
 ///
-/// Decrements the RunState-side `SwordOfStone` counter on elite
-/// victory, then transforms into [`RelicId::SwordOfJade`] when the
-/// counter hits zero (`counter == 0`, NOT `counter < 0` — the
-/// Python `<= 0` guard fires on the same decrement that brings the
-/// counter to zero). Idempotent on already-transformed RunStates:
-/// if `SwordOfStone` is no longer present the lookup fails fast
-/// with [`EffectResult::NotImplemented`].
-///
-/// Symmetric counterpart to the combat-side
-/// [`listener_sword_of_stone`] which mutates the CombatState relic
-/// mirror. Both listeners are wired today; the production firing
-/// site for the run-side channel is deferred (the dispatcher in
-/// `combat_loop.rs::step_phase_continue` has no `&mut RunState`
-/// in scope).
+/// The count is the combat side's: [`listener_sword_of_stone`] decrements the
+/// combat relic's down-counter (seeded 5) on each elite victory, and the exit
+/// callback flushes it into `RunState.relic_counters`. This run-side arm
+/// fires after that flush, from `RunManager::exit_combat_and_transition`
+/// (sts2-agent fork), and only reads the count: at 0 it replaces the relic
+/// (decrementing here too would count every elite twice). Idempotent: once
+/// Sword of Stone is gone the ownership check fails fast.
 fn listener_sword_of_stone_run(rs: &mut RunState, ctx: &CombatVictoryRunCtx) -> EffectResult {
     if !ctx.is_elite {
         return EffectResult::NotImplemented;
@@ -2273,30 +2264,15 @@ fn listener_sword_of_stone_run(rs: &mut RunState, ctx: &CombatVictoryRunCtx) -> 
     if !run_owns(rs, RelicId::SwordOfStone) {
         return EffectResult::NotImplemented;
     }
-    // RunState carries relic counters out-of-band on
-    // `RunState.relic_counters` (a BTreeMap, since `RunState.relics`
-    // is just `Vec<RelicId>` — the run-side surface doesn't have the
-    // `Relic` POD's `counter` slot). The seed of 5 mirrors the
-    // combat-side `Relic { counter: 5 }` initialization at obtain
-    // time; the per-elite-victory decrement here keeps the two
-    // representations in lock-step.
-    let counter = rs.relic_counters.entry(RelicId::SwordOfStone).or_insert(5);
-    if *counter <= 0 {
-        // Counter already drained — defensive no-op.
+    let counter = rs
+        .relic_counters
+        .get(&RelicId::SwordOfStone)
+        .copied()
+        .unwrap_or(5);
+    if counter > 0 {
         return EffectResult::NotImplemented;
     }
-    *counter -= 1;
-    let transform_now = *counter == 0;
-    if transform_now {
-        // Mirrors Python `owner.run_state.transform_relic(self,
-        // SwordOfJade)`. `transform_relic` replaces the first matching
-        // id in-place; the resulting [`RelicId::SwordOfJade`] entry
-        // keeps the (now-zero) counter, matching the Python
-        // `transform_relic` post-condition where the new relic instance
-        // starts from default state but the surrounding deck/order is
-        // preserved.
-        let _ = rs.transform_relic(RelicId::SwordOfStone, RelicId::SwordOfJade);
-    }
+    let _ = rs.transform_relic(RelicId::SwordOfStone, RelicId::SwordOfJade);
     EffectResult::Resolved
 }
 
@@ -4465,40 +4441,29 @@ mod tests {
     // end-to-end via the run-side after_combat_victory channel.
     // -----------------------------------------------------------------
 
-    /// End-to-end transform path: 5 elite-victory dispatch cycles
-    /// decrement the run-side counter 5→4→3→2→1→0; the fifth firing
-    /// also swaps `SwordOfStone` for `SwordOfJade` in
-    /// `RunState.relics`. Drives both the combat-side counter mirror
-    /// AND the run-side transform listener together to model the
-    /// production lifecycle (combat→run firing site is still
-    /// deferred; the test stands in for that wiring).
-    /// Bead `sts2-rs-y8zi4`.
+    /// The run-side arm reads the count the combat side flushed: an elite
+    /// victory with the count at 0 replaces Sword of Stone with Sword of
+    /// Jade; above 0 it leaves both the relic and its count alone.
     #[test]
     fn listener_sword_of_stone_run_transforms_at_zero_counter() {
         crate::relics::dispatch::ensure_installed();
+        let ctx = CombatVictoryRunCtx { is_elite: true };
         let mut rs = RunState::new();
         rs.relics.push(RelicId::SwordOfStone);
-        rs.relic_counters.insert(RelicId::SwordOfStone, 5);
-        let ctx = CombatVictoryRunCtx { is_elite: true };
-        for expected_after in [4, 3, 2, 1, 0] {
-            let _ = sts2_core::run_effects::dispatch_after_combat_victory_run(&mut rs, &ctx);
-            if expected_after > 0 {
-                assert_eq!(
-                    rs.relic_counters.get(&RelicId::SwordOfStone).copied(),
-                    Some(expected_after),
-                    "post-decrement counter should be {expected_after}",
-                );
-                assert!(rs.relics.contains(&RelicId::SwordOfStone));
-                assert!(!rs.relics.contains(&RelicId::SwordOfJade));
-            } else {
-                // counter hit 0 on this firing → transform fires.
-                assert!(!rs.relics.contains(&RelicId::SwordOfStone));
-                assert!(rs.relics.contains(&RelicId::SwordOfJade));
-            }
-        }
+        rs.relic_counters.insert(RelicId::SwordOfStone, 1);
+        let _ = sts2_core::run_effects::dispatch_after_combat_victory_run(&mut rs, &ctx);
+        assert_eq!(
+            rs.relic_counters.get(&RelicId::SwordOfStone).copied(),
+            Some(1)
+        );
+        assert!(rs.relics.contains(&RelicId::SwordOfStone));
+        rs.relic_counters.insert(RelicId::SwordOfStone, 0);
+        let _ = sts2_core::run_effects::dispatch_after_combat_victory_run(&mut rs, &ctx);
+        assert!(!rs.relics.contains(&RelicId::SwordOfStone));
+        assert!(rs.relics.contains(&RelicId::SwordOfJade));
     }
 
-    /// Non-elite victories must NOT decrement the run-side counter —
+    /// Non-elite victories leave the run-side counter and the relic alone —
     /// mirrors the combat-side `is_elite` guard.
     #[test]
     fn listener_sword_of_stone_run_noop_on_non_elite() {
@@ -4537,38 +4502,36 @@ mod tests {
         );
     }
 
-    /// End-to-end with BOTH dispatchers in sequence: the combat-side
-    /// counter mirror AND the run-side counter both decrement
-    /// independently, and the run-side transform fires at zero
-    /// without depending on the combat-side state. Pins the
-    /// "parallel buses" contract — neither listener reads the
-    /// other's mutation; both apply the same `is_elite` predicate
-    /// to their respective state surface.
+    /// End-to-end with both buses as the run manager drives them: five
+    /// elite victories, each the combat side's decrement, the exit flush of
+    /// its count into `relic_counters`, then the run-side arm. The fifth
+    /// replaces the relic; none before it does.
     #[test]
-    fn sword_of_stone_combat_and_run_dispatchers_co_decrement_end_to_end() {
+    fn sword_of_stone_combat_count_then_run_transform_end_to_end() {
         crate::relics::dispatch::ensure_installed();
         let mut state = CombatState::default();
         push_relic_with_counter(&mut state, RelicKind::SwordOfStone, 5);
         state.is_elite = true;
         let mut rs = RunState::new();
         rs.relics.push(RelicId::SwordOfStone);
-        rs.relic_counters.insert(RelicId::SwordOfStone, 5);
         let ctx = CombatVictoryRunCtx { is_elite: true };
-        for _ in 0..5 {
+        for elite in 1..=5 {
             let _ = sts2_core::relic_effects::dispatch_after_combat_victory(&mut state);
+            let count = state
+                .relics
+                .iter()
+                .find(|r| r.kind == RelicKind::SwordOfStone)
+                .expect("combat-side SwordOfStone")
+                .counter;
+            rs.relic_counters.insert(RelicId::SwordOfStone, count);
             let _ = sts2_core::run_effects::dispatch_after_combat_victory_run(&mut rs, &ctx);
+            assert_eq!(
+                rs.relics.contains(&RelicId::SwordOfJade),
+                elite == 5,
+                "elite {elite}"
+            );
         }
-        // Combat mirror: counter drained to 0; relic still present
-        // (the combat-side listener doesn't transform).
-        let combat_relic = state
-            .relics
-            .iter()
-            .find(|r| r.kind == RelicKind::SwordOfStone)
-            .expect("combat-side SwordOfStone still present");
-        assert_eq!(combat_relic.counter, 0);
-        // Run-side: counter drained AND transformed to SwordOfJade.
         assert!(!rs.relics.contains(&RelicId::SwordOfStone));
-        assert!(rs.relics.contains(&RelicId::SwordOfJade));
     }
 
     /// The listener is a no-op when the player doesn't own the relic
