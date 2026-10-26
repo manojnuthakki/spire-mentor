@@ -211,6 +211,21 @@ pub const BASE_DRAW: i32 = 5;
 /// fresh each turn — see `start_player_turn` Step 6.
 pub const BASE_MAX_ENERGY: i32 = 3;
 
+/// C# `PlayerCombatState.MaxEnergy` (`PlayerCombatState.cs:101`): the base
+/// (`BASE_MAX_ENERGY`; no permanent base increase exists at this pin) through
+/// `Hook.ModifyMaxEnergy`, computed on every read. `state.player.max_energy`
+/// holds the value the turn start computed; a max-energy power or relic gained
+/// since shows here at once (sts2-agent fork: the wire reports this).
+#[must_use]
+pub fn effective_max_energy(state: &CombatState) -> i32 {
+    BASE_MAX_ENERGY
+        .saturating_add(hooks::dispatch_modify_max_energy(
+            state,
+            &MaxEnergyCtx::default(),
+        ))
+        .clamp(0, i32::from(i8::MAX))
+}
+
 // Hot-path presence gates (perf): `state.powers.present_kinds()` is a
 // documented SUPERSET of every live power's kind, so a `contains` miss
 // provably means "no live power of that kind" and the guarded walk can be
@@ -816,9 +831,7 @@ pub(crate) fn continue_player_turn_setup(state: &mut CombatState) -> StepResult 
     // cs4/rs5 @t6, growing +1/turn). We store the effective value into
     // `state.player.max_energy` purely as the reported mirror of
     // `PlayerCombatState.MaxEnergy`.
-    let base_max_i32 = BASE_MAX_ENERGY;
-    let max_delta = hooks::dispatch_modify_max_energy(state, &MaxEnergyCtx::default());
-    let max_energy_i32 = base_max_i32.saturating_add(max_delta);
+    let max_energy_i32 = effective_max_energy(state);
     let max_energy_i8 = i8::try_from(max_energy_i32.clamp(0, i32::from(i8::MAX)))
         .expect("max_energy fits in i8 after clamp");
     if hooks::dispatch_should_reset_energy(state, &CombatLifecycleCtx::default()) {

@@ -614,16 +614,11 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
     set(&mut player, "hp", emitted_hp);
     set(&mut player, "block", state.player.block.max(0));
     set(&mut player, "energy", i32::from(state.player.energy).max(0));
-    set(
-        &mut player,
-        "max_energy",
-        i32::from(state.player.max_energy).max(0),
-    );
-    set(
-        &mut player,
-        "energy_regen_per_turn",
-        i32::from(state.player.max_energy).max(0),
-    );
+    // The game computes max energy on every read (S10): the stored value is
+    // the turn start's.
+    let max_energy = sts2_core::combat_loop::effective_max_energy(state);
+    set(&mut player, "max_energy", max_energy);
+    set(&mut player, "energy_regen_per_turn", max_energy);
     // Gold: gates SealOfGold's turn-start hook, so an engine -> dict ->
     // engine round-trip must not silently zero it.
     set(&mut player, "gold", state.gold);
@@ -1422,6 +1417,32 @@ mod tests {
             .keys()
             .map(String::as_str)
             .collect()
+    }
+
+    /// C# `PlayerCombatState.MaxEnergy` is computed on every read
+    /// (`Hook.ModifyMaxEnergy` over the base, `PlayerCombatState.cs:101`): a
+    /// max-energy power gained during the turn shows at once, where the
+    /// engine's stored value is the turn start's (S10: 4 on the game, 3 on
+    /// the engine).
+    #[test]
+    fn max_energy_is_computed_on_each_read() {
+        let mut state = CombatState::default();
+        state.player.current_hp = 80;
+        state.player.max_hp = 80;
+        state.player.max_energy = 3; // stored at the turn's start
+        let uid = sts2_core::PowerUid(NonZeroU32::new(1).expect("non-zero"));
+        state.powers.push(sts2_core::Power {
+            id: uid.0,
+            kind: sts2_core::PowerKind::Demesne,
+            amount: 1,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state.player.powers.push(uid);
+        let v = combat_state_to_value(&state).expect("serializes");
+        assert_eq!(v["player"]["max_energy"], 4);
+        assert_eq!(v["player"]["energy_regen_per_turn"], 4);
     }
 
     #[test]
