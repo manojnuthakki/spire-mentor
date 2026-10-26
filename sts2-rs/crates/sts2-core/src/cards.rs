@@ -1105,10 +1105,7 @@ impl Card {
         // cards (A9P1: SpoilsMap counted as a 7th WarPaint candidate).
         !self.upgraded
             && !matches!(self.card_type, CardType::Curse | CardType::Status)
-            && !matches!(
-                self.card_id,
-                CardId::ByrdonisEgg | CardId::LanternKey | CardId::SpoilsMap
-            )
+            && !self.card_id.is_quest()
     }
 
     /// The downstream relic bodies (`BoneTea`, `HistoryCourse`,
@@ -1295,6 +1292,14 @@ impl Card {
 }
 
 impl CardId {
+    /// True iff the game types this card `CardType.Quest` (Byrdonis Egg,
+    /// Lantern Key, Spoils Map), which the engine's [`CardType`] lacks: their
+    /// cards carry a stand-in type, and a host shows Quest (sts2-agent fork).
+    #[must_use]
+    pub const fn is_quest(self) -> bool {
+        matches!(self, Self::ByrdonisEgg | Self::LanternKey | Self::SpoilsMap)
+    }
+
     /// True iff this card's C# `CanonicalTags` include `CardTag.OstyAttack`
     /// — the 13 Necrobinder cards whose damage is dealt **by the Osty**
     /// (`DamageCmd.Attack(...).FromOsty(...)`), not the player.

@@ -484,7 +484,8 @@ pub fn effective_master_deck_indices(rm: &RunManager) -> Vec<usize> {
 
 /// One card outside combat, in the combat wire's card vocabulary
 /// (sts2-agent fork): `id` (python name), `upgraded`, `base_cost`,
-/// `base_damage`, `base_block`, `type` (title-cased), the instance's keyword
+/// `base_damage`, `base_block`, `type` (title-cased; `Quest` for the game's
+/// Quest cards), the instance's keyword
 /// `flags` (`eternal`, `exhaust`, `ethereal`, `unplayable`, `innate`,
 /// `retain`), its first enchantment, its affliction and its own
 /// `replay_count`, each only when present. `eternal` is the removability gate
@@ -498,11 +499,13 @@ pub fn card_value(card: &sts2_core::cards::Card) -> Value {
     set(&mut d, "base_cost", i32::from(card.cost));
     set(&mut d, "base_damage", card.base_damage);
     set(&mut d, "base_block", card.base_block);
-    set(
-        &mut d,
-        "type",
-        super::names::card_type_python_name(card.card_type),
-    );
+    // The game's Quest cards carry a stand-in type in the engine (S9).
+    let card_type = if card.card_id.is_quest() {
+        "Quest"
+    } else {
+        super::names::card_type_python_name(card.card_type)
+    };
+    set(&mut d, "type", card_type);
     let mut flags: Vec<&str> = Vec::new();
     if sts2_core::lookup_card_removable().is_some_and(|removable| !removable(card)) {
         flags.push("eternal");
@@ -1381,6 +1384,21 @@ mod tests {
         assert_eq!(flags(&bane), ["eternal", "ethereal", "unplayable"]);
         let strike = card_value(&fresh_card(CardId::StrikeIronclad));
         assert!(!flags(&strike).contains(&"eternal"));
+    }
+
+    /// The game's Quest cards (C# `CardType.Quest`: Byrdonis Egg, Lantern
+    /// Key, Spoils Map) show that type; the engine's card types have no
+    /// Quest, so the card dict names it (S9).
+    #[test]
+    fn card_value_names_a_quest_cards_type() {
+        use sts2_core::cards::CardId;
+        for id in [CardId::SpoilsMap, CardId::ByrdonisEgg, CardId::LanternKey] {
+            assert_eq!(card_value(&fresh_card(id))["type"], "Quest", "{id:?}");
+        }
+        assert_eq!(
+            card_value(&fresh_card(CardId::StrikeIronclad))["type"],
+            "Attack"
+        );
     }
 
     /// The run-side relic state the Python API couldn't read (S2's rest):
