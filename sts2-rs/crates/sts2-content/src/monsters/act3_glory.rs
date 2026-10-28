@@ -254,7 +254,11 @@ pub(crate) fn axebot_stock_after_death(state: &mut CombatState, owner: CreatureU
     let new_uid =
         state.spawn_enemy_at_index_with_taken(sts2_core::MonsterKind::Axebot, dead_index, &taken);
     // C# `Axebot` with a `StockAmount` override opens on BOOT_UP.
-    let ai = create_axebot_ai(true);
+    let ai = crate::ascension_scaling::summoned_ai(
+        state,
+        sts2_core::MonsterKind::Axebot,
+        create_axebot_ai(true),
+    );
     // Telegraph BOOT_UP's intent — but ONLY when the respawn happens during
     // the PLAYER's turn. This mirrors C# `CombatManager.AfterCreatureAdded`
     // (CombatManager.cs:689-696): a mid-combat-added enemy has its move
@@ -1095,7 +1099,8 @@ fn fabricator_spawn_bot(
     let slot = state
         .first_free_enemy_slot(FAB_SLOT_COUNT)
         .unwrap_or(LAST_BOT_SLOT);
-    let uid = state.spawn_enemy_in_slot(kind, slot, create_bot_ai(kind));
+    let ai = crate::ascension_scaling::summoned_ai(state, kind, create_bot_ai(kind));
+    let uid = state.spawn_enemy_in_slot(kind, slot, ai);
     sts2_core::card_effects::apply_power_to_creature(state, uid, PowerKind::Minion, 1);
     // Record _lastSpawned on the Fabricator's own AI.
     if let Some(idx) = state.creatures.iter().position(|c| c.id == owner.0) {
@@ -1941,11 +1946,17 @@ pub fn create_magi_knight_ai() -> MonsterAi {
 /// is telegraph-only and the block must come from this effect fn, which fires
 /// after the attack lands (bead `sts2-rs-k27e` attack-effect wiring).
 fn magi_knight_power_shield_effect(state: &mut CombatState, owner: CreatureUid) {
+    let amount = crate::ascension_scaling::tough_block(
+        state.ascension,
+        sts2_core::MonsterKind::MagiKnight,
+        "FIRST_POWER_SHIELD",
+        5,
+    );
     sts2_core::hooks::apply_effects(
         state,
         &[sts2_core::hooks::Effect::GainBlockCreature {
             target: sts2_core::hooks::CreatureRef::Enemy(owner),
-            amount: 5,
+            amount,
         }],
     );
 }

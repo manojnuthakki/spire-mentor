@@ -103,9 +103,8 @@ pub(crate) const ASCENSION_ATTACK_SCALING: &[(MonsterKind, &str, i32, i32)] = &[
     (MonsterKind::GlobeHead, "GALVANIC_BURST", 16, 17),
     (MonsterKind::GlobeHead, "SHOCKING_SLAP", 13, 14),
     (MonsterKind::GlobeHead, "THUNDER_STRIKE", 6, 7),
-    (MonsterKind::GremlinMerc, "DOUBLE_SMASH", 6, 7),
-    (MonsterKind::GremlinMerc, "GIMME", 7, 8),
-    (MonsterKind::GremlinMerc, "HEHE", 8, 9),
+    // GremlinMerc's attacks scale at ToughEnemies (A8), not here:
+    // `TOUGH_ATTACK_SCALING`.
     // `…wb8lk.11`: v0.107.1 HauntedShip attacks scale at A9. SwipeDamage
     // GetValueIfAscension(DeadlyEnemies, 14, 13) ⇒ A0 13 / A9 14; StompDamage
     // (..5, 4) ⇒ A0 4 / A9 5 (per hit, × StompRepeat 3). Decomp
@@ -271,6 +270,69 @@ pub(crate) const ASCENSION_ATTACK_SCALING: &[(MonsterKind, &str, i32, i32)] = &[
     (MonsterKind::Zapbot, "ZAP", 14, 15),
 ];
 
+/// Attacks C# scales at `AscensionLevel.ToughEnemies` (>= ascension 8)
+/// rather than `DeadlyEnemies`: `(kind, move_id, base, tough)`.
+#[rustfmt::skip]
+pub(crate) const TOUGH_ATTACK_SCALING: &[(MonsterKind, &str, i32, i32)] = &[
+    // C# `GremlinMerc.cs:36,40,44` `GimmeDamage => (ToughEnemies, 8, 7)`,
+    // `DoubleSmashDamage => (.., 7, 6)`, `HeheDamage => (.., 9, 8)`.
+    (MonsterKind::GremlinMerc, "DOUBLE_SMASH", 6, 7),
+    (MonsterKind::GremlinMerc, "GIMME", 7, 8),
+    (MonsterKind::GremlinMerc, "HEHE", 8, 9),
+];
+
+/// Move blocks C# scales at `AscensionLevel.ToughEnemies` (A8):
+/// `(kind, move_id, base, tough)`. The patch rewrites the move's
+/// `Intent::Defend` (the block a primary defend grants, and the telegraph),
+/// and the effect_fns that grant a secondary defend read the same row
+/// through [`tough_block`].
+#[rustfmt::skip]
+pub(crate) const TOUGH_BLOCK_SCALING: &[(MonsterKind, &str, i32, i32)] = &[
+    // C# `Tunneler.cs:52` `BlockGain => (ToughEnemies, 37, 32)`.
+    (MonsterKind::Tunneler, "BURROW_MOVE", 32, 37),
+    // C# `LagavulinMatriarch.cs:57` `Slash2Block => (.., 14, 12)`.
+    (MonsterKind::LagavulinMatriarch, "SLASH2", 12, 14),
+    // C# `InfestedPrism.cs:44` `PulsateBlock => (.., 22, 20)`.
+    (MonsterKind::InfestedPrism, "PULSATE", 20, 22),
+    // C# `LouseProgenitor.cs:65` `CurlBlock => (.., 18, 14)` — a PRIMARY
+    // defend, applied by `perform_intent` off the patched intent.
+    (MonsterKind::LouseProgenitor, "CURL_AND_GROW_MOVE", 14, 18),
+    // C# `MagiKnight.cs:49` `PowerShieldBlock => (.., 9, 5)`, read by both
+    // `PowerShieldMove` and `PrepMove` (a primary defend).
+    (MonsterKind::MagiKnight, "FIRST_POWER_SHIELD", 5, 9),
+    (MonsterKind::MagiKnight, "PREP", 5, 9),
+    // C# `Nibbit.cs:32` `SliceBlock => (.., 6, 5)`; the effect_fn reads
+    // `ToughEnemies` itself, this keeps the telegraph in step.
+    (MonsterKind::Nibbit, "SLICE", 5, 6),
+];
+
+/// The `ascension`-resolved block for `(kind, move_id)` from
+/// [`TOUGH_BLOCK_SCALING`]: `base` below `ToughEnemies` or with no row.
+#[must_use]
+pub fn tough_block(ascension: u8, kind: MonsterKind, move_id: &str, base: i32) -> i32 {
+    if ascension < AscensionLevel::ToughEnemies as u8 {
+        return base;
+    }
+    TOUGH_BLOCK_SCALING
+        .iter()
+        .find(|e| e.0 == kind && e.1 == move_id)
+        .map_or(base, |e| e.3)
+}
+
+/// The AI of a monster a fight adds (a summon, a respawn), patched for the
+/// fight's ascension as [`crate::monster_dispatch::build_ai_with_ascension`]
+/// patches a roster's. Every mid-fight spawn site builds its AI through this
+/// before reading the first telegraph.
+#[must_use]
+pub fn summoned_ai(
+    state: &sts2_core::CombatState,
+    kind: MonsterKind,
+    mut ai: MonsterAi,
+) -> MonsterAi {
+    apply_ascension_attack_scaling(&mut ai, kind, state.ascension);
+    ai
+}
+
 /// Monsters whose `DeadlyEnemies` (A9) scaling bumps a move's BLOCK.
 ///
 /// C# reads a `…Block` property in `CreatureCmd.GainBlock`, and the move's
@@ -340,10 +402,52 @@ const ASCENSION_HITS_SCALING: &[(MonsterKind, &str, u8, u8)] = &[
     (MonsterKind::TrackerRubyRaider, "HOUNDS", 8, 9),
 ];
 
-/// Patch `ai` in place so every scaled attack move deals its
-/// `DeadlyEnemies` damage when `ascension >= 9`. No-op below the
-/// `DeadlyEnemies` threshold (the factory-built A0 damage stands).
+/// The `ToughEnemies` (A8) half of [`apply_ascension_attack_scaling`]:
+/// [`TOUGH_ATTACK_SCALING`] and [`TOUGH_BLOCK_SCALING`].
+fn apply_tough_scaling(ai: &mut MonsterAi, kind: MonsterKind) {
+    if !TOUGH_ATTACK_SCALING.iter().any(|e| e.0 == kind)
+        && !TOUGH_BLOCK_SCALING.iter().any(|e| e.0 == kind)
+    {
+        return;
+    }
+    for state in std::sync::Arc::make_mut(&mut ai.states).values_mut() {
+        let MonsterState::Move(m) = state else {
+            continue;
+        };
+        if let Some(e) = TOUGH_ATTACK_SCALING
+            .iter()
+            .find(|e| e.0 == kind && e.1 == m.id)
+        {
+            for intent in &mut m.intents {
+                match intent {
+                    Intent::Attack { damage }
+                    | Intent::DeathBlow { damage }
+                    | Intent::MultiAttack { damage, .. } => *damage = e.3,
+                    _ => {}
+                }
+            }
+        }
+        if let Some(e) = TOUGH_BLOCK_SCALING
+            .iter()
+            .find(|e| e.0 == kind && e.1 == m.id)
+        {
+            for intent in &mut m.intents {
+                if let Intent::Defend { block } = intent {
+                    *block = e.3;
+                }
+            }
+        }
+    }
+}
+
+/// Patch `ai` in place for the fight's ascension: the `ToughEnemies` rows at
+/// `ascension >= 8`, then every scaled attack move's `DeadlyEnemies` damage
+/// (and blocks, hit counts) at `ascension >= 9`. Below both, the
+/// factory-built A0 values stand.
 pub fn apply_ascension_attack_scaling(ai: &mut MonsterAi, kind: MonsterKind, ascension: u8) {
+    if ascension >= AscensionLevel::ToughEnemies as u8 {
+        apply_tough_scaling(ai, kind);
+    }
     if ascension < AscensionLevel::DeadlyEnemies as u8 {
         return;
     }
@@ -549,6 +653,176 @@ mod tests {
             }),
             _ => None,
         })
+    }
+
+    fn move_block(ai: &MonsterAi, move_id: &str) -> Option<i32> {
+        ai.states.values().find_map(|s| match s {
+            MonsterState::Move(m) if m.id == move_id => m.intents.iter().find_map(|i| match i {
+                Intent::Defend { block } => Some(*block),
+                _ => None,
+            }),
+            _ => None,
+        })
+    }
+
+    /// The `ToughEnemies` (A8) rows: each resolves to a real move with its
+    /// base value at A7 and its A8 value at A8 and A10 — Gremlin Merc's
+    /// attacks (moved from the A9 table: C# `GremlinMerc.cs:36-44` scales
+    /// them at ToughEnemies) and the move blocks.
+    #[test]
+    fn tough_enemies_rows_scale_at_a8() {
+        let ai_at = |kind, asc| {
+            build_ai_with_ascension(
+                kind,
+                MonsterSpawnArgs::default(),
+                SpawnPosition::default(),
+                asc,
+            )
+        };
+        for &(kind, move_id, base, tough) in TOUGH_ATTACK_SCALING {
+            assert_eq!(
+                move_attack_damage(&ai_at(kind, 7), move_id),
+                Some(base),
+                "{kind:?} {move_id}"
+            );
+            for asc in [8, 10] {
+                assert_eq!(
+                    move_attack_damage(&ai_at(kind, asc), move_id),
+                    Some(tough),
+                    "{kind:?} {move_id} A{asc}"
+                );
+            }
+        }
+        for &(kind, move_id, base, tough) in TOUGH_BLOCK_SCALING {
+            assert_eq!(
+                move_block(&ai_at(kind, 7), move_id),
+                Some(base),
+                "{kind:?} {move_id}"
+            );
+            assert_eq!(
+                move_block(&ai_at(kind, 8), move_id),
+                Some(tough),
+                "{kind:?} {move_id}"
+            );
+            assert_eq!(tough_block(7, kind, move_id, base), base);
+            assert_eq!(tough_block(8, kind, move_id, base), tough);
+        }
+    }
+
+    /// A secondary defend's block is granted by the move's effect_fn, which
+    /// reads [`tough_block`]: Tunneler's BURROW 37 at A8 (A6d4: 37 on
+    /// Headless at A10), Lagavulin Matriarch's SLASH2 14, Infested Prism's
+    /// PULSATE 22, Magi Knight's FIRST_POWER_SHIELD 9.
+    #[test]
+    fn tough_enemies_secondary_defends_grant_the_a8_block() {
+        for (kind, move_id, base, tough) in [
+            (MonsterKind::Tunneler, "BURROW_MOVE", 32, 37),
+            (MonsterKind::LagavulinMatriarch, "SLASH2", 12, 14),
+            (MonsterKind::InfestedPrism, "PULSATE", 20, 22),
+            (MonsterKind::MagiKnight, "FIRST_POWER_SHIELD", 5, 9),
+        ] {
+            for (asc, want) in [(7u8, base), (8, tough)] {
+                let ai = build_ai_with_ascension(
+                    kind,
+                    MonsterSpawnArgs::default(),
+                    SpawnPosition::default(),
+                    asc,
+                );
+                let effect = ai
+                    .states
+                    .values()
+                    .find_map(|s| match s {
+                        MonsterState::Move(m) if m.id == move_id => Some(m.effect),
+                        _ => None,
+                    })
+                    .expect("move");
+                let mut state = sts2_core::CombatState {
+                    ascension: asc,
+                    ..sts2_core::CombatState::default()
+                };
+                let uid = state.spawn_enemy(kind);
+                let before = state
+                    .creatures
+                    .iter()
+                    .find(|c| c.id == uid.0)
+                    .unwrap()
+                    .block;
+                effect(&mut state, uid);
+                let after = state
+                    .creatures
+                    .iter()
+                    .find(|c| c.id == uid.0)
+                    .unwrap()
+                    .block;
+                assert_eq!(after - before, want, "{kind:?} {move_id} A{asc}");
+            }
+        }
+    }
+
+    /// A monster a fight adds mid-combat gets the fight's ascension patch,
+    /// as a roster's does (A6c5: Gas Bomb's EXPLODE 9, Sneaky Gremlin's
+    /// TACKLE 10, Wriggler's NASTY_BITE 7 at A10), including the telegraph
+    /// read at spawn.
+    #[test]
+    fn mid_fight_summons_get_the_ascension_patch() {
+        fn spawned(state: &sts2_core::CombatState, kind: MonsterKind) -> &MonsterAi {
+            state
+                .creatures
+                .iter()
+                .rev()
+                .find(|c| c.species == Some(kind))
+                .and_then(|c| c.ai.as_ref())
+                .expect("summon with an AI")
+        }
+        let a10 = || {
+            let mut state = sts2_core::CombatState {
+                ascension: 10,
+                ..sts2_core::CombatState::default()
+            };
+            state.player.current_hp = 80;
+            state.player.max_hp = 80;
+            state.init_player_creature();
+            state
+        };
+
+        // Living Fog's BLOAT summons a Gas Bomb.
+        let mut state = a10();
+        let fog = state.spawn_enemy(MonsterKind::LivingFog);
+        let fog_ai = build_ai_with_ascension(
+            MonsterKind::LivingFog,
+            MonsterSpawnArgs::default(),
+            SpawnPosition::default(),
+            10,
+        );
+        let bloat = fog_ai
+            .states
+            .values()
+            .find_map(|s| match s {
+                MonsterState::Move(m) if m.id == "BLOAT" => Some(m.effect),
+                _ => None,
+            })
+            .expect("BLOAT");
+        bloat(&mut state, fog);
+        assert_eq!(
+            move_attack_damage(spawned(&state, MonsterKind::GasBomb), "EXPLODE"),
+            Some(9)
+        );
+
+        // A Gremlin Merc's Surprise summons Sneaky and Fat Gremlins.
+        let mut state = a10();
+        let merc = state.spawn_enemy(MonsterKind::GremlinMerc);
+        crate::monsters::act1_underdocks::surprise_after_death_spawn(&mut state, merc);
+        let sneaky = spawned(&state, MonsterKind::SneakyGremlin);
+        assert_eq!(move_attack_damage(sneaky, "TACKLE"), Some(10));
+
+        // A Phrog Parasite's Infested death spawns Wrigglers.
+        let mut state = a10();
+        let phrog = state.spawn_enemy(MonsterKind::PhrogParasite);
+        crate::monsters::act1_overgrowth::infested_after_death_spawn(&mut state, phrog);
+        assert_eq!(
+            move_attack_damage(spawned(&state, MonsterKind::Wriggler), "NASTY_BITE"),
+            Some(7)
+        );
     }
 
     /// Every table row must resolve to a real attack move whose A0 damage

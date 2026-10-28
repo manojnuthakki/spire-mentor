@@ -58,11 +58,12 @@ fn fogmog_illusion_effect(state: &mut CombatState, _owner: CreatureUid) {
     // Was a bare `spawn_enemy_at_front`, which happened to be right only
     // because "illusion" is index 0. Going through the slot model retires the
     // `TODO(o1mwv)` per-encounter workaround (GH #552).
-    state.spawn_enemy_in_slot(
+    let ai = crate::ascension_scaling::summoned_ai(
+        state,
         MonsterKind::EyeWithTeeth,
-        FOGMOG_ILLUSION_SLOT,
         create_eye_with_teeth_ai(),
     );
+    state.spawn_enemy_in_slot(MonsterKind::EyeWithTeeth, FOGMOG_ILLUSION_SLOT, ai);
 }
 
 /// `FogmogNormal.Slots = ["illusion", "fogmog"]` — the summoned Eye's slot.
@@ -127,7 +128,11 @@ pub fn infested_after_death_spawn(state: &mut CombatState, _owner: CreatureUid) 
     ];
     for slot in slots {
         let uid = state.spawn_enemy(MonsterKind::Wriggler);
-        let ai = create_infested_wriggler_ai(slot);
+        let ai = crate::ascension_scaling::summoned_ai(
+            state,
+            MonsterKind::Wriggler,
+            create_infested_wriggler_ai(slot),
+        );
         // Telegraph the spawned wriggler's initial move (SPAWNED_MOVE = Stun)
         // on the fresh creature so the NEXT enemy turn's `acting_enemies`
         // snapshot — which filters on `creature.intent.is_some()` — includes

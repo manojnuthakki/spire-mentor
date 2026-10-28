@@ -1721,6 +1721,33 @@ impl MonsterKind {
         }
     }
 
+    /// A8 `ToughEnemies` replacements for the [`Self::on_spawn_self_buffs`]
+    /// amounts C# resolves through
+    /// `AscensionHelper.GetValueIfAscension(ToughEnemies, …)`; `None` when the
+    /// amount doesn't scale there. Same shape as
+    /// [`Self::on_spawn_self_buff_deadly`].
+    #[must_use]
+    pub fn on_spawn_self_buff_tough(self, power: crate::powers::PowerKind) -> Option<i32> {
+        use crate::powers::PowerKind;
+        match (self, power) {
+            // C# `Vantom.cs:64` `SlipperyAmt => (ToughEnemies, 9, 8)`.
+            (MonsterKind::Vantom, PowerKind::Slippery) => Some(9),
+            // C# `SewerClam.cs:32` Plating `(ToughEnemies, 9, 8)`.
+            (MonsterKind::SewerClam, PowerKind::Plating) => Some(9),
+            // C# `FrogKnight.cs:43` `PlatingAmount => (.., 19, 15)`.
+            (MonsterKind::FrogKnight, PowerKind::Plating) => Some(19),
+            // C# `SlumberingBeetle.cs:45` `PlatingAmount => (.., 18, 15)`.
+            (MonsterKind::SlumberingBeetle, PowerKind::Plating) => Some(18),
+            // C# `PhantasmalGardener.cs:49` `SkittishAmount => (.., 7, 6)`.
+            (MonsterKind::PhantasmalGardener, PowerKind::Skittish) => Some(7),
+            // C# `TerrorEel.cs:39` `ShriekAmount => (.., 75, 70)`.
+            (MonsterKind::TerrorEel, PowerKind::Shriek) => Some(75),
+            // C# `LouseProgenitor.cs:65,70` CurlUp(`CurlBlock => (.., 18, 14)`).
+            (MonsterKind::LouseProgenitor, PowerKind::CurlUp) => Some(18),
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub fn on_spawn_self_buffs(self) -> &'static [(crate::powers::PowerKind, i32)] {
         use crate::powers::PowerKind;

@@ -868,6 +868,7 @@ pub fn surprise_after_death_spawn(state: &mut CombatState, owner: sts2_core::Cre
         (MonsterKind::SneakyGremlin, create_sneaky_gremlin_ai()),
         (MonsterKind::FatGremlin, create_fat_gremlin_ai()),
     ] {
+        let ai = crate::ascension_scaling::summoned_ai(state, kind, ai);
         let uid = state.spawn_enemy(kind);
         let initial_intent = if telegraph {
             ai.current_move().intents.first().copied()
@@ -1139,7 +1140,12 @@ fn living_fog_bloat_effect(state: &mut CombatState, owner: sts2_core::CreatureUi
         .position(|&u| u == owner)
         .unwrap_or(state.enemy_uids.len());
     let uid = state.spawn_enemy_at_index(sts2_core::MonsterKind::GasBomb, at);
-    state.set_creature_ai(uid, create_gas_bomb_ai());
+    let ai = crate::ascension_scaling::summoned_ai(
+        state,
+        sts2_core::MonsterKind::GasBomb,
+        create_gas_bomb_ai(),
+    );
+    state.set_creature_ai(uid, ai);
 }
 
 /// `LivingFog` — ADVANCED_GAS (init) → BLOAT → SUPER_GAS_BLAST → BLOAT …
@@ -1426,11 +1432,12 @@ fn two_tailed_rat_call_for_backup_effect(state: &mut CombatState, _owner: sts2_c
     // `roll_next_enemy_intents` pass, in enemy order — NOT here at spawn time:
     // C# rolls the summoner's next move before the newcomer's, and resolving
     // early swaps which draw each rat gets (GH #544).
-    state.spawn_enemy_in_slot(
+    let ai = crate::ascension_scaling::summoned_ai(
+        state,
         sts2_core::MonsterKind::TwoTailedRat,
-        slot,
         create_two_tailed_rat_ai(TwoTailedRatSlot::Other),
     );
+    state.spawn_enemy_in_slot(sts2_core::MonsterKind::TwoTailedRat, slot, ai);
 }
 
 /// Starter-move selector for [`create_two_tailed_rat_ai`], mirroring C#'s
@@ -2380,11 +2387,17 @@ fn lagavulin_asleep(combat: &CombatState, owner: sts2_core::CreatureUid) -> bool
 /// (`Slash2Block`=12 non-asc) `CreatureCmd.GainBlock(.., 12)`. Bead
 /// `sts2-rs-viwkh` (same class as SkulkingColony ZOOM, `sts2-rs-71kog`).
 fn lagavulin_matriarch_slash2_effect(state: &mut CombatState, owner: sts2_core::CreatureUid) {
+    let amount = crate::ascension_scaling::tough_block(
+        state.ascension,
+        sts2_core::MonsterKind::LagavulinMatriarch,
+        "SLASH2",
+        12,
+    );
     sts2_core::hooks::apply_effects(
         state,
         &[sts2_core::hooks::Effect::GainBlockCreature {
             target: sts2_core::hooks::CreatureRef::Enemy(owner),
-            amount: 12,
+            amount,
         }],
     );
 }

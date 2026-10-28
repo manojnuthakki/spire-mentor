@@ -5925,10 +5925,18 @@ impl CombatState {
         // C# resolves a few `AfterAddedToRoom` amounts through
         // `GetValueIfAscension(DeadlyEnemies, …)` (CorpseSlug's Ravenous,
         // TestSubject's Enrage); the static table above is the A0 value.
+        // `ToughEnemies` (A8) scales others (Vantom's Slippery, the Platings,
+        // Skittish, Shriek, Curl Up).
         let deadly = self.ascension >= crate::ascension::AscensionLevel::DeadlyEnemies as u8;
+        let tough = self.ascension >= crate::ascension::AscensionLevel::ToughEnemies as u8;
         for &(kind, amount) in species.on_spawn_self_buffs() {
             let amount = if deadly {
                 species.on_spawn_self_buff_deadly(kind).unwrap_or(amount)
+            } else {
+                amount
+            };
+            let amount = if tough {
+                species.on_spawn_self_buff_tough(kind).unwrap_or(amount)
             } else {
                 amount
             };
@@ -19104,6 +19112,41 @@ mod tests {
     /// Myte — all four are Python-pin fabrications; their real C#
     /// classes either have no AfterAddedToRoom or apply the relevant
     /// power mid-move, not on spawn. 5dp60 removed those rows.
+    /// A8 `ToughEnemies` scales these spawn powers (C# `AfterAddedToRoom`
+    /// through `GetValueIfAscension(ToughEnemies, …)`): the A8 amount at
+    /// ascension 8 and above, the base at 7.
+    #[test]
+    fn spawn_powers_scale_at_tough_enemies() {
+        use crate::powers::PowerKind;
+        let cases: &[(MonsterKind, PowerKind, i32, i32)] = &[
+            (MonsterKind::Vantom, PowerKind::Slippery, 8, 9),
+            (MonsterKind::SewerClam, PowerKind::Plating, 8, 9),
+            (MonsterKind::FrogKnight, PowerKind::Plating, 15, 19),
+            (MonsterKind::SlumberingBeetle, PowerKind::Plating, 15, 18),
+            (MonsterKind::PhantasmalGardener, PowerKind::Skittish, 6, 7),
+            (MonsterKind::TerrorEel, PowerKind::Shriek, 70, 75),
+            (MonsterKind::LouseProgenitor, PowerKind::CurlUp, 14, 18),
+        ];
+        for &(species, kind, base, tough) in cases {
+            for (ascension, want) in [(7u8, base), (8, tough), (10, tough)] {
+                let mut state = CombatState {
+                    ascension,
+                    ..CombatState::default()
+                };
+                let uid = state.spawn_enemy(species);
+                let creature = state.creatures.iter().find(|c| c.id == uid.0).unwrap();
+                let stack: i32 = creature
+                    .powers
+                    .iter()
+                    .filter_map(|puid| state.powers.get_by_id(puid.0))
+                    .filter(|p| p.kind == kind)
+                    .map(|p| p.amount)
+                    .sum();
+                assert_eq!(stack, want, "{species:?} {kind:?} at A{ascension}");
+            }
+        }
+    }
+
     #[test]
     fn spawn_enemy_applies_on_spawn_self_buffs() {
         use crate::powers::PowerKind;

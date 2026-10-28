@@ -101,8 +101,14 @@ fn tunneler_burrow_effect(state: &mut CombatState, owner: CreatureUid) {
     // does `GainBlock(BlockGain=32)` to self after the Burrowed apply.
     // The telegraph `Intent::Defend { block: 32 }` is dropped by
     // `perform_intent` because it is the SECOND intent (Buff is
-    // first), so the block has to live here.
-    gain_secondary_defend_block(state, owner, 32);
+    // first), so the block has to live here. 37 at ToughEnemies.
+    let block = crate::ascension_scaling::tough_block(
+        state.ascension,
+        MonsterKind::Tunneler,
+        "BURROW_MOVE",
+        32,
+    );
+    gain_secondary_defend_block(state, owner, block);
 }
 
 /// `BowlbugNectar` BUFF — `BowlbugNectar.cs:68`
@@ -165,11 +171,12 @@ fn the_obscura_illusion_effect(state: &mut CombatState, _owner: CreatureUid) {
     // `TheObscuraNormal.Slots = ["illusion", "obscura"]`; the slot model
     // reproduces C#'s `SortEnemiesBySlotName` instead of the old hardcoded
     // front-insert (GH #552).
-    state.spawn_enemy_in_slot(
+    let ai = crate::ascension_scaling::summoned_ai(
+        state,
         MonsterKind::Parafright,
-        THE_OBSCURA_ILLUSION_SLOT,
         crate::monsters::act1_overgrowth::create_parafright_ai(),
     );
+    state.spawn_enemy_in_slot(MonsterKind::Parafright, THE_OBSCURA_ILLUSION_SLOT, ai);
 }
 
 /// `TheObscuraNormal.Slots = ["illusion", "obscura"]` — the Parafright's slot.
@@ -394,7 +401,13 @@ fn crusher_adapt_effect(state: &mut CombatState, owner: CreatureUid) {
 /// secondary Defend 20 and Buff are applied here. VitalSparkAmount =
 /// GetValueIfAscension(DeadlyEnemies, 3, 2) ⇒ A0 2 / A9 3.
 fn infested_prism_pulsate_effect(state: &mut CombatState, owner: CreatureUid) {
-    gain_secondary_defend_block(state, owner, 20);
+    let block = crate::ascension_scaling::tough_block(
+        state.ascension,
+        MonsterKind::InfestedPrism,
+        "PULSATE",
+        20,
+    );
+    gain_secondary_defend_block(state, owner, block);
     let amount =
         ascension::get_value_if_ascension(state.ascension, AscensionLevel::DeadlyEnemies, 3, 2);
     apply_power_to_creature(state, owner, PowerKind::VitalSpark, amount);
@@ -679,7 +692,12 @@ fn ovicopter_lay_eggs_effect(state: &mut CombatState, _owner: CreatureUid) {
         // falls back to the static `MonsterKind::roll_intent` path. The
         // eggs act before the Ovicopter on subsequent turns (slot < 5) —
         // load-bearing for the hatch-roll Niche RNG order.
-        let uid = state.spawn_enemy_in_slot(MonsterKind::ToughEgg, slot, create_tough_egg_ai());
+        let ai = crate::ascension_scaling::summoned_ai(
+            state,
+            MonsterKind::ToughEgg,
+            create_tough_egg_ai(),
+        );
+        let uid = state.spawn_enemy_in_slot(MonsterKind::ToughEgg, slot, ai);
         // Bead `sts2-rs-z4jsg`: C# `ToughEgg.AfterAddedToRoom` (fired
         // inside `CreatureCmd.Add`, BEFORE the summon-site Minion apply
         // below) grants `HatchPower((CurrentSide != Enemy) ? 1 : 2)`.
