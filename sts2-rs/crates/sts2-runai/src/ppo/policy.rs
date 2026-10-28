@@ -236,22 +236,14 @@ fn resolve_boss_display(rm: &RunManager, act_index: u8) -> (Option<String>, Opti
 /// finding — a stale ledger lingering in `rm.combat` excluding cards
 /// well after combat — no longer applies; see git history.)
 fn effective_master_deck_indices(rm: &RunManager) -> Vec<usize> {
-    let mut keep: Vec<usize> = (0..rm.run_state.master_deck.len()).collect();
+    let all = 0..rm.run_state.master_deck.len();
     let Some(combat) = rm.combat.as_ref() else {
-        return keep;
+        return all.collect();
     };
-    for stolen in &combat.swipe_stolen {
-        if stolen.reclaimed {
-            continue;
-        }
-        if let Some(pos) = keep.iter().position(|&i| {
-            let c = &rm.run_state.master_deck[i];
-            c.card_id == stolen.card_id && c.upgraded == stolen.upgraded
-        }) {
-            keep.remove(pos);
-        }
-    }
-    keep
+    // sts2-agent fork: each stolen card by its deck link
+    // (`CombatState::unreclaimed_stolen_deck_indices`), not its combat state.
+    let stolen = combat.unreclaimed_stolen_deck_indices(&rm.run_state.master_deck);
+    all.filter(|i| !stolen.contains(i)).collect()
 }
 
 /// `RunManager.full_map()` mirror (`sts2-py::run_manager.rs` ~:1842),

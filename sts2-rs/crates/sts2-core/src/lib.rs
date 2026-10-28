@@ -3535,6 +3535,30 @@ pub struct SwipeStolen {
     pub deck_index: Option<usize>,
 }
 
+/// The master-deck index of a stolen card (sts2-agent fork): its deck link
+/// (`deck_index`, C# `DeckVersion`) when the combat recorded one, so a
+/// combat-only change (an Armaments upgrade) can't hide it; else, for a combat
+/// built without a run deck, the first `(card_id, upgraded)` match. An index in
+/// `taken` (already paired) is never returned. Every place that pairs a stolen
+/// combat card with its permanent card goes through this.
+#[must_use]
+pub fn resolve_stolen_deck_index(
+    master_deck: &[Card],
+    deck_index: Option<usize>,
+    card_id: crate::cards::CardId,
+    upgraded: bool,
+    taken: &[usize],
+) -> Option<usize> {
+    match deck_index {
+        Some(i) => (i < master_deck.len() && !taken.contains(&i)).then_some(i),
+        None => (0..master_deck.len()).find(|i| {
+            !taken.contains(i)
+                && master_deck[*i].card_id == card_id
+                && master_deck[*i].upgraded == upgraded
+        }),
+    }
+}
+
 /// One reward a fight added to its combat room (C# `CombatRoom.AddExtraReward`),
 /// in [`CombatState::room_extra_rewards`]. sts2-agent fork.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -7701,6 +7725,27 @@ impl CombatState {
     #[must_use]
     pub fn deck_index_of(&self, uid: CardUid) -> Option<usize> {
         self.deck_card_uids.iter().position(|&u| u == uid)
+    }
+
+    /// The master-deck indices of the cards a thief still holds (un-reclaimed
+    /// steals), each found by [`resolve_stolen_deck_index`]. C# removes a stolen
+    /// card's `DeckVersion` from the deck at once; the engine removes it at the
+    /// combat's exit, so a mid-combat deck view drops these. sts2-agent fork.
+    #[must_use]
+    pub fn unreclaimed_stolen_deck_indices(&self, master_deck: &[Card]) -> Vec<usize> {
+        let mut taken: Vec<usize> = Vec::new();
+        for stolen in self.swipe_stolen.iter().filter(|s| !s.reclaimed) {
+            if let Some(i) = resolve_stolen_deck_index(
+                master_deck,
+                stolen.deck_index,
+                stolen.card_id,
+                stolen.upgraded,
+                &taken,
+            ) {
+                taken.push(i);
+            }
+        }
+        taken
     }
 
     /// [`Self::record_swipe_steal`] for the combat card `uid`, keeping its

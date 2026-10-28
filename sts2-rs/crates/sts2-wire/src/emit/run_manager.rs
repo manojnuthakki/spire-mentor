@@ -459,27 +459,19 @@ pub fn generated_rooms(rm: &RunManager) -> Value {
 /// live `master_deck` still contains the stolen card mid-combat. The deck
 /// VIEW ([`master_deck`] / [`master_deck_detailed`], consumed by the
 /// workbench player serialization) must reflect C#'s mid-combat shrink, so
-/// drop one `(card_id, upgraded)` match per un-reclaimed `swipe_stolen`
-/// entry of the active combat. Out of combat this is the identity (no
+/// drop the deck card of each un-reclaimed `swipe_stolen` entry of the active
+/// combat, found by its deck link (identity only for a combat without one). Out of combat this is the identity (no
 /// active combat), and `exit_combat` has by then removed the cards for real.
 #[must_use]
 pub fn effective_master_deck_indices(rm: &RunManager) -> Vec<usize> {
-    let mut keep: Vec<usize> = (0..rm.run_state.master_deck.len()).collect();
+    let all = 0..rm.run_state.master_deck.len();
     let Some(combat) = rm.combat.as_ref() else {
-        return keep;
+        return all.collect();
     };
-    for stolen in &combat.swipe_stolen {
-        if stolen.reclaimed {
-            continue;
-        }
-        if let Some(pos) = keep.iter().position(|&i| {
-            let c = &rm.run_state.master_deck[i];
-            c.card_id == stolen.card_id && c.upgraded == stolen.upgraded
-        }) {
-            keep.remove(pos);
-        }
-    }
-    keep
+    // sts2-agent fork: each stolen card by its deck link
+    // (`CombatState::unreclaimed_stolen_deck_indices`), not its combat state.
+    let stolen = combat.unreclaimed_stolen_deck_indices(&rm.run_state.master_deck);
+    all.filter(|i| !stolen.contains(i)).collect()
 }
 
 /// One card outside combat, in the combat wire's card vocabulary

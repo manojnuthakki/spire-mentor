@@ -775,23 +775,10 @@ const fn is_run_persistent_damage_scaler(id: sts2_core::cards::CardId) -> bool {
     matches!(id, sts2_core::cards::CardId::TheScythe)
 }
 
-/// Fold each combat-side scaling card's accumulated run-persistent `base_damage`
-/// back onto its master-deck source (C# `DeckVersion.BuffFromPlay`).
-///
-/// The combat copy and its master-deck source carry no explicit back-link, so
-/// instances are paired by `(card_id, upgraded)` in master-deck order. The
-/// combat arena (`combat.cards`) holds the original deck cards reversed (the
-/// deck is fed to the draw pile via `.rev()` front-inserts — see
-/// [`enter_combat_from_roster`]), and mid-combat-generated cards are appended
-/// after; pairing same-`(id, upgraded)` instances by their respective stable
-/// orders matches the combat copy back to its master row. For each pair the
-/// master card's `base_damage` is set to the combat copy's accumulated value
-/// (which started equal to the master's at `enter_combat` and only grew),
-/// guarded by `max` so a never-played Scythe can't shrink the master value.
 /// The stolen cards and the room's extra rewards at a combat's exit. Each
-/// stolen card is found in `master_deck` by its deck link
-/// ([`sts2_core::SwipeStolen::deck_index`], C# `DeckVersion`), or for a combat
-/// without one by `(card_id, upgraded)`. A card a surviving or escaped thief
+/// stolen card is found in `master_deck` by [`sts2_core::resolve_stolen_deck_index`]:
+/// its deck link ([`sts2_core::SwipeStolen::deck_index`], C# `DeckVersion`), or
+/// for a combat without one by `(card_id, upgraded)`. A card a surviving or escaped thief
 /// keeps (`SwipePower.Steal` → `RemoveFromDeck`) leaves the deck for good. With
 /// `extras` (sts2-agent fork, `interactive_rewards`, a won fight) the room's
 /// extra rewards are staged in the order the game adds them: those the fight
@@ -803,29 +790,7 @@ const fn is_run_persistent_damage_scaler(id: sts2_core::cards::CardId) -> bool {
 /// killed thief's card stays in the deck. Bead `sts2-rs-RP13`.
 fn settle_swiped_cards_and_extras(rs: &mut RunState, combat: &CombatState, extras: bool) {
     use sts2_core::{CombatExtraReward, OfferedReward};
-    let mut taken: Vec<usize> = Vec::new();
-    let mut find = |rs: &RunState,
-                    deck_index: Option<usize>,
-                    card_id: sts2_core::cards::CardId,
-                    upgraded: bool|
-     -> Option<usize> {
-        let idx = deck_index
-            .filter(|i| *i < rs.master_deck.len())
-            .or_else(|| {
-                (0..rs.master_deck.len()).find(|i| {
-                    !taken.contains(i)
-                        && rs.master_deck[*i].card_id == card_id
-                        && rs.master_deck[*i].upgraded == upgraded
-                })
-            })?;
-        (!taken.contains(&idx)).then(|| {
-            taken.push(idx);
-            idx
-        })
-    };
-    for stolen in combat.swipe_stolen.iter().filter(|s| !s.reclaimed) {
-        let _ = find(rs, stolen.deck_index, stolen.card_id, stolen.upgraded);
-    }
+    let mut taken: Vec<usize> = combat.unreclaimed_stolen_deck_indices(&rs.master_deck);
     if extras {
         for extra in &combat.room_extra_rewards {
             let offered = match *extra {
@@ -836,9 +801,16 @@ fn settle_swiped_cards_and_extras(rs: &mut RunState, combat: &CombatState, extra
                     upgraded,
                     deck_index,
                 } => {
-                    let Some(idx) = find(rs, deck_index, card_id, upgraded) else {
+                    let Some(idx) = sts2_core::resolve_stolen_deck_index(
+                        &rs.master_deck,
+                        deck_index,
+                        card_id,
+                        upgraded,
+                        &taken,
+                    ) else {
                         continue;
                     };
+                    taken.push(idx);
                     OfferedReward::SpecialCard(rs.master_deck[idx])
                 }
             };
@@ -869,6 +841,17 @@ fn settle_swiped_cards_and_extras(rs: &mut RunState, combat: &CombatState, extra
     }
 }
 
+/// Fold each combat-side scaling card's accumulated run-persistent `base_damage`
+/// back onto its master-deck source (C# `DeckVersion.BuffFromPlay`).
+///
+/// Each master card is paired with its own combat copy through the combat's
+/// deck link ([`CombatState::deck_card_uids`], C# `DeckVersion`), so a
+/// combat-only change to the copy (an upgrade) doesn't break the pairing.
+/// Only a combat built without a run deck falls back to identity matching:
+/// same-`(card_id, upgraded)` instances paired in their stable orders (the
+/// arena holds the deck cards reversed, generated cards after them). The master
+/// card's `base_damage` takes the combat copy's accumulated value, guarded by
+/// `max` so a never-played Scythe can't shrink it.
 fn propagate_scaling_cards_to_master_deck(rs: &mut RunState, combat: &CombatState) {
     use sts2_core::cards::CardId;
 
