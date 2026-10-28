@@ -1363,9 +1363,12 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
     // simply removed (PileType.None — the dangling `state.cards` instance
     // is unreferenced and harmless).
     let corruption_exhausts_dupe = dupe_card_type == sts2_core::cards::CardType::Skill
-        && state.player_power_amount(sts2_core::PowerKind::Corruption) > 0
-        && sts2_core::combat_loop::exhaust_may_begin(state);
-    if corruption_exhausts_dupe {
+        && state.player_power_amount(sts2_core::PowerKind::Corruption) > 0;
+    if corruption_exhausts_dupe && !sts2_core::combat_loop::exhaust_may_begin(state) {
+        // The result pile is Exhaust, but `CardCmd.Exhaust` is refused once the
+        // combat is ending (`CardCmd.cs:239`): the dupe stays in Play, untouched,
+        // as the game leaves it (`CardModel.cs:1985`). sts2-agent fork.
+    } else if corruption_exhausts_dupe {
         let _ = sts2_core::cards::move_card(
             &mut state.player,
             new_uid,

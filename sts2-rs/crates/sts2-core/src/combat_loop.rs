@@ -6318,11 +6318,6 @@ fn fire_after_card_exhausted(
     card_tags: cards::CardTags,
     card_type: cards::CardType,
 ) {
-    // The callers have moved the card already; a pile move can't end the
-    // combat, so this is the exhaust's one entry check (`exhaust_may_begin`).
-    if !exhaust_may_begin(state) {
-        return;
-    }
     let exhaust_ctx = crate::relic_effects::CardEventCtx {
         card_id,
         card_uid: Some(card_uid),
@@ -6338,6 +6333,33 @@ fn fire_after_card_exhausted(
         card_type: Some(card_type),
     };
     hooks::dispatch_after_card_exhausted(state, &hook_exhaust_ctx, false);
+}
+
+/// `CardCmd.Exhaust` for a card in the Play pile (a play's or an auto-play's
+/// result pile): asked once at its entry (`CardCmd.cs:239`), so a refused
+/// exhaust leaves the card where it is, in Play, as the game does
+/// (`CardModel.cs:1985`: the result-pile switch only calls `CardCmd.Exhaust`);
+/// once begun, the move and both buses complete. Returns whether it began.
+/// sts2-agent fork.
+fn exhaust_from_play(
+    state: &mut CombatState,
+    card_uid: crate::CardUid,
+    target: Option<CreatureUid>,
+    card_id: cards::CardId,
+    card_tags: cards::CardTags,
+    card_type: cards::CardType,
+) -> bool {
+    if !exhaust_may_begin(state) {
+        return false;
+    }
+    let _ = cards::move_card(
+        &mut state.player,
+        card_uid,
+        PileKind::Play,
+        PileKind::Exhaust,
+    );
+    fire_after_card_exhausted(state, card_id, card_uid, target, card_tags, card_type);
+    true
 }
 
 /// Bead `sts2-rs-ummci`: stamp `combat_log.last_attack_skill_played` for a
@@ -7704,17 +7726,11 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
         || corruption_exhausts_skill)
         && state.pending_choice.is_none()
     {
-        let _ = cards::move_card(
-            &mut state.player,
-            card_uid,
-            PileKind::Play,
-            PileKind::Exhaust,
-        );
-        fire_after_card_exhausted(
+        let _ = exhaust_from_play(
             state,
-            card.card_id,
             card_uid,
             target_uid,
+            card.card_id,
             card.tags,
             card.card_type,
         );
@@ -8023,8 +8039,7 @@ pub fn flush_played_cards_after_choice(state: &mut CombatState) {
             continue;
         }
         if crate::card_effects::card_exhausts_inst(&card) || corruption_exhausts_skill {
-            let _ = cards::move_card(&mut state.player, uid, PileKind::Play, PileKind::Exhaust);
-            fire_after_card_exhausted(state, card.card_id, uid, None, card.tags, card.card_type);
+            let _ = exhaust_from_play(state, uid, None, card.card_id, card.tags, card.card_type);
             continue;
         }
         let is_attack_or_skill = matches!(
@@ -8767,24 +8782,25 @@ pub(crate) fn resolve_auto_played_card_at_target(
             } else {
                 PileKind::Discard
             };
-            let _ = cards::move_card(&mut state.player, top_uid, PileKind::Play, dest);
-            // C# `MoveToResultPileWithoutPlaying` exhausts via `CardCmd.Exhaust`
-            // when `ExhaustOnNextPlay`/Exhaust-keyword, which fires the
-            // exhaust hooks; the plain Discard branch fires nothing. Mirror
-            // that: only dispatch the exhaust buses when we actually
-            // exhausted. (DistilledChaos passes `force_exhaust = false` and
-            // unplayable status cards lack the Exhaust keyword, so this branch
-            // is dead for DistilledChaos itself and only matters for a future
-            // force-exhaust auto-play of an unplayable card.)
             if matches!(dest, PileKind::Exhaust) {
-                fire_after_card_exhausted(
+                // C# `MoveToResultPileWithoutPlaying` exhausts via `CardCmd.Exhaust`
+                // when `ExhaustOnNextPlay`/Exhaust-keyword, which fires the
+                // exhaust hooks; the plain Discard branch fires nothing. Mirror
+                // that: only dispatch the exhaust buses when we actually
+                // exhausted. (DistilledChaos passes `force_exhaust = false` and
+                // unplayable status cards lack the Exhaust keyword, so this branch
+                // is dead for DistilledChaos itself and only matters for a future
+                // force-exhaust auto-play of an unplayable card.)
+                let _ = exhaust_from_play(
                     state,
-                    top_card_id,
                     top_uid,
                     None,
+                    top_card_id,
                     top_card_tags,
                     top_card_type,
                 );
+            } else {
+                let _ = cards::move_card(&mut state.player, top_uid, PileKind::Play, dest);
             }
         }
         return;
@@ -8818,16 +8834,17 @@ pub(crate) fn resolve_auto_played_card_at_target(
             } else {
                 PileKind::Discard
             };
-            let _ = cards::move_card(&mut state.player, top_uid, PileKind::Play, dest);
             if matches!(dest, PileKind::Exhaust) {
-                fire_after_card_exhausted(
+                let _ = exhaust_from_play(
                     state,
-                    top_card_id,
                     top_uid,
                     None,
+                    top_card_id,
                     top_card_tags,
                     top_card_type,
                 );
+            } else {
+                let _ = cards::move_card(&mut state.player, top_uid, PileKind::Play, dest);
             }
         }
         return;
@@ -8850,16 +8867,17 @@ pub(crate) fn resolve_auto_played_card_at_target(
             } else {
                 PileKind::Discard
             };
-            let _ = cards::move_card(&mut state.player, top_uid, PileKind::Play, dest);
             if matches!(dest, PileKind::Exhaust) {
-                fire_after_card_exhausted(
+                let _ = exhaust_from_play(
                     state,
-                    top_card_id,
                     top_uid,
                     None,
+                    top_card_id,
                     top_card_tags,
                     top_card_type,
                 );
+            } else {
+                let _ = cards::move_card(&mut state.player, top_uid, PileKind::Play, dest);
             }
         }
         return;
@@ -9675,17 +9693,11 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
                 state.player.play.remove(pos);
             }
         } else if force_exhaust || self_exhausts || corruption_exhausts_skill {
-            let _ = cards::move_card(
-                &mut state.player,
-                top_uid,
-                PileKind::Play,
-                PileKind::Exhaust,
-            );
-            fire_after_card_exhausted(
+            let _ = exhaust_from_play(
                 state,
-                top_card_id,
                 top_uid,
                 None,
+                top_card_id,
                 top_card_tags,
                 top_card_type,
             );

@@ -4504,3 +4504,54 @@ fn an_exhaust_whose_reaction_kills_still_reaches_joss_paper() {
         "the exhaust began live: Joss Paper counts it"
     );
 }
+
+/// A refused exhaust changes nothing (C# `CardCmd.Exhaust`, `CardCmd.cs:239`;
+/// the result-pile switch, `CardModel.cs:1985`). Fiend Fire exhausts the
+/// Defend while the combat is live (Joss Paper counts it), then its hit kills
+/// the last enemy: its own result-pile exhaust is refused, so Fiend Fire stays
+/// in the Play pile and Joss Paper isn't told.
+#[test]
+fn fiend_fire_after_its_killing_blow_is_not_exhausted() {
+    install_pool();
+    crate::cards::dispatch::ensure_installed();
+    crate::relics::dispatch::ensure_installed();
+    let (mut state, _enemy) = fresh_state_with_enemy(5);
+    state.init_player_creature();
+    state.phase = sts2_core::CombatPhase::PlayerPlayPhase;
+    state.player.energy = 3;
+    state.relics.push(sts2_core::Relic {
+        id: NonZeroU32::new(1).expect("non-zero"),
+        kind: sts2_core::RelicKind::JossPaper,
+        counter: 0,
+        is_wax: false,
+        is_melted: false,
+    });
+    let fiend_fire = push_hand_card(&mut state, CardId::FiendFire);
+    let defend = push_hand_card_typed(&mut state, CardId::DefendIronclad, CardType::Skill);
+    let _ = sts2_core::apply(
+        &mut state,
+        sts2_core::Action::PlayCard {
+            hand_index: 0,
+            target: Some(0),
+        },
+    );
+    assert!(
+        sts2_core::combat_loop::combat_is_ending(&state),
+        "the hit killed the enemy"
+    );
+    assert_eq!(
+        state.player.exhaust.as_slice(),
+        &[defend],
+        "only Defend's exhaust began"
+    );
+    assert!(
+        state.player.play.contains(&fiend_fire),
+        "Fiend Fire stays in Play"
+    );
+    let counter = state
+        .relics
+        .iter()
+        .find(|r| r.kind == sts2_core::RelicKind::JossPaper)
+        .map(|r| r.counter);
+    assert_eq!(counter, Some(1), "Joss Paper counts Defend only");
+}

@@ -7699,6 +7699,11 @@ impl CombatState {
     pub fn exhaust_from_draw_pile(&mut self, count: i32) {
         let iters = usize::try_from(count).unwrap_or(0);
         for _ in 0..iters {
+            // Each exhaust's entry check (`exhaust_may_begin`), before its
+            // reshuffle: a refused exhaust moves no card and draws no Shuffle.
+            if !crate::combat_loop::exhaust_may_begin(self) {
+                break;
+            }
             // Reshuffle if draw is empty and discard is non-empty.
             // Mirrors Python's `_shuffle_if_needed` at the top of each
             // iteration (so a single call can drain across the boundary).
@@ -7752,6 +7757,10 @@ impl CombatState {
     /// pile is empty (C# `await ShuffleIfNecessary`), then no-ops if both piles
     /// are empty. Bead `sts2-rs-70anj.1` (ToastyMittens before-draw timing fix).
     pub fn exhaust_top_from_draw_skipping_innate(&mut self, skip_innate: bool) {
+        // The exhaust's entry check, before its reshuffle (`exhaust_may_begin`).
+        if !crate::combat_loop::exhaust_may_begin(self) {
+            return;
+        }
         self.exhaust_from_draw_reshuffle_step();
         if self.player.draw.is_empty() {
             return;
@@ -7785,9 +7794,6 @@ impl CombatState {
     /// for both the top-card path and the skip-Innate path
     /// ([`Self::exhaust_top_from_draw_skipping_innate`]).
     fn exhaust_one_from_draw_at(&mut self, idx: usize) {
-        if !crate::combat_loop::exhaust_may_begin(self) {
-            return;
-        }
         let uid = self.player.draw.remove(idx);
         self.player.exhaust.push(uid);
 
@@ -18727,6 +18733,39 @@ mod tests {
         assert!(state.player.draw.is_empty());
         assert!(state.player.discard.is_empty());
         assert_eq!(state.player.exhaust.as_slice(), &[a]);
+    }
+
+    /// A refused draw-pile exhaust changes nothing: once the combat is ending,
+    /// neither entry point reshuffles the discard pile into the empty draw
+    /// pile nor draws from Shuffle (C# `CardCmd.Exhaust`, `CardCmd.cs:239`;
+    /// the check comes before the reshuffle).
+    #[test]
+    fn a_refused_draw_pile_exhaust_moves_nothing_and_draws_no_shuffle() {
+        for skip_innate_path in [false, true] {
+            let mut state = CombatState {
+                is_over: true, // the combat has ended
+                ..Default::default()
+            };
+            state.player.current_hp = 80;
+            let a = push_draw_test_card(&mut state);
+            let b = push_draw_test_card(&mut state);
+            state.player.draw.clear();
+            state.player.discard.extend([a, b]);
+            let shuffle_before = state.run_rng.shuffle.counter();
+            if skip_innate_path {
+                state.exhaust_top_from_draw_skipping_innate(false);
+            } else {
+                state.exhaust_from_draw_pile(1);
+            }
+            assert!(state.player.draw.is_empty());
+            assert_eq!(state.player.discard.as_slice(), &[a, b]);
+            assert!(state.player.exhaust.is_empty());
+            assert_eq!(
+                state.run_rng.shuffle.counter(),
+                shuffle_before,
+                "no Shuffle draw"
+            );
+        }
     }
 
     #[test]
