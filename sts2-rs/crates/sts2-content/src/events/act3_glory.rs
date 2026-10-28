@@ -95,6 +95,24 @@ fn war_historian_repy_unlock_cage(state: &mut RunState) -> EventOutcome {
 /// the rarity / RNG surfaces land — same convention as
 /// `TrashHeap::dive_in`. Port pin: `act3.py:99-111`.
 fn war_historian_repy_unlock_chest(state: &mut RunState) -> EventOutcome {
+    if state.interactive_rewards {
+        // C# `UnlockChest`: `OfferCustom([Potion, Potion, Relic, Relic])`, each
+        // rolled when offered, in that order.
+        let relic = sts2_core::OfferedReward::RandomRelic {
+            rarity: None,
+            is_wax: false,
+        };
+        state.offer_custom_rewards(
+            vec![
+                sts2_core::OfferedReward::Potion(None),
+                sts2_core::OfferedReward::Potion(None),
+                relic.clone(),
+                relic,
+            ],
+            true,
+        );
+        return EventOutcome::finished("Unlocked chest, gained 2 potions and 2 relics.");
+    }
     // 2 potion-rewards — `Reward::Potion` variant landed via
     // `sts2-rs-ib04`; `PotionReward::empty()` matches Python's
     // unspecified-potion shape (dispatcher rolls at drain time).

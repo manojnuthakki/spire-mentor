@@ -546,7 +546,17 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // other `AddExtraReward` powers (Heist / Swipe / Royalties / TheHunt) as
     // they are ported — each adds its own arm here.
     let grimoire_stacks = combat.player_power_amount(sts2_core::PowerKind::ForbiddenGrimoire);
-    if grimoire_stacks > 0 {
+    // sts2-agent fork: under `interactive_rewards` each `AddExtraReward` power
+    // stages its reward on `rs.room_extra_rewards` for the room's rewards
+    // screen (C# appends `CombatRoom.ExtraRewards` to the room's set) instead
+    // of settling it here.
+    let extras = rs.interactive_rewards && combat.player_won;
+    if extras {
+        for _ in 0..grimoire_stacks.max(0) {
+            rs.room_extra_rewards
+                .push(sts2_core::OfferedReward::RemoveCard);
+        }
+    } else if grimoire_stacks > 0 {
         rs.add_card_removal_reward(grimoire_stacks as u32);
     }
 
@@ -556,6 +566,19 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // restores it (`SwipePower.BeforeDeath`), which the combat already recorded
     // as `reclaimed`. Drop each un-reclaimed stolen card from `master_deck`.
     remove_swiped_cards_from_master_deck(rs, combat);
+    if extras {
+        // C# `SwipePower.BeforeDeath`: a thief killed holding a stolen card
+        // gives it back as a `SpecialCardReward` (the steal already took it out
+        // of the deck); a card the player doesn't claim is lost.
+        offer_reclaimed_swiped_cards(rs, combat);
+        // C# `TheHunt.OnPlay`: one `CardReward(ForRoom(room), 3)` per fatal
+        // (the `TheHuntPower` counter counts them).
+        let hunts = combat.player_power_amount(sts2_core::PowerKind::TheHunt);
+        for _ in 0..hunts.max(0) {
+            rs.room_extra_rewards
+                .push(sts2_core::OfferedReward::RoomCard);
+        }
+    }
 
     // Bead `sts2-rs-RP15`: combat gold-reward proportion. C#
     // `CombatRoom.cs:216` `GoldProportion = 1 - EscapedCreatures.Count /
@@ -611,9 +634,13 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     if combat.player_won {
         let royalties_stacks = combat.player_power_amount(sts2_core::PowerKind::Royalties);
         if royalties_stacks > 0 {
-            rs.gain_gold(sts2_core::powers::regent::royalties_gold_on_victory(
-                royalties_stacks,
-            ));
+            let gold = sts2_core::powers::regent::royalties_gold_on_victory(royalties_stacks);
+            if extras {
+                rs.room_extra_rewards
+                    .push(sts2_core::OfferedReward::Gold(gold));
+            } else {
+                rs.gain_gold(gold);
+            }
         }
     }
 
@@ -633,7 +660,12 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // Runs AFTER the RP17 `rs.gold = combat.gold` writeback so it is not
     // clobbered by it.
     if combat.player_won && combat.heist_recovered_gold > 0 {
-        rs.gain_gold(combat.heist_recovered_gold);
+        if extras {
+            rs.room_extra_rewards
+                .push(sts2_core::OfferedReward::Gold(combat.heist_recovered_gold));
+        } else {
+            rs.gain_gold(combat.heist_recovered_gold);
+        }
     }
 
     // Run-master propagation for scaling cards (C# `DeckVersion.BuffFromPlay`).
@@ -793,6 +825,29 @@ fn remove_swiped_cards_from_master_deck(rs: &mut RunState, combat: &CombatState)
             .position(|c| c.card_id == stolen.card_id && c.upgraded == stolen.upgraded)
         {
             rs.master_deck.remove(idx);
+        }
+    }
+}
+
+/// Each card a killed thief held (`reclaimed`) leaves the deck and comes back
+/// as a special card reward on the room's rewards screen (sts2-agent fork,
+/// `interactive_rewards`): C# `SwipePower.Steal` removed it from the deck and
+/// `SwipePower.BeforeDeath` offers it (`SpecialCardReward`), so it is in the
+/// deck again only once claimed. Paired by `(card_id, upgraded)` as
+/// [`remove_swiped_cards_from_master_deck`] does.
+fn offer_reclaimed_swiped_cards(rs: &mut RunState, combat: &CombatState) {
+    for stolen in &combat.swipe_stolen {
+        if !stolen.reclaimed {
+            continue;
+        }
+        if let Some(idx) = rs
+            .master_deck
+            .iter()
+            .position(|c| c.card_id == stolen.card_id && c.upgraded == stolen.upgraded)
+        {
+            let card = rs.master_deck.remove(idx);
+            rs.room_extra_rewards
+                .push(sts2_core::OfferedReward::SpecialCard(card));
         }
     }
 }
@@ -1949,6 +2004,94 @@ mod tests {
                 .iter()
                 .any(|r| matches!(r, sts2_core::runstate::Reward::RemoveCard { .. })),
             "no Grimoire → no card-removal reward"
+        );
+    }
+
+    /// A won fight's exit with the player holding `powers` (sts2-agent fork).
+    fn exit_holding(powers: &[(sts2_core::PowerKind, i32)], heist: i32, screen: bool) -> RunState {
+        let mut rs = fresh_run();
+        rs.interactive_rewards = screen;
+        let mut combat = enter_combat(&rs, select_first(act1_normal_pool()));
+        combat.player_won = true;
+        combat.heist_recovered_gold = heist;
+        let player_uid = combat
+            .player
+            .creature_uid
+            .expect("player-Creature initialized");
+        for &(kind, amount) in powers {
+            sts2_core::card_effects::apply_power_to_creature(&mut combat, player_uid, kind, amount);
+        }
+        exit_combat(&mut rs, &combat);
+        rs
+    }
+
+    /// sts2-agent fork: under `interactive_rewards` a won room's extra rewards
+    /// (C# `CombatRoom.AddExtraReward`: Royalties' and Heist's gold, Forbidden
+    /// Grimoire's removal, The Hunt's card reward) wait on its rewards screen.
+    #[test]
+    fn exit_combat_stages_a_rooms_extra_rewards_for_its_screen() {
+        use sts2_core::{OfferedReward, PowerKind};
+        let gold_before = fresh_run().gold;
+        let rs = exit_holding(
+            &[
+                (PowerKind::Royalties, 30),
+                (PowerKind::ForbiddenGrimoire, 1),
+                (PowerKind::TheHunt, 1),
+            ],
+            25,
+            true,
+        );
+        assert_eq!(rs.gold, gold_before, "no gold settled at the exit");
+        assert!(
+            rs.pending_rewards.is_empty(),
+            "no removal queued at the exit"
+        );
+        let mut extras = rs.room_extra_rewards.clone();
+        extras.sort_by_key(|r| format!("{r:?}"));
+        assert_eq!(
+            extras,
+            vec![
+                OfferedReward::Gold(25),
+                OfferedReward::Gold(30),
+                OfferedReward::RemoveCard,
+                OfferedReward::RoomCard,
+            ]
+        );
+        // Without the screen they settle at once, as before.
+        let auto = exit_holding(&[(PowerKind::Royalties, 30)], 25, false);
+        assert_eq!(auto.gold, gold_before + 55);
+        assert!(auto.room_extra_rewards.is_empty());
+    }
+
+    /// sts2-agent fork: a killed thief's card (C# `SwipePower.BeforeDeath`)
+    /// leaves the deck and comes back as a special card reward to claim.
+    #[test]
+    fn exit_combat_offers_a_killed_thiefs_card_as_a_special_card_reward() {
+        crate::cards::dispatch::ensure_installed();
+        let mut rs = fresh_run();
+        rs.interactive_rewards = true;
+        let stolen =
+            crate::cards::spec_index::card_pod_from_id(sts2_core::cards::CardId::Bash, false)
+                .expect("spec");
+        rs.master_deck.push(stolen);
+        let mut combat = enter_combat(&rs, select_first(act1_normal_pool()));
+        combat.player_won = true;
+        combat.swipe_stolen.push(sts2_core::SwipeStolen {
+            thief: combat.enemy_uids[0],
+            card_id: stolen.card_id,
+            upgraded: stolen.upgraded,
+            reclaimed: true,
+        });
+        let deck = rs.master_deck.len();
+        exit_combat(&mut rs, &combat);
+        assert_eq!(
+            rs.master_deck.len(),
+            deck - 1,
+            "out of the deck until claimed"
+        );
+        assert_eq!(
+            rs.room_extra_rewards,
+            vec![sts2_core::OfferedReward::SpecialCard(stolen)]
         );
     }
 

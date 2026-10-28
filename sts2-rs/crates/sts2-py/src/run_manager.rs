@@ -446,9 +446,10 @@ impl PyRunManager {
 
     /// The open rewards screen (sts2-agent fork; `interactive_rewards=True`):
     /// `[{"type": "gold", "amount"} | {"type": "potion", "id"} | {"type":
-    /// "relic", "id"} | {"type": "card", "options": [{"id", "upgraded"}]}]`,
-    /// index-aligned with `claim_reward`'s `idx`, or `None` when no screen is
-    /// open. While a card reward claimed from it is open,
+    /// "relic", "id"} | {"type": "card", "options": [{"id", "upgraded"}]} |
+    /// {"type": "special_card", "id", "upgraded"} | {"type": "card_removal"}]`
+    /// for the innermost open set, index-aligned with `claim_reward`'s `idx`, or
+    /// `None` when no screen is open. While a card reward claimed from it is open,
     /// `screen_card_claim()` names its index.
     fn reward_screen(&self, py: Python<'_>) -> PyResult<PyObject> {
         crate::value_to_py(py, &emit_rm::reward_screen(&self.inner)).map(Bound::unbind)
@@ -500,6 +501,27 @@ impl PyRunManager {
     /// The rewards-screen entry whose card reward is open now (sts2-agent fork).
     fn screen_card_claim(&self) -> Option<usize> {
         self.inner.screen_card_claim()
+    }
+
+    /// The open rewards set's source (sts2-agent fork): `"room"` for a won
+    /// fight's, `"custom"` for one an event or relic offered (C#
+    /// `RewardsCmd.OfferCustom`), or `None` when no screen is open.
+    fn reward_screen_source(&self) -> Option<&'static str> {
+        self.inner
+            .reward_set()
+            .map(|set| if set.custom { "custom" } else { "room" })
+    }
+
+    /// Whether the open rewards screen may be left now (sts2-agent fork):
+    /// false while a set built `WithSkippingDisallowed()` (Neow's Bones) has a
+    /// reward left; true when no screen is open.
+    fn reward_screen_can_proceed(&self) -> bool {
+        self.inner.reward_screen_can_proceed()
+    }
+
+    /// How many rewards sets are open, innermost shown (sts2-agent fork).
+    fn reward_set_depth(&self) -> usize {
+        self.inner.reward_set_depth()
     }
 
     #[getter]

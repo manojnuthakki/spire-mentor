@@ -80,6 +80,35 @@ use sts2_core::runstate::{
     RestSiteOption, Reward, RoomType, RunState,
 };
 use sts2_core::shop::{auto_purchase_shop_inventory, ShopInventory};
+use sts2_core::OfferedReward;
+
+/// sts2-agent fork: roll `count` relic rewards now, as the listener's
+/// `RewardsCmd.OfferCustom` populates them (the same grab-bag rolls as
+/// [`RunState::offer_random_relic_rewards_wax`]), and offer them as one set
+/// under `interactive_rewards`.
+fn offer_rolled_relic_set(
+    rs: &mut RunState,
+    count: usize,
+    rarities: &[Option<RelicRarity>],
+    is_wax: bool,
+) {
+    let before = rs.relic_rewards.len();
+    rs.offer_random_relic_rewards_wax(count, rarities, is_wax);
+    let rolled = rs.relic_rewards.split_off(before);
+    rs.offer_custom_rewards(rolled.into_iter().map(OfferedReward::Relic).collect(), true);
+}
+
+/// sts2-agent fork: `n` card rewards rolled when the set opens (non-combat
+/// odds), offered as one set under `interactive_rewards`.
+fn offer_card_reward_set(rs: &mut RunState, n: usize) {
+    let rewards = (0..n)
+        .map(|_| OfferedReward::Card {
+            options: None,
+            upgraded: Vec::new(),
+        })
+        .collect();
+    rs.offer_custom_rewards(rewards, true);
+}
 use sts2_core::{CombatState, RelicKind, Side};
 
 // ---------------------------------------------------------------------------
@@ -2510,6 +2539,13 @@ fn listener_cauldron(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::Cauldron) {
         return EffectResult::NotImplemented;
     }
+    if rs.interactive_rewards {
+        rs.offer_custom_rewards(
+            vec![OfferedReward::Potion(None); CAULDRON_POTIONS as usize],
+            true,
+        );
+        return EffectResult::Resolved;
+    }
     for _ in 0..CAULDRON_POTIONS {
         rs.pending_rewards
             .push(Reward::Potion(PotionReward::empty()));
@@ -2531,6 +2567,10 @@ fn listener_small_capsule(rs: &mut RunState) -> EffectResult {
         return EffectResult::NotImplemented;
     }
     // Python `offer_relic_rewards(1)` — rolls one random rarity per slot.
+    if rs.interactive_rewards {
+        offer_rolled_relic_set(rs, SMALL_CAPSULE_RELICS, &[], false);
+        return EffectResult::Resolved;
+    }
     rs.offer_random_relic_rewards(SMALL_CAPSULE_RELICS, &[]);
     EffectResult::Resolved
 }
@@ -2548,14 +2588,16 @@ fn listener_calling_bell(rs: &mut RunState) -> EffectResult {
         return EffectResult::NotImplemented;
     }
     // Python pin: `offer_relic_rewards(3, rarities=(COMMON, UNCOMMON, RARE))`.
-    rs.offer_random_relic_rewards(
-        CALLING_BELL_RELICS,
-        &[
-            Some(RelicRarity::Common),
-            Some(RelicRarity::Uncommon),
-            Some(RelicRarity::Rare),
-        ],
-    );
+    let rarities = [
+        Some(RelicRarity::Common),
+        Some(RelicRarity::Uncommon),
+        Some(RelicRarity::Rare),
+    ];
+    if rs.interactive_rewards {
+        offer_rolled_relic_set(rs, CALLING_BELL_RELICS, &rarities, false);
+        return EffectResult::Resolved;
+    }
+    rs.offer_random_relic_rewards(CALLING_BELL_RELICS, &rarities);
     EffectResult::Resolved
 }
 
@@ -2683,6 +2725,10 @@ fn listener_glass_eye(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::GlassEye) {
         return EffectResult::NotImplemented;
     }
+    if rs.interactive_rewards {
+        offer_card_reward_set(rs, GLASS_EYE_CARDS);
+        return EffectResult::Resolved;
+    }
     for _ in 0..GLASS_EYE_CARDS {
         rs.pending_rewards.push(Reward::Card(CardReward::empty()));
     }
@@ -2700,6 +2746,21 @@ fn listener_glass_eye(rs: &mut RunState) -> EffectResult {
 fn listener_lost_coffer(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::LostCoffer) {
         return EffectResult::NotImplemented;
+    }
+    if rs.interactive_rewards {
+        // C# `LostCoffer.AfterObtained`: `OfferCustom([CardReward, PotionReward])`,
+        // populated in that order.
+        rs.offer_custom_rewards(
+            vec![
+                OfferedReward::Card {
+                    options: None,
+                    upgraded: Vec::new(),
+                },
+                OfferedReward::Potion(None),
+            ],
+            true,
+        );
+        return EffectResult::Resolved;
     }
     rs.pending_rewards.push(Reward::Card(CardReward::empty()));
     rs.pending_rewards
@@ -2726,6 +2787,17 @@ fn listener_kaleidoscope(rs: &mut RunState) -> EffectResult {
     }
     let owner = rs.character_id;
     let rewards = crate::cards::spec_index::roll_kaleidoscope_card_rewards(rs, owner);
+    if rs.interactive_rewards {
+        let set = rewards
+            .into_iter()
+            .map(|options| OfferedReward::Card {
+                options: Some(options),
+                upgraded: Vec::new(),
+            })
+            .collect();
+        rs.offer_custom_rewards(set, true);
+        return EffectResult::Resolved;
+    }
     for reward in rewards {
         rs.pending_rewards
             .push(Reward::Card(CardReward::from_options(reward)));
@@ -3223,6 +3295,10 @@ fn listener_radiant_pearl(state: &mut CombatState, side: Side) -> EffectResult {
 fn listener_toy_box(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::ToyBox) {
         return EffectResult::NotImplemented;
+    }
+    if rs.interactive_rewards {
+        offer_rolled_relic_set(rs, TOY_BOX_RELICS, &[], true);
+        return EffectResult::Resolved;
     }
     rs.offer_random_relic_rewards_wax(TOY_BOX_RELICS, &[], true);
     EffectResult::Resolved
@@ -4736,6 +4812,10 @@ fn listener_golden_compass_modify_unknown_map_point_room_types(
 fn listener_orrery(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::Orrery) {
         return EffectResult::NotImplemented;
+    }
+    if rs.interactive_rewards {
+        offer_card_reward_set(rs, ORRERY_CARDS);
+        return EffectResult::Resolved;
     }
     for _ in 0..ORRERY_CARDS {
         rs.pending_rewards.push(Reward::Card(CardReward::empty()));

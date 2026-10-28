@@ -1053,6 +1053,11 @@ fn potion_courier_grab(state: &mut RunState) -> EventOutcome {
     // `RewardsCmd.OfferCustom` them. Each reward names FoulPotion explicitly
     // (no pool roll), so queue pre-populated `Reward::Potion`s.
     use sts2_core::{potions::PotionKind, PotionReward, Reward};
+    if state.interactive_rewards {
+        let foul = sts2_core::OfferedReward::Potion(Some(PotionKind::FoulPotion));
+        state.offer_custom_rewards(vec![foul; POTION_COURIER_FOUL_POTIONS], true);
+        return EventOutcome::finished("Grabbed 3 Foul Potions.");
+    }
     for _ in 0..POTION_COURIER_FOUL_POTIONS {
         state
             .pending_rewards
@@ -1074,9 +1079,13 @@ fn potion_courier_ransack(state: &mut RunState) -> EventOutcome {
         &mut state.rng.rewards,
         state.character_id,
     ) {
-        state
-            .pending_rewards
-            .push(Reward::Potion(PotionReward::with_kind(kind)));
+        if state.interactive_rewards {
+            state.offer_custom_rewards(vec![sts2_core::OfferedReward::Potion(Some(kind))], true);
+        } else {
+            state
+                .pending_rewards
+                .push(Reward::Potion(PotionReward::with_kind(kind)));
+        }
     }
     EventOutcome::finished("Ransacked the courier — gained an uncommon potion.")
 }

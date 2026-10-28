@@ -713,6 +713,56 @@ pub struct PendingDeckEnchant {
     pub secondary_type: Option<crate::cards::CardType>,
 }
 
+/// One reward of a set the game offers through C# `RewardsCmd.OfferCustom`
+/// (an event's or a relic's rewards; sts2-agent fork). Under
+/// [`RunState::interactive_rewards`] a producer queues these on
+/// [`RunState::offered_reward_sets`]; the run manager rolls whatever is left
+/// to roll when it opens the set (C# `RewardsSet.GenerateWithoutOffering`
+/// populates every reward in list order at offer time) and shows the set on
+/// its rewards screen. The same shape stages a won combat room's extra
+/// rewards (C# `CombatRoom.AddExtraReward`, [`RunState::room_extra_rewards`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OfferedReward {
+    /// `GoldReward(amount)`.
+    Gold(i32),
+    /// `PotionReward`: a named potion, or `None` to roll one (C#
+    /// `PotionReward.Populate`, the `roll_potion_reward_kind` callback).
+    Potion(Option<crate::potions::PotionKind>),
+    /// `RelicReward(relic)`: a predetermined relic.
+    Relic(RelicReward),
+    /// `RelicReward(player)` / `RelicReward(rarity, player)`: rolled at offer
+    /// time off the grab bag (the rarity on `Rewards` when `None`), as
+    /// [`RunState::offer_random_relic_rewards`] does; `is_wax` stamps Toy
+    /// Box's offers.
+    RandomRelic {
+        rarity: Option<RelicRarity>,
+        is_wax: bool,
+    },
+    /// `CardReward`: pre-rolled options (with their offered upgrades, empty
+    /// for none), or `None` to roll a non-combat reward at offer time.
+    Card {
+        options: Option<Vec<CardId>>,
+        upgraded: Vec<bool>,
+    },
+    /// `CardReward(ForRoom(room))` added to a combat room (The Hunt): rolled
+    /// with the room's own card-reward roller.
+    RoomCard,
+    /// `SpecialCardReward(card)`: this card, added to the deck when claimed.
+    SpecialCard(Card),
+    /// `CardRemovalReward`: one deck removal when claimed.
+    RemoveCard,
+}
+
+/// A set of [`OfferedReward`]s offered together (one `RewardsCmd.OfferCustom`
+/// call, or a `RewardsSet` a relic offers itself). `can_skip` is false for a
+/// set built `WithSkippingDisallowed()` (Neow's Bones): every reward must be
+/// claimed before the screen can be left. sts2-agent fork.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OfferedRewardSet {
+    pub rewards: Vec<OfferedReward>,
+    pub can_skip: bool,
+}
+
 /// `Reward` enum — the open variant set Python has as a class
 /// hierarchy under `Reward`. This bead landed the four variants the
 /// event-reward retrofit chain depends on (`Card`, `Relic`, `Gold`,
@@ -1564,6 +1614,19 @@ pub struct RunState {
     /// `false` keeps the auto-collect path every parity test pins.
     pub interactive_rewards: bool,
 
+    /// Reward sets offered through C# `RewardsCmd.OfferCustom` under
+    /// [`Self::interactive_rewards`], in offer order, waiting for the run
+    /// manager to roll and show them (`RunManager::reward_screen`). A
+    /// producer calls [`Self::offer_custom_rewards`]. sts2-agent fork.
+    pub offered_reward_sets: Vec<OfferedRewardSet>,
+
+    /// A won combat room's extra rewards (C# `CombatRoom.AddExtraReward`:
+    /// Swipe's returned card, Heist's and Royalties' gold, The Hunt's card
+    /// reward, Forbidden Grimoire's removals), staged by the combat exit under
+    /// [`Self::interactive_rewards`] and listed on the room's rewards screen
+    /// after its own rewards. sts2-agent fork.
+    pub room_extra_rewards: Vec<OfferedReward>,
+
     /// Opt-in potion actions outside the combat search's action set
     /// (sts2-agent fork): `RunAction::DiscardPotion` in any phase that shows
     /// the belt (C# `PotionModel.Discard`), and `RunAction::DrinkPotion`
@@ -1937,6 +2000,8 @@ impl Default for RunState {
             pending_deck_enchants: Vec::new(),
             interactive_potion_swap: false,
             interactive_rewards: false,
+            offered_reward_sets: Vec::new(),
+            room_extra_rewards: Vec::new(),
             interactive_potions: false,
             pending_potion_swaps: Vec::new(),
             potions_overflow_dropped: 0,
@@ -2206,6 +2271,22 @@ impl RunState {
     pub fn offer_relic_rewards(&mut self, relic_id: RelicId, count: usize) {
         for _ in 0..count {
             self.relic_rewards.push(RelicReward::new(relic_id));
+        }
+    }
+
+    /// Offer `rewards` as one set (C# `RewardsCmd.OfferCustom`; `can_skip`
+    /// false for `WithSkippingDisallowed()`), to be rolled and shown by the run
+    /// manager. Only under [`Self::interactive_rewards`]: a producer checks
+    /// the flag and keeps its auto-collect path otherwise. An empty set is
+    /// never shown (C# `RewardsSet.Offer` returns at once). sts2-agent fork.
+    pub fn offer_custom_rewards(&mut self, rewards: Vec<OfferedReward>, can_skip: bool) {
+        debug_assert!(
+            self.interactive_rewards,
+            "offered sets are an interactive_rewards path"
+        );
+        if !rewards.is_empty() {
+            self.offered_reward_sets
+                .push(OfferedRewardSet { rewards, can_skip });
         }
     }
 
@@ -2589,6 +2670,7 @@ impl RunState {
             || !self.pending_rewards.is_empty()
             || !self.relic_rewards.is_empty()
             || !self.pending_bundles.is_empty()
+            || !self.offered_reward_sets.is_empty()
     }
 
     /// Drain every queued [`Self::relic_rewards`] entry by calling

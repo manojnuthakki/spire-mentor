@@ -645,6 +645,46 @@ pub enum ScreenReward {
         options: Vec<crate::cards::CardId>,
         upgraded: Vec<bool>,
     },
+    /// C# `SpecialCardReward`: this card is added to the deck when claimed
+    /// (Swipe's returned card).
+    SpecialCard {
+        card: crate::cards::Card,
+    },
+    /// C# `CardRemovalReward`: claiming it opens one deck removal (Forbidden
+    /// Grimoire).
+    RemoveCard,
+}
+
+impl ScreenReward {
+    /// The game's order within a set (C# `Reward.RewardsSetIndex`, the key
+    /// `RewardsSet.GenerateWithoutOffering` sorts by): gold, potion, relic,
+    /// special card, card, removal.
+    #[must_use]
+    pub const fn rewards_set_index(&self) -> u8 {
+        match self {
+            Self::Gold { .. } => 1,
+            Self::Potion { .. } => 2,
+            Self::Relic { .. } => 3,
+            Self::SpecialCard { .. } => 4,
+            Self::Card { .. } => 5,
+            Self::RemoveCard => 7,
+        }
+    }
+}
+
+/// One set on the rewards screen (sts2-agent fork): the won room's
+/// (`custom == false`, at the bottom of the stack), or one an event or relic
+/// offered (C# `RewardsCmd.OfferCustom`). A set offered while another is open
+/// is shown on top of it; leaving or completing it shows its parent again.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RewardSet {
+    /// Unclaimed rewards, in the game's order.
+    pub rewards: Vec<ScreenReward>,
+    /// `false` for a set built `WithSkippingDisallowed()` (Neow's Bones):
+    /// `ProceedRewards` is refused while a reward is left.
+    pub can_skip: bool,
+    /// An event's or relic's set (C# `source: custom`), not the room's.
+    pub custom: bool,
 }
 
 /// Top-level run orchestrator. Owns the run-side state ([`RunState`])
@@ -743,10 +783,15 @@ pub struct RunManager {
     /// shop is open OR the callback isn't wired (legacy skip-only
     /// behavior). Bead `sts2-rs-if6ry` (W3).
     shop_inventory: Option<crate::shop::ShopInventory>,
-    /// The open rewards screen ([`RunState::interactive_rewards`]), in the
-    /// order the game lists it (gold, potion, relic, card). `None` when no
-    /// screen is open. sts2-agent fork.
-    reward_screen: Option<Vec<ScreenReward>>,
+    /// The open rewards sets ([`RunState::interactive_rewards`]), innermost
+    /// last: the room's at the bottom when a won fight opened it, then any set
+    /// an event or relic offered over it. Empty when no screen is open.
+    /// sts2-agent fork.
+    reward_sets: Vec<RewardSet>,
+    /// The phase to return to once every offered set opened outside a room's
+    /// rewards screen is done (an event's page, the shop, the map).
+    /// sts2-agent fork.
+    rewards_resume_phase: Option<Phase>,
     /// The screen entry whose card reward is open right now (its options in
     /// `card_reward_options`). sts2-agent fork.
     screen_card_claim: Option<usize>,
@@ -912,7 +957,8 @@ impl RunManager {
             pending_choose_screen_post_add: Vec::new(),
             card_offer_can_skip: true,
             shop_inventory: None,
-            reward_screen: None,
+            reward_sets: Vec::new(),
+            rewards_resume_phase: None,
             screen_card_claim: None,
         }
     }
@@ -1424,20 +1470,25 @@ impl RunManager {
             Phase::CardReward => {
                 // sts2-agent fork: the open rewards screen, unless something it
                 // opened is up (its card reward, a relic a claim queued).
-                if let Some(screen) = &self.reward_screen {
+                if let Some(set) = self.reward_sets.last() {
                     if self.screen_card_claim.is_none()
                         && self.card_reward_options.is_empty()
                         && self.card_reward_bundles.is_none()
                         && self.run_state.relic_rewards.is_empty()
                     {
                         let open_slot = self.has_open_potion_slot();
-                        let mut v: Vec<RunAction> = screen
+                        let mut v: Vec<RunAction> = set
+                            .rewards
                             .iter()
                             .enumerate()
                             .filter(|(_, r)| open_slot || !matches!(r, ScreenReward::Potion { .. }))
                             .map(|(idx, _)| RunAction::ClaimReward { idx })
                             .collect();
-                        v.push(RunAction::ProceedRewards);
+                        // A set built `WithSkippingDisallowed()` can't be left
+                        // while a reward is on it.
+                        if self.reward_screen_can_proceed() {
+                            v.push(RunAction::ProceedRewards);
+                        }
                         return v;
                     }
                 }
@@ -1630,7 +1681,20 @@ impl RunManager {
     /// when a required callback (see [`ContentCallbacks`]) is not
     /// wired, and [`ActionResult::Advanced`] on success. Bead
     /// `sts2-rs-7kl4f`.
+    ///
+    /// Under [`RunState::interactive_rewards`] (sts2-agent fork) the sets an
+    /// event or relic offered during the action open afterwards, and offered
+    /// sets that are done close.
     pub fn take_action(&mut self, action: RunAction) -> ActionResult {
+        let result = self.take_action_inner(action);
+        if self.run_state.interactive_rewards {
+            self.open_offered_reward_sets();
+            self.settle_reward_sets();
+        }
+        result
+    }
+
+    fn take_action_inner(&mut self, action: RunAction) -> ActionResult {
         if self.phase == Phase::RunOver {
             return ActionResult::RunOver;
         }
@@ -2317,6 +2381,7 @@ impl RunManager {
         }
         if !player_won {
             // Player died.
+            self.run_state.room_extra_rewards.clear();
             self.run_state.is_over = true;
             self.run_state.player_won = false;
             self.phase = Phase::RunOver;
@@ -2353,6 +2418,12 @@ impl RunManager {
         // chain. A player death already short-circuited to `Phase::RunOver`
         // above, so this is reached only on a WON (incl. timed-out) fight.
         if let Some(req) = self.run_state.event_combat.take() {
+            // sts2-agent fork: an event fight has no room rewards screen here;
+            // its extra rewards are offered as a set after the event resumes.
+            let extras = std::mem::take(&mut self.run_state.room_extra_rewards);
+            if !extras.is_empty() {
+                self.run_state.offer_custom_rewards(extras, true);
+            }
             return self.finish_event_combat(req);
         }
         // NOTE: the post-combat victory heal (Ironclad's BurningBlood +6
@@ -2381,6 +2452,7 @@ impl RunManager {
                 // second-boss point, or at the boss point when no second
                 // exists (`CombatManager.cs:801-806`). Bead sts2-rs-40ikw.2.
                 if !self.run_state.awaiting_second_boss() {
+                    self.run_state.room_extra_rewards.clear();
                     self.run_state.is_over = true;
                     self.run_state.player_won = true;
                     self.phase = Phase::RunOver;
@@ -2526,10 +2598,12 @@ impl RunManager {
     }
 
     /// Open the rewards screen for a won combat room (sts2-agent fork): the
-    /// rolled gold and potion, the relics the room queued (an elite's), and
-    /// the card reward `enter_card_reward_phase` rolled, in the order the
-    /// game lists them (gold, potion, relic, card). No-op without a roll
-    /// (the auto-collect path).
+    /// rolled gold and potion, the relics the room queued (an elite's), the
+    /// card reward `enter_card_reward_phase` rolled, then the room's extra
+    /// rewards ([`RunState::room_extra_rewards`], rolled now, after the room's
+    /// own, as C# `RewardsSet.WithRewardsFromRoom` appends them), sorted as the
+    /// game sorts a set (gold, potion, relic, special card, card, removal).
+    /// No-op without a roll (the auto-collect path).
     fn open_reward_screen(&mut self, roll: Option<RoomRewardRoll>) {
         let Some(roll) = roll else {
             return;
@@ -2553,17 +2627,186 @@ impl RunManager {
                 upgraded: std::mem::take(&mut self.card_reward_upgraded),
             });
         }
-        self.reward_screen = Some(screen);
+        for extra in std::mem::take(&mut self.run_state.room_extra_rewards) {
+            if let Some(reward) = self.roll_offered_reward(extra) {
+                screen.push(reward);
+            }
+        }
+        screen.sort_by_key(ScreenReward::rewards_set_index);
+        self.reward_sets.push(RewardSet {
+            rewards: screen,
+            can_skip: true,
+            custom: false,
+        });
         self.screen_card_claim = None;
         self.phase = Phase::CardReward;
     }
 
-    /// Claim one reward of the open screen (C# `Reward.OnSelect`). sts2-agent fork.
+    /// Roll one offered reward's contents (C# `Reward.Populate`), or `None`
+    /// when there is nothing to offer (an exhausted pool). sts2-agent fork.
+    fn roll_offered_reward(
+        &mut self,
+        reward: crate::runstate::OfferedReward,
+    ) -> Option<ScreenReward> {
+        use crate::runstate::OfferedReward;
+        Some(match reward {
+            OfferedReward::Gold(amount) => ScreenReward::Gold { amount },
+            OfferedReward::Potion(kind) => ScreenReward::Potion {
+                kind: kind.or_else(|| {
+                    self.callbacks
+                        .roll_potion_reward_kind
+                        .and_then(|f| f(&mut self.run_state))
+                })?,
+            },
+            OfferedReward::Relic(relic) => ScreenReward::Relic { relic },
+            OfferedReward::RandomRelic { rarity, is_wax } => {
+                let rarity = rarity.unwrap_or_else(|| self.run_state.roll_reward_relic_rarity());
+                let id = self.run_state.pop_relic_from_grab_bag(rarity)?;
+                ScreenReward::Relic {
+                    relic: if is_wax {
+                        crate::runstate::RelicReward::new_wax(id)
+                    } else {
+                        crate::runstate::RelicReward::new(id)
+                    },
+                }
+            }
+            OfferedReward::Card {
+                options: Some(options),
+                upgraded,
+            } => ScreenReward::Card { options, upgraded },
+            OfferedReward::Card { options: None, .. } => {
+                // A non-combat card reward (`CardCreationSource.Other`): base
+                // odds, no pity (the same roller `drain_pending_rewards` uses).
+                let roller = self
+                    .callbacks
+                    .generate_noncombat_card_reward_options
+                    .or(self.callbacks.generate_card_reward_options)?;
+                let options = roller(&mut self.run_state);
+                let upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                if options.is_empty() {
+                    return None;
+                }
+                ScreenReward::Card { options, upgraded }
+            }
+            OfferedReward::RoomCard => {
+                let roller = self.callbacks.generate_card_reward_options?;
+                let options = roller(&mut self.run_state);
+                let upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                if options.is_empty() {
+                    return None;
+                }
+                ScreenReward::Card { options, upgraded }
+            }
+            OfferedReward::SpecialCard(card) => ScreenReward::SpecialCard { card },
+            OfferedReward::RemoveCard => ScreenReward::RemoveCard,
+        })
+    }
+
+    /// Show the sets events and relics offered ([`RunState::offered_reward_sets`],
+    /// sts2-agent fork): each rolled now, in offer order, its rewards in list
+    /// order (C# `RewardsSet.GenerateWithoutOffering` populates every reward
+    /// when the set is offered, then sorts it). The first offered is shown first
+    /// (C# awaits each `Offer` in turn), over whatever set is open; with none
+    /// open the current phase is kept to return to. Not in combat: a set
+    /// offered there waits for the fight to end.
+    fn open_offered_reward_sets(&mut self) {
+        if self.run_state.offered_reward_sets.is_empty()
+            || matches!(self.phase, Phase::Combat | Phase::RunOver)
+        {
+            return;
+        }
+        let offered = std::mem::take(&mut self.run_state.offered_reward_sets);
+        let mut opened: Vec<RewardSet> = Vec::with_capacity(offered.len());
+        for set in offered {
+            let mut rewards: Vec<ScreenReward> = Vec::with_capacity(set.rewards.len());
+            for reward in set.rewards {
+                if let Some(r) = self.roll_offered_reward(reward) {
+                    rewards.push(r);
+                }
+            }
+            if rewards.is_empty() {
+                continue;
+            }
+            rewards.sort_by_key(ScreenReward::rewards_set_index);
+            opened.push(RewardSet {
+                rewards,
+                can_skip: set.can_skip,
+                custom: true,
+            });
+        }
+        if opened.is_empty() {
+            return;
+        }
+        if self.reward_sets.is_empty() && self.rewards_resume_phase.is_none() {
+            self.rewards_resume_phase = Some(self.phase);
+        }
+        self.reward_sets.extend(opened.into_iter().rev());
+        self.phase = Phase::CardReward;
+    }
+
+    /// Close every offered set that is done (C# `RewardsSetSynchronizer`
+    /// completes a custom set when its last reward is claimed: it has no
+    /// proceed button), innermost first, once nothing a claim opened is still
+    /// up. When the last set offered outside a room's screen closes, the run
+    /// returns to the phase it was in. sts2-agent fork.
+    fn settle_reward_sets(&mut self) {
+        if self.reward_claim_in_progress() || !self.run_state.offered_reward_sets.is_empty() {
+            return;
+        }
+        while self
+            .reward_sets
+            .last()
+            .is_some_and(|set| set.custom && set.rewards.is_empty())
+        {
+            self.reward_sets.pop();
+        }
+        self.resume_after_reward_sets();
+    }
+
+    /// Whether something a claim opened is still up (a card offering, a deck
+    /// pick, a queued relic or card choice, a potion swap): the set it was
+    /// claimed from isn't done until it resolves (C# `Reward.OnSelect` awaits
+    /// it). sts2-agent fork.
+    fn reward_claim_in_progress(&self) -> bool {
+        let rs = &self.run_state;
+        self.screen_card_claim.is_some()
+            || !self.card_reward_options.is_empty()
+            || self.card_reward_bundles.is_some()
+            || !rs.relic_rewards.is_empty()
+            || rs.pending_deck_removals != 0
+            || rs.pending_deck_upgrades != 0
+            || !rs.pending_deck_transforms.is_empty()
+            || !rs.pending_deck_enchants.is_empty()
+            || !rs.pending_card_grants.is_empty()
+            || !rs.pending_card_selects.is_empty()
+            || !rs.pending_bundles.is_empty()
+            || !rs.pending_potion_swaps.is_empty()
+    }
+
+    /// With no set open any more, return to the phase the first offered set
+    /// interrupted, and let what waited on the sets (Neow's Bones' curse) land.
+    fn resume_after_reward_sets(&mut self) {
+        if !self.reward_sets.is_empty() {
+            self.phase = Phase::CardReward;
+            return;
+        }
+        let Some(phase) = self.rewards_resume_phase.take() else {
+            return;
+        };
+        self.phase = phase;
+        if phase == Phase::CardReward {
+            self.advance_after_card_reward();
+        }
+        self.drain_post_pick_relic_grants_if_settled();
+        self.drain_post_pick_deck_cards_if_settled();
+    }
+
+    /// Claim one reward of the open set (C# `Reward.OnSelect`). sts2-agent fork.
     fn do_claim_reward(&mut self, idx: usize) -> ActionResult {
         let Some(reward) = self
-            .reward_screen
-            .as_ref()
-            .and_then(|s| s.get(idx))
+            .reward_sets
+            .last()
+            .and_then(|set| set.rewards.get(idx))
             .cloned()
         else {
             return ActionResult::InvalidForPhase;
@@ -2574,26 +2817,54 @@ impl RunManager {
                 self.run_state.gain_gold(amount);
             }
             ScreenReward::Potion { kind } => {
-                // C# `PotionCmd.TryToProcure`: refused on a full belt, and the
-                // reward stays on the screen (not offered then).
-                if !self.run_state.add_potion_to_belt(kind) {
+                // C# `PotionCmd.TryToProcure`: a vetoed procure (Sozu) uses the
+                // reward up with nothing gained; a full belt refuses the claim,
+                // and the reward stays on the screen (not offered then).
+                if !crate::run_effects::dispatch_should_procure_potion(&mut self.run_state) {
+                    self.remove_screen_reward(idx);
+                } else if !self.run_state.add_potion_to_belt(kind) {
                     return ActionResult::InvalidForPhase;
+                } else {
+                    self.remove_screen_reward(idx);
                 }
-                self.remove_screen_reward(idx);
             }
             ScreenReward::Relic { relic } => {
                 self.remove_screen_reward(idx);
                 // Through the relic-reward queue so `accept_relic_reward`
-                // obtains it (wax flag, `after_obtained`); a follow-up reward it
-                // queues (Small Capsule) is offered before the screen returns.
+                // obtains it (wax flag, `after_obtained`); a set it offers
+                // (Small Capsule's) opens over this one.
                 self.run_state.relic_rewards.push(relic);
                 let last = self.run_state.relic_rewards.len() - 1;
                 let _ = self.run_state.accept_relic_reward(last);
+                // What its pickup queued the engine's own way (a choose
+                // screen, a bundle, a card or potion reward) comes up over
+                // the screen.
+                self.advance_after_card_reward();
             }
             ScreenReward::Card { options, upgraded } => {
                 self.card_reward_options = options;
                 self.card_reward_upgraded = upgraded;
                 self.screen_card_claim = Some(idx);
+            }
+            ScreenReward::SpecialCard { mut card } => {
+                // C# `SpecialCardReward.OnSelect`: `CardPileCmd.Add(card, Deck)`,
+                // with the deck-add hooks every deck add fires.
+                self.remove_screen_reward(idx);
+                self.run_state.modify_card_being_added_to_deck(&mut card);
+                let ctx = crate::run_effects::CardAddedRunCtx {
+                    card_id: card.card_id,
+                    card_type: card.card_type,
+                    source: crate::relic_effects::AddSource::Reward,
+                };
+                self.run_state.master_deck.push(card);
+                let _ =
+                    crate::run_effects::dispatch_on_card_added_to_deck(&mut self.run_state, &ctx);
+            }
+            ScreenReward::RemoveCard => {
+                // C# `CardRemovalReward.OnSelect`: one deck removal (the
+                // interactive pick preempts the screen until it is made).
+                self.remove_screen_reward(idx);
+                let _ = self.run_state.remove_cards_from_deck(1);
             }
         }
         self.phase = Phase::CardReward;
@@ -2601,19 +2872,28 @@ impl RunManager {
     }
 
     fn remove_screen_reward(&mut self, idx: usize) {
-        if let Some(screen) = self.reward_screen.as_mut() {
-            if idx < screen.len() {
-                screen.remove(idx);
+        if let Some(set) = self.reward_sets.last_mut() {
+            if idx < set.rewards.len() {
+                set.rewards.remove(idx);
             }
         }
     }
 
-    /// Leave the rewards screen, skipping what is left (C# `Reward.OnSkipped`),
-    /// and continue as the auto-collect path does after its card reward.
-    /// sts2-agent fork.
+    /// Leave the open set, skipping what is left on it (C# `Reward.OnSkipped`).
+    /// Refused while a set built `WithSkippingDisallowed()` has a reward left.
+    /// Leaving the room's set continues as the auto-collect path does after its
+    /// card reward; leaving an offered set shows its parent, or returns to the
+    /// phase it interrupted. sts2-agent fork.
     fn do_proceed_rewards(&mut self) -> ActionResult {
-        self.reward_screen = None;
+        if self.reward_sets.is_empty() || !self.reward_screen_can_proceed() {
+            return ActionResult::InvalidForPhase;
+        }
         self.screen_card_claim = None;
+        let left = self.reward_sets.pop();
+        if left.is_some_and(|set| set.custom) {
+            self.settle_reward_sets();
+            return ActionResult::Advanced;
+        }
         self.advance_after_card_reward();
         ActionResult::Advanced
     }
@@ -3071,13 +3351,45 @@ impl RunManager {
         true
     }
 
+    /// Open the front pending custom card select as a choose screen
+    /// (`card_reward_options` with `card_offer_choose_screen`); `false` when
+    /// none is pending.
+    fn surface_pending_card_select(&mut self) -> bool {
+        if self.run_state.pending_card_selects.is_empty() || !self.card_reward_options.is_empty() {
+            return false;
+        }
+        let select = self.run_state.pending_card_selects.remove(0);
+        self.card_reward_options = select.options;
+        // Carry the per-option offered-upgrade flags so `do_card_reward_pick`
+        // grants the picked card with its offered upgrade state. For
+        // SilverCrucible-modified slates (BrainLeech ShareKnowledge routed
+        // through `offer_card_reward`) every upgradable option is offered
+        // upgraded (C# `SilverCrucible.TryModifyCardRewardOptionsLate`);
+        // for the bare-id callers (HeftyTablet, shop-event) these are
+        // all-false. Replaces the prior unconditional `.clear()`, which
+        // always granted unupgraded.
+        self.card_reward_upgraded = select.upgraded;
+        self.card_offer_choose_screen = true;
+        self.pending_choose_screen_post_add = select.post_add;
+        self.card_offer_can_skip = select.can_skip;
+        true
+    }
+
     fn advance_after_card_reward(&mut self) {
         if !self.card_reward_options.is_empty() {
             return;
         }
         // sts2-agent fork: the rewards screen stays until `ProceedRewards`.
-        if self.reward_screen.is_some() {
+        // What a claim from it queued the engine's own way (a relic's choose
+        // screen, bundle, card or potion reward) comes up over it first.
+        if !self.reward_sets.is_empty() {
             self.phase = Phase::CardReward;
+            if self.run_state.relic_rewards.is_empty()
+                && !self.surface_pending_card_select()
+                && !self.drain_pending_rewards()
+            {
+                let _ = self.surface_pending_bundle();
+            }
             return;
         }
         if !self.run_state.relic_rewards.is_empty() {
@@ -3097,21 +3409,7 @@ impl RunManager {
         // `CardPileCmd.Add([chosen?, Injury], Deck)`. The standard
         // post-combat reward is callback-generated and never touches this
         // queue, so the two never collide.
-        if !self.run_state.pending_card_selects.is_empty() {
-            let select = self.run_state.pending_card_selects.remove(0);
-            self.card_reward_options = select.options;
-            // Carry the per-option offered-upgrade flags so `do_card_reward_pick`
-            // grants the picked card with its offered upgrade state. For
-            // SilverCrucible-modified slates (BrainLeech ShareKnowledge routed
-            // through `offer_card_reward`) every upgradable option is offered
-            // upgraded (C# `SilverCrucible.TryModifyCardRewardOptionsLate`);
-            // for the bare-id callers (HeftyTablet, shop-event) these are
-            // all-false. Replaces the prior unconditional `.clear()`, which
-            // always granted unupgraded.
-            self.card_reward_upgraded = select.upgraded;
-            self.card_offer_choose_screen = true;
-            self.pending_choose_screen_post_add = select.post_add;
-            self.card_offer_can_skip = select.can_skip;
+        if self.surface_pending_card_select() {
             // Stay in CardReward — get_available_actions now fans out the
             // option picks.
             return;
@@ -3644,7 +3942,9 @@ impl RunManager {
     /// `card_reward_options`. The shared settle gate for the two post-pick
     /// drains below.
     fn grant_batch_settled(&self) -> bool {
-        !self.run_state.has_pending_grant_choice() && self.card_reward_options.is_empty()
+        !self.run_state.has_pending_grant_choice()
+            && self.card_reward_options.is_empty()
+            && !self.reward_sets.iter().any(|set| set.custom)
     }
 
     /// Grant the next relic a multi-grant listener deferred
@@ -4800,7 +5100,31 @@ impl RunManager {
     /// sts2-agent fork.
     #[must_use]
     pub fn reward_screen(&self) -> Option<&[ScreenReward]> {
-        self.reward_screen.as_deref()
+        self.reward_sets.last().map(|set| set.rewards.as_slice())
+    }
+
+    /// The open rewards set (the innermost), with its skipping policy and
+    /// source, or `None`. sts2-agent fork.
+    #[must_use]
+    pub fn reward_set(&self) -> Option<&RewardSet> {
+        self.reward_sets.last()
+    }
+
+    /// How many rewards sets are open (a set offered from a claim is shown
+    /// over its parent). sts2-agent fork.
+    #[must_use]
+    pub fn reward_set_depth(&self) -> usize {
+        self.reward_sets.len()
+    }
+
+    /// Whether the open rewards screen may be left now: its set allows
+    /// skipping or nothing is left on it (C# `RewardsSet.DisallowSkipping`).
+    /// `true` when no screen is open. sts2-agent fork.
+    #[must_use]
+    pub fn reward_screen_can_proceed(&self) -> bool {
+        self.reward_sets
+            .last()
+            .map_or(true, |set| set.can_skip || set.rewards.is_empty())
     }
 
     /// The screen entry whose card reward is open now, if any. sts2-agent fork.
@@ -5290,7 +5614,11 @@ mod tests {
         rm.run_state.interactive_rewards = true;
         rm.run_state.max_potion_slots = 2;
         rm.phase = Phase::CardReward;
-        rm.reward_screen = Some(screen);
+        rm.reward_sets = vec![RewardSet {
+            rewards: screen,
+            can_skip: true,
+            custom: false,
+        }];
         rm
     }
 

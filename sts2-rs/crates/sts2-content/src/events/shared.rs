@@ -531,9 +531,13 @@ pub fn battleworn_dummy_resume(
     }
     match setting {
         BattlewornDummySetting::Setting1 => {
-            state
-                .pending_rewards
-                .push(Reward::Potion(PotionReward::empty()));
+            if state.interactive_rewards {
+                state.offer_custom_rewards(vec![sts2_core::OfferedReward::Potion(None)], true);
+            } else {
+                state
+                    .pending_rewards
+                    .push(Reward::Potion(PotionReward::empty()));
+            }
         }
         BattlewornDummySetting::Setting2 => {
             // C# `BattlewornDummy.cs:97` (v0.107.1):
@@ -755,6 +759,14 @@ fn philosopher_pool(state: &mut RunState) -> EventOutcome {
     // chosen philosopher's character pool. Deferred — character_id /
     // multi-rarity CardReward variants not landed yet. Queue 3
     // placeholders.
+    if state.interactive_rewards {
+        let card = sts2_core::OfferedReward::Card {
+            options: None,
+            upgraded: Vec::new(),
+        };
+        state.offer_custom_rewards(vec![card; 3], true);
+        return EventOutcome::finished("Received card rewards from philosopher pool (deferred).");
+    }
     for _ in 0..3 {
         state
             .pending_rewards
@@ -1205,11 +1217,17 @@ fn drowning_bottle(state: &mut RunState) -> EventOutcome {
     // surfaces a card-reward screen, not a potion). Push a populated
     // `Reward::Potion` so the drain grants Glowwater directly. `OfferCustom`
     // does not route through the Sozu procure-veto, so this is a direct push.
+    let glowwater = sts2_core::potions::PotionKind::GlowwaterPotion;
+    if state.interactive_rewards {
+        state.offer_custom_rewards(
+            vec![sts2_core::OfferedReward::Potion(Some(glowwater))],
+            true,
+        );
+        return EventOutcome::finished("Gained Glowwater Potion.");
+    }
     state
         .pending_rewards
-        .push(Reward::Potion(PotionReward::with_kind(
-            sts2_core::potions::PotionKind::GlowwaterPotion,
-        )));
+        .push(Reward::Potion(PotionReward::with_kind(glowwater)));
     EventOutcome::finished("Gained Glowwater Potion.")
 }
 
@@ -1639,6 +1657,18 @@ fn punchoff_nab(state: &mut RunState) -> EventOutcome {
     {
         state.master_deck.push(card);
     }
+    if state.interactive_rewards {
+        // C# `PunchOff.Nab`: `OfferCustom([new RelicReward(player)])`, a relic
+        // rolled when offered (the placeholder below stands in for it).
+        state.offer_custom_rewards(
+            vec![sts2_core::OfferedReward::RandomRelic {
+                rarity: None,
+                is_wax: false,
+            }],
+            true,
+        );
+        return EventOutcome::finished("Added Injury to the deck and gained a relic.");
+    }
     state
         .pending_rewards
         .push(Reward::Relic(RelicReward::new(RelicId::Astrolabe)));
@@ -1652,6 +1682,23 @@ fn punchoff_take_them(state: &mut RunState) -> EventOutcome {
     // never offers AND omitted the potion. Grant relic + potion; the combat
     // sub-page itself stays deferred (`6ynt.4.combat-setup`). Bead
     // `sts2-rs-RP27`. (Placeholder `Astrolabe` relic id is a separate stand-in.)
+    if state.interactive_rewards {
+        // The fight's rewards, `[RelicReward(player), PotionReward(player)]`,
+        // rolled in that order (the fight itself is still deferred).
+        state.offer_custom_rewards(
+            vec![
+                sts2_core::OfferedReward::RandomRelic {
+                    rarity: None,
+                    is_wax: false,
+                },
+                sts2_core::OfferedReward::Potion(None),
+            ],
+            true,
+        );
+        return EventOutcome::finished(
+            "Fought constructs and earned a relic + potion (combat deferred).",
+        );
+    }
     state
         .pending_rewards
         .push(Reward::Relic(RelicReward::new(RelicId::Astrolabe)));

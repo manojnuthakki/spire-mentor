@@ -333,6 +333,21 @@ fn listener_neows_bones(rs: &mut RunState) -> EffectResult {
         .take(2)
         .filter_map(|nr| nr.to_relic_id())
         .collect();
+    if rs.interactive_rewards {
+        // sts2-agent fork: the two relics are a set the player claims, built
+        // `WithSkippingDisallowed()` (every relic must be claimed). A set a
+        // claimed relic offers (Small Capsule's) opens over it. The curse is
+        // rolled once every offered set is done (C#: after `Offer()` returns).
+        let set = to_grant
+            .into_iter()
+            .map(|rid| sts2_core::OfferedReward::Relic(RelicReward::new(rid)))
+            .collect();
+        rs.offer_custom_rewards(set, false);
+        rs.pending_neows_bones_curses = rs
+            .pending_neows_bones_curses
+            .saturating_add(NEOWS_BONES_CURSES as u32);
+        return EffectResult::Resolved;
+    }
     let mut remaining = to_grant.into_iter();
     if let Some(first) = remaining.next() {
         rs.relic_rewards.push(RelicReward::new(first));

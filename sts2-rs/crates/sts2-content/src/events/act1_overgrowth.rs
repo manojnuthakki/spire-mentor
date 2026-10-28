@@ -84,6 +84,16 @@ fn brain_leech_rip(state: &mut RunState) -> EventOutcome {
     // at option time); the drain surfaces the options verbatim.
     let lost = state.lose_hp(BRAIN_LEECH_RIP_DAMAGE);
     let options = crate::cards::spec_index::roll_colorless_reward_options_no_upgrade(state, 3);
+    if state.interactive_rewards {
+        state.offer_custom_rewards(
+            vec![sts2_core::OfferedReward::Card {
+                options: Some(options),
+                upgraded: Vec::new(),
+            }],
+            true,
+        );
+        return EventOutcome::finished(format!("Took {lost} damage, gained a colorless card."));
+    }
     state
         .pending_rewards
         .push(Reward::Card(CardReward::from_options(options)));
@@ -255,9 +265,13 @@ fn the_legends_find_exit(state: &mut RunState) -> EventOutcome {
     if let Some(kind) =
         crate::potions::all::roll_event_potion_full_pool(&mut state.rng.rewards, state.character_id)
     {
-        state
-            .pending_rewards
-            .push(Reward::Potion(PotionReward::with_kind(kind)));
+        if state.interactive_rewards {
+            state.offer_custom_rewards(vec![sts2_core::OfferedReward::Potion(Some(kind))], true);
+        } else {
+            state
+                .pending_rewards
+                .push(Reward::Potion(PotionReward::with_kind(kind)));
+        }
     }
     EventOutcome::finished(format!("Took {lost} damage, gained a potion reward."))
 }

@@ -2102,7 +2102,12 @@ fn wellspring_bottle(state: &mut RunState) -> EventOutcome {
         state.character_id,
     );
     if let Some(kind) = kind {
-        let _ = state.procure_potion(PotionReward::with_kind(kind));
+        if state.interactive_rewards {
+            // `OfferCustom`: the claim procures it (Sozu's veto applies there).
+            state.offer_custom_rewards(vec![sts2_core::OfferedReward::Potion(Some(kind))], true);
+        } else {
+            let _ = state.procure_potion(PotionReward::with_kind(kind));
+        }
     }
     EventOutcome::finished("Gained a random potion.")
 }

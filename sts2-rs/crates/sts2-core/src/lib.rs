@@ -155,8 +155,8 @@ pub mod potion_effects;
 // hook channels in `relic_effects` mutate.
 pub mod runstate;
 pub use runstate::{
-    CardReward, PendingDeckEnchant, PendingDeckTransform, PotionReward, RelicRarity, RelicReward,
-    Reward, Room, RoomType, RunState,
+    CardReward, OfferedReward, OfferedRewardSet, PendingDeckEnchant, PendingDeckTransform,
+    PotionReward, RelicRarity, RelicReward, Reward, Room, RoomType, RunState,
 };
 
 // Bead sts2-rs-6ynt.4.1 (P7 events framework): Run-side events POD

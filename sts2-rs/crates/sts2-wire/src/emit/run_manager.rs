@@ -1036,8 +1036,10 @@ pub fn event_option_infos(rm: &RunManager) -> Value {
 /// (`RunState::interactive_rewards`) as `[{"type": "gold", "amount"} |
 /// {"type": "potion", "id": "POTION.<UPPER_SNAKE>"} | {"type": "relic", "id":
 /// "RELIC.<UPPER_SNAKE>"} | {"type": "card", "options": [{"id":
-/// "CARD.<UPPER_SNAKE>", "upgraded"}, …]}, …]`, index-aligned with
-/// `claim_reward`'s `idx`; `Null` when no screen is open. A card reward's
+/// "CARD.<UPPER_SNAKE>", "upgraded"}, …]} | {"type": "special_card", "id":
+/// "CARD.<UPPER_SNAKE>", "upgraded"} | {"type": "card_removal"}, …]` (the
+/// innermost open set), index-aligned with `claim_reward`'s `idx`; `Null`
+/// when no screen is open. A card reward's
 /// options are listed for the host's own bookkeeping: the game shows them only
 /// once the reward is claimed.
 #[must_use]
@@ -1085,6 +1087,18 @@ pub fn reward_screen(rm: &RunManager) -> Value {
                             })
                             .collect();
                         d.insert("options".to_owned(), Value::Array(opts));
+                    }
+                    ScreenReward::SpecialCard { card } => {
+                        set(&mut d, "type", "special_card");
+                        set(
+                            &mut d,
+                            "id",
+                            format!("CARD.{}", card.card_id.to_python_name()),
+                        );
+                        set(&mut d, "upgraded", card.upgraded);
+                    }
+                    ScreenReward::RemoveCard => {
+                        set(&mut d, "type", "card_removal");
                     }
                 }
                 Value::Object(d)

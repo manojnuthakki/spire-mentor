@@ -891,6 +891,20 @@ fn the_future_of_potions_trade(state: &mut RunState, slot: usize) -> EventOutcom
         return EventOutcome::finished("The machine had nothing to give.");
     }
     let count = options.len();
+    if state.interactive_rewards {
+        // C# `TheFutureOfPotions`: `OfferCustom([CardReward(options)])`, the
+        // options upgraded.
+        state.offer_custom_rewards(
+            vec![sts2_core::OfferedReward::Card {
+                options: Some(options),
+                upgraded: vec![true; count],
+            }],
+            true,
+        );
+        return EventOutcome::finished(format!(
+            "Fed the machine a potion for {count} upgraded cards to choose from."
+        ));
+    }
     state
         .pending_card_selects
         .push(sts2_core::runstate::PendingCardSelect {
@@ -1476,6 +1490,11 @@ fn whispering_gold(state: &mut RunState) -> EventOutcome {
     // time in queue order.
     let cost = whispering_rolled_gold(state);
     lose_gold_saturating(state, cost);
+    if state.interactive_rewards {
+        let potion = sts2_core::OfferedReward::Potion(None);
+        state.offer_custom_rewards(vec![potion; WHISPERING_POTION_COUNT], true);
+        return EventOutcome::finished(format!("Paid {cost} gold, gained 2 potion rewards."));
+    }
     for _ in 0..WHISPERING_POTION_COUNT {
         state
             .pending_rewards
