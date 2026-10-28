@@ -1,0 +1,172 @@
+{
+ "points": [
+  {
+   "act": 1,
+   "deck_size": 10,
+   "floor": 0,
+   "idx": 0,
+   "scores": {
+    "block": 38.7,
+    "damage": 25.6,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 11,
+   "floor": 0,
+   "idx": 2,
+   "scores": {
+    "block": 36.6,
+    "damage": 34.2,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 12,
+   "floor": 1,
+   "idx": 15,
+   "scores": {
+    "block": 41.9,
+    "damage": 32.2,
+    "velocity": 0.2,
+    "volume": 6.5
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 13,
+   "floor": 2,
+   "idx": 27,
+   "scores": {
+    "block": 39.1,
+    "damage": 30.0,
+    "velocity": 21.4,
+    "volume": 29.3
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 14,
+   "floor": 4,
+   "idx": 41,
+   "scores": {
+    "block": 38.9,
+    "damage": 36.6,
+    "velocity": 34.5,
+    "volume": 36.6
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 5,
+   "idx": 43,
+   "scores": {
+    "block": 36.5,
+    "damage": 35.2,
+    "velocity": 30.5,
+    "volume": 34.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 16,
+   "floor": 6,
+   "idx": 72,
+   "scores": {
+    "block": 35.1,
+    "damage": 34.6,
+    "velocity": 25.4,
+    "volume": 31.4
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 17,
+   "floor": 8,
+   "idx": 76,
+   "scores": {
+    "block": 32.8,
+    "damage": 35.0,
+    "velocity": 21.6,
+    "volume": 29.2
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 16,
+   "floor": 8,
+   "idx": 79,
+   "scores": {
+    "block": 35.1,
+    "damage": 33.5,
+    "velocity": 26.3,
+    "volume": 31.4
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 16,
+   "floor": 10,
+   "idx": 84,
+   "scores": {
+    "block": 35.1,
+    "damage": 35.1,
+    "velocity": 26.3,
+    "volume": 31.9
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 17,
+   "floor": 11,
+   "idx": 115,
+   "scores": {
+    "block": 33.1,
+    "damage": 36.2,
+    "velocity": 18.8,
+    "volume": 28.2
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 18,
+   "floor": 12,
+   "idx": 140,
+   "scores": {
+    "block": 36.7,
+    "damage": 34.0,
+    "velocity": 12.8,
+    "volume": 25.2
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 19,
+   "floor": 13,
+   "idx": 162,
+   "scores": {
+    "block": 34.9,
+    "damage": 34.2,
+    "velocity": 14.3,
+    "volume": 25.7
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 20,
+   "floor": 14,
+   "idx": 193,
+   "scores": {
+    "block": 40.4,
+    "damage": 33.2,
+    "velocity": 15.8,
+    "volume": 27.7
+   }
+  }
+ ]
+}

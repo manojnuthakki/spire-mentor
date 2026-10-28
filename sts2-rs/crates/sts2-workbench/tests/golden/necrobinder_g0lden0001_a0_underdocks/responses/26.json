@@ -192,6 +192,10 @@
       "damage": 1,
       "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
       "type": "Buff"
+     },
+     {
+      "intent_image": "https://assets.test/intent_atlas/intent_defend.png",
+      "type": "Defend"
      }
     ],
     "kind": "Seapunk",

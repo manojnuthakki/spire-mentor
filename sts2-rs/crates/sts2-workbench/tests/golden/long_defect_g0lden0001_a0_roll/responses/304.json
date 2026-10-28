@@ -1,0 +1,78 @@
+{
+ "assumptions": {
+  "energy": 3,
+  "hand": 5,
+  "samples": 200
+ },
+ "block": {
+  "per_turn": 10.4,
+  "scaling_cards": []
+ },
+ "composition": {
+  "by_rarity": {
+   "Basic": 9,
+   "Common": 8,
+   "Quest": 1,
+   "Uncommon": 2
+  },
+  "by_type": {
+   "Attack": 9,
+   "Quest": 1,
+   "Skill": 10
+  },
+  "dead_cards": 0,
+  "energy_curve": {
+   "0": 5,
+   "1": 14,
+   "X": 1
+  },
+  "unupgraded_basics": 8
+ },
+ "damage": {
+  "aoe_attacks": [
+   "Sweeping Beam"
+  ],
+  "attack_count": 9,
+  "per_turn": 16.1,
+  "scaling_cards": [
+   "Zap"
+  ],
+  "single_target": 14.5,
+  "vs_group": 17.7
+ },
+ "deck_size": 20,
+ "lenses": {
+  "boss": 29.4,
+  "hallway": 30.9,
+  "scaling": 28.6
+ },
+ "scores": {
+  "block": 40.5,
+  "damage": 33.1,
+  "velocity": 14.5,
+  "volume": 26.9
+ },
+ "velocity": {
+  "bottleneck": "energy",
+  "cards_per_turn": 4.3,
+  "dilution": 0.75,
+  "draw_limited_turns": 2.1,
+  "energy_limited_turns": 3.4,
+  "engine_cards": 2,
+  "extra_per_turn": 0.2,
+  "tags": {
+   "draw": 1,
+   "energy": 1
+  }
+ },
+ "warnings": [
+  {
+   "severity": "info",
+   "text": "Low velocity — few draw/energy cards; you'll often draw the wrong hand."
+  },
+  {
+   "severity": "info",
+   "text": "Energy-limited — cards stranded in hand; more energy helps, more draw won't."
+  }
+ ]
+}

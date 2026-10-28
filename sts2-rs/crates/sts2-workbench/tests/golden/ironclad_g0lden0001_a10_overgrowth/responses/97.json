@@ -204,6 +204,11 @@
        }
       ],
       "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "intent_image": "https://assets.test/intent_atlas/intent_debuff.png",
+      "type": "Debuff"
      }
     ],
     "kind": "Flyconid",

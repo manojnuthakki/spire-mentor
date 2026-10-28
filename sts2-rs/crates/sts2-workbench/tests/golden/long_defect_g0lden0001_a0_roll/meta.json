@@ -1,6 +1,5 @@
 {
  "coverage": [
-  "boss_relic",
   "card_select:none",
   "card_select:remove",
   "card_select:remove|upgrade",
@@ -55,12 +54,12 @@
   "status:409"
  ],
  "engine": {
-  "src_hash": "efd4c87e2241b233",
+  "src_hash": "e15dff2067dc4736",
   "version": "0.0.1"
  },
- "final_act": 2,
- "final_floor": 19,
- "full_responses": 135,
+ "final_act": 1,
+ "final_floor": 16,
+ "full_responses": 119,
  "full_steps": 40,
  "patches": {
   "assets_base_url": "https://assets.test",
@@ -69,7 +68,7 @@
  },
  "python": "3.13",
  "reached_game_over": true,
- "requests": 517,
+ "requests": 317,
  "scenario": {
   "act1": "roll",
   "ascension": 0,
@@ -846,5 +845,5 @@
   ],
   "seed": "G0LDEN0001"
  },
- "steps_played": 427
+ "steps_played": 243
 }

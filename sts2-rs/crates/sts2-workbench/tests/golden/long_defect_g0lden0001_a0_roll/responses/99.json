@@ -1,27 +1,3 @@
 {
- "error": "no PPO net loaded for Defect",
- "impl": "rust",
- "options": [
-  {
-   "action": "choose_option",
-   "args": {
-    "option_index": 0
-   },
-   "is_best": false,
-   "label": "Choose: Rest",
-   "prob": null
-  },
-  {
-   "action": "choose_option",
-   "args": {
-    "option_index": 1
-   },
-   "is_best": false,
-   "label": "Choose: Smith",
-   "prob": null
-  }
- ],
- "ppo_available": false,
- "surface": "rest",
- "value": null
+ "detail": "ppo policy only available at a non-combat decision"
 }

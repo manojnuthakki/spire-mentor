@@ -97,6 +97,10 @@
         }
        ],
        "type": "Attack"
+      },
+      {
+       "damage": 1,
+       "type": "Debuff"
       }
      ],
      "kind": "SludgeSpinner",

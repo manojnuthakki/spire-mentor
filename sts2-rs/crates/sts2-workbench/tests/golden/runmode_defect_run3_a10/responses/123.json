@@ -242,6 +242,11 @@
        }
       ],
       "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
+      "type": "Buff"
      }
     ],
     "kind": "CubexConstruct",

@@ -121,6 +121,10 @@
         }
        ],
        "type": "Attack"
+      },
+      {
+       "damage": 3,
+       "type": "Buff"
       }
      ],
      "kind": "SludgeSpinner",

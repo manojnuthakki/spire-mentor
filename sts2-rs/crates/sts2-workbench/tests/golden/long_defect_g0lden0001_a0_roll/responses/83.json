@@ -28,25 +28,6 @@
   "decision": "combat_play",
   "discard_pile": [
    {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
     "base_cost": -1,
     "can_play": false,
     "color": "colorless",
@@ -80,6 +61,25 @@
     },
     "target_type": "None",
     "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
     "upgraded": false
    }
   ],
@@ -293,6 +293,54 @@
   ],
   "draw_pile_count": 11,
   "enemies": [
+   {
+    "block": 0,
+    "hp": 6,
+    "image": "https://assets.test/monsters/snapping_jaxfruit.png",
+    "index": 0,
+    "intents": [
+     {
+      "base_damage": 3,
+      "damage": 7,
+      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_2.png",
+      "modifiers": [
+       {
+        "add": 4,
+        "image": "https://assets.test/power_atlas/strength_power.png",
+        "kind": "power",
+        "name": "STRENGTH",
+        "side": "enemy",
+        "title": "Strength"
+       }
+      ],
+      "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
+      "type": "Buff"
+     }
+    ],
+    "kind": "SnappingJaxfruit",
+    "max_hp": 32,
+    "move_state": "ENERGY_ORB_MOVE",
+    "name": "Snapping Jaxfruit",
+    "powers": [
+     {
+      "amount": 4,
+      "display_amount": 4,
+      "id": "STRENGTH",
+      "image": "https://assets.test/power_atlas/strength_power.png",
+      "image_big": "https://assets.test/power_big/strength_power.png",
+      "name": "Strength"
+     }
+    ],
+    "rig": "https://assets.test/monster_rigs/snapping_jaxfruit/snapping_jaxfruit",
+    "rig_bounds_h": 254.0,
+    "rig_bounds_w": 230.0,
+    "rig_scale": 0.3,
+    "uid": 2
+   },
    {
     "block": 0,
     "hp": 37,

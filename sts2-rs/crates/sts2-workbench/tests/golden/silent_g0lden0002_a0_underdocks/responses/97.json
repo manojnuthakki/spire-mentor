@@ -244,6 +244,11 @@
        }
       ],
       "type": "Attack"
+     },
+     {
+      "damage": 1,
+      "intent_image": "https://assets.test/intent_atlas/intent_debuff.png",
+      "type": "Debuff"
      }
     ],
     "kind": "SludgeSpinner",

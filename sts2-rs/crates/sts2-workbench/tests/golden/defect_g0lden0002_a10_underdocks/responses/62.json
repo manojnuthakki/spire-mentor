@@ -229,6 +229,11 @@
       "damage": 7,
       "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_2.png",
       "type": "Attack"
+     },
+     {
+      "damage": 3,
+      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
+      "type": "Buff"
      }
     ],
     "kind": "SludgeSpinner",

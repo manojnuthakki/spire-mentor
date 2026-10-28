@@ -1,3 +1,8 @@
 {
- "detail": "no recommendation here"
+ "action": "select_map_node",
+ "args": {
+  "col": 1,
+  "row": 15
+ },
+ "policy": "ppo"
 }

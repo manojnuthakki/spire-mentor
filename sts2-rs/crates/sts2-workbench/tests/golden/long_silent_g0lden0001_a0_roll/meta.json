@@ -56,7 +56,7 @@
   "status:409"
  ],
  "engine": {
-  "src_hash": "efd4c87e2241b233",
+  "src_hash": "e15dff2067dc4736",
   "version": "0.0.1"
  },
  "final_act": 1,
@@ -70,7 +70,7 @@
  },
  "python": "3.13",
  "reached_game_over": true,
- "requests": 249,
+ "requests": 253,
  "scenario": {
   "act1": "roll",
   "ascension": 0,
@@ -847,5 +847,5 @@
   ],
   "seed": "G0LDEN0001"
  },
- "steps_played": 179
+ "steps_played": 183
 }

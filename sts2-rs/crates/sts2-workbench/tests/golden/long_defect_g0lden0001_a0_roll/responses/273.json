@@ -12,7 +12,7 @@
   "bg_seed": 1772253313,
   "floor": 16,
   "step_no": 0,
-  "turn": 8
+  "turn": 4
  },
  "pv": null,
  "scores": [],
@@ -32,40 +32,73 @@
     "can_play": false,
     "color": "blue",
     "cost": 1,
-    "description": "Gain 6 Block.\nTransform all Status cards in your Hand into Fuel.",
-    "description_rich": "Gain 6 [gold]Block[/gold].\n[gold]Transform[/gold] all Status cards in your [gold]Hand[/gold] into [gold]Fuel[/gold].",
-    "id": "COMPACT",
-    "image": "https://assets.test/card_atlas/defect/beta/compact.png",
+    "description": "Gain 9 Block.",
+    "description_rich": "Gain 9 [gold]Block[/gold].",
+    "id": "LEAP",
+    "image": "https://assets.test/card_atlas/defect/leap.png",
     "index": -1,
-    "name": "Compact",
-    "rarity": "Uncommon",
+    "name": "Leap",
+    "rarity": "Common",
     "stats": {
-     "block": 6
+     "block": 9
     },
     "target_type": "None",
     "type": "Skill",
     "upgraded": false
-   }
-  ],
-  "discard_pile_count": 1,
-  "draw_pile": [
+   },
    {
-    "base_cost": 0,
+    "base_cost": 1,
     "can_play": false,
     "color": "blue",
-    "cost": 0,
-    "description": "Deal 3 damage.\nApply 1 Vulnerable.",
-    "description_rich": "Deal 3 damage.\nApply 1 [gold]Vulnerable[/gold].",
-    "id": "BEAM_CELL",
-    "image": "https://assets.test/card_atlas/defect/beam_cell.png",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
     "index": -1,
-    "name": "Beam Cell",
-    "rarity": "Common",
+    "name": "Strike",
+    "rarity": "Basic",
     "stats": {
-     "damage": 3
+     "damage": 6
     },
     "target_type": "None",
     "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": -1,
+    "can_play": false,
+    "color": "colorless",
+    "cost": 0,
+    "description": "Unplayable.\nEthereal.",
+    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
+    "id": "DAZED",
+    "image": "https://assets.test/card_atlas/status/dazed.png",
+    "index": -1,
+    "name": "Dazed",
+    "rarity": "Status",
+    "stats": {},
+    "target_type": "None",
+    "type": "Status",
     "upgraded": false
    },
    {
@@ -85,6 +118,28 @@
     },
     "target_type": "None",
     "type": "Skill",
+    "upgraded": false
+   }
+  ],
+  "discard_pile_count": 5,
+  "draw_pile": [
+   {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Deal 3 damage.\nApply 1 Vulnerable.",
+    "description_rich": "Deal 3 damage.\nApply 1 [gold]Vulnerable[/gold].",
+    "id": "BEAM_CELL",
+    "image": "https://assets.test/card_atlas/defect/beam_cell.png",
+    "index": -1,
+    "name": "Beam Cell",
+    "rarity": "Common",
+    "stats": {
+     "damage": 3
+    },
+    "target_type": "None",
+    "type": "Attack",
     "upgraded": false
    },
    {
@@ -107,55 +162,19 @@
     "upgraded": false
    },
    {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.\nEthereal.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
-    "id": "DAZED",
-    "image": "https://assets.test/card_atlas/status/dazed.png",
-    "index": -1,
-    "name": "Dazed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
     "base_cost": 1,
     "can_play": false,
     "color": "blue",
     "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "description": "Gain 6 Block.\nTransform all Status cards in your Hand into Fuel.",
+    "description_rich": "Gain 6 [gold]Block[/gold].\n[gold]Transform[/gold] all Status cards in your [gold]Hand[/gold] into [gold]Fuel[/gold].",
+    "id": "COMPACT",
+    "image": "https://assets.test/card_atlas/defect/beta/compact.png",
     "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
+    "name": "Compact",
+    "rarity": "Uncommon",
     "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
+     "block": 6
     },
     "target_type": "None",
     "type": "Skill",
@@ -240,35 +259,18 @@
     "can_play": false,
     "color": "blue",
     "cost": 1,
-    "description": "Gain 9 Block.",
-    "description_rich": "Gain 9 [gold]Block[/gold].",
-    "id": "LEAP",
-    "image": "https://assets.test/card_atlas/defect/leap.png",
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
     "index": -1,
-    "name": "Leap",
-    "rarity": "Common",
+    "name": "Strike",
+    "rarity": "Basic",
     "stats": {
-     "block": 9
+     "damage": 6
     },
     "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "quest",
-    "cost": 0,
-    "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
-    "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra [gold]Gold[/gold] in the next Act.",
-    "id": "SPOILS_MAP",
-    "image": "https://assets.test/card_atlas/quest/spoils_map.png",
-    "index": -1,
-    "name": "Spoils Map",
-    "rarity": "Quest",
-    "stats": {},
-    "target_type": "None",
-    "type": "Quest",
+    "type": "Attack",
     "upgraded": false
    },
    {
@@ -289,44 +291,6 @@
     "target_type": "None",
     "type": "Attack",
     "upgraded": true
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
    },
    {
     "base_cost": 1,
@@ -435,45 +399,28 @@
     "upgraded": false
    },
    {
-    "base_cost": -1,
+    "base_cost": 1,
     "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.",
-    "description_rich": "[gold]Unplayable[/gold].",
-    "id": "WOUND",
-    "image": "https://assets.test/card_atlas/status/wound.png",
+    "color": "blue",
+    "cost": 1,
+    "description": "Channel 1 Lightning.",
+    "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
+    "id": "ZAP",
+    "image": "https://assets.test/card_atlas/defect/zap.png",
     "index": -1,
-    "name": "Wound",
-    "rarity": "Status",
+    "name": "Zap",
+    "rarity": "Basic",
     "stats": {},
     "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.",
-    "description_rich": "[gold]Unplayable[/gold].",
-    "id": "WOUND",
-    "image": "https://assets.test/card_atlas/status/wound.png",
-    "index": -1,
-    "name": "Wound",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
+    "type": "Skill",
     "upgraded": false
    }
   ],
-  "draw_pile_count": 23,
+  "draw_pile_count": 16,
   "enemies": [
    {
     "block": 0,
-    "hp": 90,
+    "hp": 138,
     "image": "https://assets.test/monsters/vantom.png",
     "index": 0,
     "intents": [
@@ -491,10 +438,10 @@
      {
       "amount": 2,
       "display_amount": 2,
-      "id": "STRENGTH",
-      "image": "https://assets.test/power_atlas/strength_power.png",
-      "image_big": "https://assets.test/power_big/strength_power.png",
-      "name": "Strength"
+      "id": "WEAK",
+      "image": "https://assets.test/power_atlas/weak_power.png",
+      "image_big": "https://assets.test/power_big/weak_power.png",
+      "name": "Weak"
      }
     ],
     "rig": "https://assets.test/monster_rigs/vantom/vantom",
@@ -504,40 +451,58 @@
     "uid": 2
    }
   ],
-  "energy": 2,
+  "energy": 0,
   "energy_image": "https://assets.test/sprite_fonts/defect_energy_icon.png",
-  "exhaust_pile": [
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Gain Energy.\nDraw 1 card.\nExhaust.",
-    "description_rich": "Gain Energy.\nDraw 1 card.\n[gold]Exhaust[/gold].",
-    "id": "FUEL",
-    "image": "https://assets.test/card_atlas/token/beta/fuel.png",
-    "index": -1,
-    "name": "Fuel",
-    "rarity": "Token",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   }
-  ],
-  "exhaust_pile_count": 1,
+  "exhaust_pile": [],
+  "exhaust_pile_count": 0,
   "floor": 16,
   "hand": [
    {
+    "base_cost": -1,
+    "can_play": false,
+    "color": "quest",
+    "cost": 0,
+    "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
+    "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra [gold]Gold[/gold] in the next Act.",
+    "id": "SPOILS_MAP",
+    "image": "https://assets.test/card_atlas/quest/spoils_map.png",
+    "index": 0,
+    "name": "Spoils Map",
+    "rarity": "Quest",
+    "stats": {},
+    "target_type": "None",
+    "type": "Quest",
+    "unplayable_reason": "blocked",
+    "upgraded": false
+   },
+   {
+    "base_cost": -1,
+    "can_play": false,
+    "color": "colorless",
+    "cost": 0,
+    "description": "Unplayable.",
+    "description_rich": "[gold]Unplayable[/gold].",
+    "id": "WOUND",
+    "image": "https://assets.test/card_atlas/status/wound.png",
+    "index": 1,
+    "name": "Wound",
+    "rarity": "Status",
+    "stats": {},
+    "target_type": "None",
+    "type": "Status",
+    "unplayable_reason": "blocked",
+    "upgraded": false
+   },
+   {
     "base_cost": 1,
-    "can_play": true,
+    "can_play": false,
     "color": "blue",
     "cost": 1,
     "description": "Gain 5 Block.",
     "description_rich": "Gain 5 [gold]Block[/gold].",
     "id": "DEFEND_DEFECT",
     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-    "index": 0,
+    "index": 2,
     "name": "Defend",
     "rarity": "Basic",
     "stats": {
@@ -545,57 +510,27 @@
     },
     "target_type": "None",
     "type": "Skill",
+    "unplayable_reason": "cost",
     "upgraded": false
    },
    {
     "base_cost": 1,
-    "can_play": true,
+    "can_play": false,
     "color": "blue",
     "cost": 1,
-    "description": "Channel 1 Lightning.",
-    "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
-    "id": "ZAP",
-    "image": "https://assets.test/card_atlas/defect/zap.png",
-    "index": 1,
-    "name": "Zap",
-    "rarity": "Basic",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": true,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Gain Energy.\nDraw 1 card.\nExhaust.",
-    "description_rich": "Gain Energy.\nDraw 1 card.\n[gold]Exhaust[/gold].",
-    "id": "FUEL",
-    "image": "https://assets.test/card_atlas/token/beta/fuel.png",
-    "index": 2,
-    "name": "Fuel",
-    "rarity": "Token",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": true,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Gain Energy.\nDraw 1 card.\nExhaust.",
-    "description_rich": "Gain Energy.\nDraw 1 card.\n[gold]Exhaust[/gold].",
-    "id": "FUEL",
-    "image": "https://assets.test/card_atlas/token/beta/fuel.png",
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
     "index": 3,
-    "name": "Fuel",
-    "rarity": "Token",
-    "stats": {},
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
     "target_type": "None",
     "type": "Skill",
+    "unplayable_reason": "cost",
     "upgraded": false
    }
   ],
@@ -621,7 +556,7 @@
    }
   ],
   "player": {
-   "block": 6,
+   "block": 20,
    "deck": [
     {
      "color": "blue",
@@ -885,7 +820,7 @@
     }
    ],
    "gold": 158,
-   "hp": 35,
+   "hp": 12,
    "image": "https://assets.test/character_sprites/defect.png",
    "max_hp": 75,
    "name": "Defect",
@@ -917,6 +852,6 @@
    "rig_scale": 0.125
   },
   "player_powers": [],
-  "round": 8
+  "round": 4
  }
 }

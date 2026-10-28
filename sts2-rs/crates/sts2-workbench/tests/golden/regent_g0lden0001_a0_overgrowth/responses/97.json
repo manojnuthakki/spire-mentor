@@ -267,6 +267,11 @@
       "damage": 3,
       "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_1.png",
       "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
+      "type": "Buff"
      }
     ],
     "kind": "SnappingJaxfruit",
@@ -290,6 +295,11 @@
       "damage": 8,
       "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_2.png",
       "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "intent_image": "https://assets.test/intent_atlas/intent_debuff.png",
+      "type": "Debuff"
      }
     ],
     "kind": "Flyconid",

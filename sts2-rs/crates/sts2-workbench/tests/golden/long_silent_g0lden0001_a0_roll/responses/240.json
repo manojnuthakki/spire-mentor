@@ -1,59 +1,83 @@
 {
- "config": {
-  "c_puct": 2.5,
-  "depth": 200,
-  "draw_widening_c": 2.0,
-  "hidden_info": "beliefdraw",
-  "rollout_policy": "heuristic",
-  "seed": 1,
-  "sims": 48,
-  "threads": 1
+ "assumptions": {
+  "energy": 3,
+  "hand": 5,
+  "samples": 200
  },
- "pv": null,
- "scores": [
+ "block": {
+  "per_turn": 10.9,
+  "scaling_cards": []
+ },
+ "composition": {
+  "by_rarity": {
+   "Basic": 11,
+   "Common": 5,
+   "Quest": 1,
+   "Uncommon": 1
+  },
+  "by_type": {
+   "Attack": 9,
+   "Quest": 1,
+   "Skill": 8
+  },
+  "dead_cards": 0,
+  "energy_curve": {
+   "0": 1,
+   "1": 14,
+   "2": 2,
+   "X": 1
+  },
+  "unupgraded_basics": 10
+ },
+ "damage": {
+  "aoe_attacks": [],
+  "attack_count": 9,
+  "per_turn": 16.8,
+  "scaling_cards": [
+   "Neutralize",
+   "Snakebite",
+   "Predator"
+  ],
+  "single_target": 16.9,
+  "vs_group": 16.8
+ },
+ "deck_size": 18,
+ "lenses": {
+  "boss": 39.8,
+  "hallway": 37.6,
+  "scaling": 41.0
+ },
+ "scores": {
+  "block": 42.1,
+  "damage": 34.3,
+  "velocity": 43.2,
+  "volume": 39.7
+ },
+ "velocity": {
+  "bottleneck": "energy",
+  "cards_per_turn": 3.1,
+  "dilution": 0.83,
+  "draw_limited_turns": 0.0,
+  "energy_limited_turns": 6.8,
+  "engine_cards": 3,
+  "extra_per_turn": 0.1,
+  "tags": {
+   "draw": 1,
+   "tutor": 2
+  }
+ },
+ "warnings": [
   {
-   "action": "ULTIMATE_STRIKE.title",
-   "is_best": true,
-   "low_confidence": false,
-   "q": 1.235,
-   "q_saturated": false,
-   "stable_idx": 6,
-   "target_index": null,
-   "visits": 12,
-   "win_prob": 1.0
+   "severity": "info",
+   "text": "No AOE — multi-enemy fights (Gremlins, hallways) will be slow."
   },
   {
-   "action": "STRIKE_SILENT.title",
-   "is_best": false,
-   "low_confidence": false,
-   "q": 1.2329,
-   "q_saturated": false,
-   "stable_idx": 0,
-   "target_index": null,
-   "visits": 12,
-   "win_prob": 1.0
+   "severity": "info",
+   "text": "Energy-limited — cards stranded in hand; more energy helps, more draw won't."
   },
   {
-   "action": "DEFEND_SILENT.title",
-   "is_best": false,
-   "low_confidence": false,
-   "q": 1.2305,
-   "q_saturated": false,
-   "stable_idx": 2,
-   "target_index": null,
-   "visits": 12,
-   "win_prob": 1.0
-  },
-  {
-   "action": "end turn",
-   "is_best": false,
-   "low_confidence": false,
-   "q": 1.2156,
-   "q_saturated": false,
-   "stable_idx": -1,
-   "target_index": null,
-   "visits": 12,
-   "win_prob": 1.0
+   "severity": "warn",
+   "text": "Deck clogged with basics/curses — prioritise removals."
   }
  ]
 }

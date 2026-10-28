@@ -87,20 +87,20 @@
    {
     "base_cost": 1,
     "can_play": false,
-    "color": "colorless",
+    "color": "green",
     "cost": 1,
-    "description": "Deal 14 damage.",
-    "description_rich": "Deal 14 damage.",
-    "id": "ULTIMATE_STRIKE",
-    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_SILENT",
+    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
     "index": -1,
-    "name": "Ultimate Strike",
-    "rarity": "Uncommon",
+    "name": "Defend",
+    "rarity": "Basic",
     "stats": {
-     "damage": 14
+     "block": 5
     },
     "target_type": "None",
-    "type": "Attack",
+    "type": "Skill",
     "upgraded": false
    },
    {
@@ -125,20 +125,20 @@
    {
     "base_cost": 1,
     "can_play": false,
-    "color": "green",
+    "color": "colorless",
     "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_SILENT",
-    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+    "description": "Deal 14 damage.",
+    "description_rich": "Deal 14 damage.",
+    "id": "ULTIMATE_STRIKE",
+    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
     "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
+    "name": "Ultimate Strike",
+    "rarity": "Uncommon",
     "stats": {
-     "block": 5
+     "damage": 14
     },
     "target_type": "None",
-    "type": "Skill",
+    "type": "Attack",
     "upgraded": false
    },
    {
@@ -259,7 +259,7 @@
   "enemies": [
    {
     "block": 0,
-    "hp": 18,
+    "hp": 32,
     "image": "https://assets.test/monsters/snapping_jaxfruit.png",
     "index": 0,
     "intents": [
@@ -278,6 +278,11 @@
        }
       ],
       "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
+      "type": "Buff"
      }
     ],
     "kind": "SnappingJaxfruit",

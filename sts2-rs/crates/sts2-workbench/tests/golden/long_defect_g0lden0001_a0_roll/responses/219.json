@@ -12,7 +12,7 @@
   "bg_seed": 1772253313,
   "floor": 14,
   "step_no": 0,
-  "turn": 4
+  "turn": 1
  },
  "pv": null,
  "scores": [],
@@ -28,97 +28,20 @@
   "decision": "combat_play",
   "discard_pile": [
    {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
     "base_cost": -1,
     "can_play": false,
     "color": "colorless",
     "cost": 0,
-    "description": "Unplayable.\nEthereal.\nWhenever you draw this card, lose Energy.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].\nWhenever you draw this card, lose Energy.",
-    "id": "VOID",
-    "image": "https://assets.test/card_atlas/status/void.png",
+    "description": "Unplayable.\nEthereal.",
+    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
+    "id": "DAZED",
+    "image": "https://assets.test/card_atlas/status/dazed.png",
     "index": -1,
-    "name": "Void",
+    "name": "Dazed",
     "rarity": "Status",
     "stats": {},
     "target_type": "None",
     "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "blue",
-    "cost": 0,
-    "description": "Gain Energy.\nAdd a Void into your Discard Pile.",
-    "description_rich": "Gain Energy.\nAdd a [gold]Void[/gold] into your [gold]Discard Pile[/gold].",
-    "id": "TURBO",
-    "image": "https://assets.test/card_atlas/defect/turbo.png",
-    "index": -1,
-    "name": "TURBO",
-    "rarity": "Common",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   }
-  ],
-  "discard_pile_count": 4,
-  "draw_pile": [
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "blue",
-    "cost": 0,
-    "description": "Deal 3 damage.\nApply 1 Vulnerable.",
-    "description_rich": "Deal 3 damage.\nApply 1 [gold]Vulnerable[/gold].",
-    "id": "BEAM_CELL",
-    "image": "https://assets.test/card_atlas/defect/beam_cell.png",
-    "index": -1,
-    "name": "Beam Cell",
-    "rarity": "Common",
-    "stats": {
-     "damage": 3
-    },
-    "target_type": "None",
-    "type": "Attack",
     "upgraded": false
    },
    {
@@ -138,6 +61,83 @@
     },
     "target_type": "None",
     "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+    "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 [gold]Weak[/gold].",
+    "id": "GO_FOR_THE_EYES",
+    "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+    "index": -1,
+    "name": "Go for the Eyes",
+    "rarity": "Common",
+    "stats": {
+     "damage": 3
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Evoke your rightmost Orb twice.",
+    "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
+    "id": "DUALCAST",
+    "image": "https://assets.test/card_atlas/defect/dualcast.png",
+    "index": -1,
+    "name": "Dualcast",
+    "rarity": "Basic",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 6 Block.\nTransform all Status cards in your Hand into Fuel.",
+    "description_rich": "Gain 6 [gold]Block[/gold].\n[gold]Transform[/gold] all Status cards in your [gold]Hand[/gold] into [gold]Fuel[/gold].",
+    "id": "COMPACT",
+    "image": "https://assets.test/card_atlas/defect/beta/compact.png",
+    "index": -1,
+    "name": "Compact",
+    "rarity": "Uncommon",
+    "stats": {
+     "block": 6
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   }
+  ],
+  "discard_pile_count": 5,
+  "draw_pile": [
+   {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Deal 3 damage.\nApply 1 Vulnerable.",
+    "description_rich": "Deal 3 damage.\nApply 1 [gold]Vulnerable[/gold].",
+    "id": "BEAM_CELL",
+    "image": "https://assets.test/card_atlas/defect/beam_cell.png",
+    "index": -1,
+    "name": "Beam Cell",
+    "rarity": "Common",
+    "stats": {
+     "damage": 3
+    },
+    "target_type": "None",
+    "type": "Attack",
     "upgraded": false
    },
    {
@@ -164,42 +164,6 @@
     "can_play": false,
     "color": "blue",
     "cost": 1,
-    "description": "Gain 6 Block.\nTransform all Status cards in your Hand into Fuel.",
-    "description_rich": "Gain 6 [gold]Block[/gold].\n[gold]Transform[/gold] all Status cards in your [gold]Hand[/gold] into [gold]Fuel[/gold].",
-    "id": "COMPACT",
-    "image": "https://assets.test/card_atlas/defect/beta/compact.png",
-    "index": -1,
-    "name": "Compact",
-    "rarity": "Uncommon",
-    "stats": {
-     "block": 6
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.\nEthereal.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
-    "id": "DAZED",
-    "image": "https://assets.test/card_atlas/status/dazed.png",
-    "index": -1,
-    "name": "Dazed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
     "description": "Gain 5 Block.",
     "description_rich": "Gain 5 [gold]Block[/gold].",
     "id": "DEFEND_DEFECT",
@@ -257,14 +221,16 @@
     "can_play": false,
     "color": "blue",
     "cost": 1,
-    "description": "Evoke your rightmost Orb twice.",
-    "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
-    "id": "DUALCAST",
-    "image": "https://assets.test/card_atlas/defect/dualcast.png",
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
     "index": -1,
-    "name": "Dualcast",
+    "name": "Defend",
     "rarity": "Basic",
-    "stats": {},
+    "stats": {
+     "block": 5
+    },
     "target_type": "None",
     "type": "Skill",
     "upgraded": false
@@ -289,19 +255,19 @@
     "upgraded": false
    },
    {
-    "base_cost": 0,
+    "base_cost": 1,
     "can_play": false,
     "color": "blue",
-    "cost": 0,
-    "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-    "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 [gold]Weak[/gold].",
-    "id": "GO_FOR_THE_EYES",
-    "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
     "index": -1,
-    "name": "Go for the Eyes",
-    "rarity": "Common",
+    "name": "Strike",
+    "rarity": "Basic",
     "stats": {
-     "damage": 3
+     "damage": 6
     },
     "target_type": "None",
     "type": "Attack",
@@ -310,69 +276,20 @@
    {
     "base_cost": 1,
     "can_play": false,
-    "color": "colorless",
+    "color": "blue",
     "cost": 1,
-    "description": "Draw 1 card.\nExhaust.",
-    "description_rich": "Draw 1 card.\n[gold]Exhaust[/gold].",
-    "id": "SLIMED",
-    "image": "https://assets.test/card_atlas/status/slimed.png",
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
     "index": -1,
-    "name": "Slimed",
-    "rarity": "Status",
-    "stats": {},
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
     "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Draw 1 card.\nExhaust.",
-    "description_rich": "Draw 1 card.\n[gold]Exhaust[/gold].",
-    "id": "SLIMED",
-    "image": "https://assets.test/card_atlas/status/slimed.png",
-    "index": -1,
-    "name": "Slimed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Draw 1 card.\nExhaust.",
-    "description_rich": "Draw 1 card.\n[gold]Exhaust[/gold].",
-    "id": "SLIMED",
-    "image": "https://assets.test/card_atlas/status/slimed.png",
-    "index": -1,
-    "name": "Slimed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Draw 1 card.\nExhaust.",
-    "description_rich": "Draw 1 card.\n[gold]Exhaust[/gold].",
-    "id": "SLIMED",
-    "image": "https://assets.test/card_atlas/status/slimed.png",
-    "index": -1,
-    "name": "Slimed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
+    "type": "Attack",
     "upgraded": false
    },
    {
@@ -414,6 +331,23 @@
     "upgraded": false
    },
    {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Gain Energy.\nAdd a Void into your Discard Pile.",
+    "description_rich": "Gain Energy.\nAdd a [gold]Void[/gold] into your [gold]Discard Pile[/gold].",
+    "id": "TURBO",
+    "image": "https://assets.test/card_atlas/defect/turbo.png",
+    "index": -1,
+    "name": "TURBO",
+    "rarity": "Common",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
     "base_cost": 1,
     "can_play": false,
     "color": "colorless",
@@ -450,11 +384,11 @@
     "upgraded": false
    }
   ],
-  "draw_pile_count": 19,
+  "draw_pile_count": 14,
   "enemies": [
    {
     "block": 0,
-    "hp": 9,
+    "hp": 28,
     "image": "https://assets.test/monsters/twig_slime_m.png",
     "index": 0,
     "intents": [
@@ -476,19 +410,18 @@
    },
    {
     "block": 0,
-    "hp": 27,
+    "hp": 25,
     "image": "https://assets.test/monsters/leaf_slime_m.png",
     "index": 1,
     "intents": [
      {
-      "damage": 8,
-      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_2.png",
-      "type": "Attack"
+      "intent_image": null,
+      "type": "StatusCard"
      }
     ],
     "kind": "LeafSlimeM",
     "max_hp": 33,
-    "move_state": "CLUMP_SHOT",
+    "move_state": "STICKY_SHOT",
     "name": "Leaf Slime (M)",
     "powers": [],
     "rig": "https://assets.test/monster_rigs/leaf_slime_m/leaf_slime_m",
@@ -496,30 +429,35 @@
     "rig_bounds_w": 200.0,
     "rig_scale": 0.45,
     "uid": 3
-   }
-  ],
-  "energy": 2,
-  "energy_image": "https://assets.test/sprite_fonts/defect_energy_icon.png",
-  "exhaust_pile": [
+   },
    {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Draw 1 card.\nExhaust.",
-    "description_rich": "Draw 1 card.\n[gold]Exhaust[/gold].",
-    "id": "SLIMED",
-    "image": "https://assets.test/card_atlas/status/slimed.png",
-    "index": -1,
-    "name": "Slimed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
+    "block": 0,
+    "hp": 11,
+    "image": "https://assets.test/monsters/leaf_slime_s.png",
+    "index": 2,
+    "intents": [
+     {
+      "damage": 3,
+      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_1.png",
+      "type": "Attack"
+     }
+    ],
+    "kind": "LeafSlimeS",
+    "max_hp": 11,
+    "move_state": "BUTT",
+    "name": "Leaf Slime (S)",
+    "powers": [],
+    "rig": "https://assets.test/monster_rigs/leaf_slime_s/leaf_slime_s",
+    "rig_bounds_h": 102.0,
+    "rig_bounds_w": 154.0,
+    "rig_scale": 0.2734,
+    "uid": 4
    }
   ],
-  "exhaust_pile_count": 1,
+  "energy": 1,
+  "energy_image": "https://assets.test/sprite_fonts/defect_energy_icon.png",
+  "exhaust_pile": [],
+  "exhaust_pile_count": 0,
   "floor": 14,
   "hand": [
    {
@@ -539,54 +477,14 @@
     "type": "Quest",
     "unplayable_reason": "blocked",
     "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "blue",
-    "cost": 1,
-    "damage_preview": {
-     "0": 6,
-     "1": 6
-    },
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-    "index": 1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "AnyEnemy",
-    "type": "Attack",
-    "upgraded": false
    }
   ],
   "max_energy": 3,
   "options": [],
   "orb_slots": 3,
-  "orbs": [
-   {
-    "evoke": 8,
-    "image": "https://assets.test/orb_atlas/lightning.png",
-    "index": 0,
-    "name": "LIGHTNING_ORB.title",
-    "passive": 3,
-    "type": "Lightning"
-   },
-   {
-    "evoke": 5,
-    "image": "https://assets.test/orb_atlas/frost.png",
-    "index": 1,
-    "name": "FROST_ORB.title",
-    "passive": 2,
-    "type": "Frost"
-   }
-  ],
+  "orbs": [],
   "player": {
-   "block": 5,
+   "block": 22,
    "deck": [
     {
      "color": "blue",
@@ -837,7 +735,7 @@
     }
    ],
    "gold": 138,
-   "hp": 32,
+   "hp": 30,
    "image": "https://assets.test/character_sprites/defect.png",
    "max_hp": 75,
    "name": "Defect",
@@ -868,7 +766,24 @@
    "rig_bounds_w": 250.0,
    "rig_scale": 0.125
   },
-  "player_powers": [],
-  "round": 4
+  "player_powers": [
+   {
+    "amount": 5,
+    "display_amount": 5,
+    "id": "DEXTERITY",
+    "image": "https://assets.test/power_atlas/dexterity_power.png",
+    "image_big": "https://assets.test/power_big/dexterity_power.png",
+    "name": "Dexterity"
+   },
+   {
+    "amount": 5,
+    "display_amount": 5,
+    "id": "SPEED_POTION",
+    "image": "https://assets.test/power_atlas/speed_potion_power.png",
+    "image_big": "https://assets.test/power_big/speed_potion_power.png",
+    "name": "Speed Potion"
+   }
+  ],
+  "round": 1
  }
 }

@@ -12,32 +12,18 @@
  "pv": null,
  "scores": [
   {
-   "action": "Neutralize",
-   "is_best": true,
-   "losses": 0,
-   "low_confidence": false,
-   "q": 1.1089,
-   "q_saturated": false,
-   "stable_idx": 5,
-   "target_index": 1,
-   "ties": 0,
-   "visits": 24,
-   "win_prob": 1.0,
-   "wins": 24
-  },
-  {
    "action": "end turn",
-   "is_best": false,
-   "losses": 0,
+   "is_best": true,
+   "losses": 1,
    "low_confidence": false,
-   "q": 1.0945,
+   "q": 1.0512,
    "q_saturated": false,
    "stable_idx": -1,
    "target_index": null,
    "ties": 0,
-   "visits": 24,
-   "win_prob": 1.0,
-   "wins": 24
+   "visits": 48,
+   "win_prob": 0.9792,
+   "wins": 47
   }
  ]
 }

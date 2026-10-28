@@ -104,6 +104,10 @@
      {
       "damage": 3,
       "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "type": "Buff"
      }
     ],
     "kind": "SnappingJaxfruit",
@@ -121,6 +125,10 @@
      {
       "damage": 8,
       "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "type": "Debuff"
      }
     ],
     "kind": "Flyconid",

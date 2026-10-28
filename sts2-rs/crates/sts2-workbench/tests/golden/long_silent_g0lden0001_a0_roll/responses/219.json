@@ -12,7 +12,7 @@
   "bg_seed": 1772253313,
   "floor": 11,
   "step_no": 0,
-  "turn": 14
+  "turn": 13
  },
  "pv": null,
  "scores": [],
@@ -26,124 +26,47 @@
   "bg_row": 11,
   "bg_seed": 1772253313,
   "decision": "combat_play",
-  "discard_pile": [
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Deal 14 damage.",
-    "description_rich": "Deal 14 damage.",
-    "id": "ULTIMATE_STRIKE",
-    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-    "index": -1,
-    "name": "Ultimate Strike",
-    "rarity": "Uncommon",
-    "stats": {
-     "damage": 14
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "green",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_SILENT",
-    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "green",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_SILENT",
-    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "green",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_SILENT",
-    "image": "https://assets.test/card_atlas/silent/strike_silent.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "green",
-    "cost": 1,
-    "description": "Deal 3 damage.\nAdd 2 Shivs into your Hand.",
-    "description_rich": "Deal 3 damage.\nAdd 2 [gold]Shivs[/gold] into your [gold]Hand[/gold].",
-    "id": "LEADING_STRIKE",
-    "image": "https://assets.test/card_atlas/silent/leading_strike.png",
-    "index": -1,
-    "name": "Leading Strike",
-    "rarity": "Common",
-    "stats": {
-     "damage": 3
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "green",
-    "cost": 1,
-    "description": "Deal 8 damage.\nApply 1 Weak.",
-    "description_rich": "Deal 8 damage.\nApply 1 [gold]Weak[/gold].",
-    "id": "SUCKER_PUNCH",
-    "image": "https://assets.test/card_atlas/silent/sucker_punch.png",
-    "index": -1,
-    "name": "Sucker Punch",
-    "rarity": "Common",
-    "stats": {
-     "damage": 8
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   }
-  ],
-  "discard_pile_count": 6,
+  "discard_pile": [],
+  "discard_pile_count": 0,
   "draw_pile": [
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "green",
+    "cost": 1,
+    "description": "Gain 6 Block.\nAdd 1 Shiv into your Hand.",
+    "description_rich": "Gain 6 [gold]Block[/gold].\nAdd 1 [gold]Shiv[/gold] into your [gold]Hand[/gold].",
+    "id": "CLOAK_AND_DAGGER",
+    "image": "https://assets.test/card_atlas/silent/cloak_and_dagger.png",
+    "index": -1,
+    "name": "Cloak and Dagger",
+    "rarity": "Common",
+    "stats": {
+     "block": 6
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "green",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_SILENT",
+    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
    {
     "base_cost": 1,
     "can_play": false,
@@ -196,6 +119,61 @@
     "rarity": "Basic",
     "stats": {
      "damage": 3
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 2,
+    "can_play": false,
+    "color": "green",
+    "cost": 2,
+    "description": "Deal 15 damage.\nNext turn, draw 2 cards.",
+    "description_rich": "Deal 15 damage.\nNext turn, draw 2 cards.",
+    "id": "PREDATOR",
+    "image": "https://assets.test/card_atlas/silent/predator.png",
+    "index": -1,
+    "name": "Predator",
+    "rarity": "Common",
+    "stats": {
+     "damage": 15
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": -1,
+    "can_play": false,
+    "color": "quest",
+    "cost": 0,
+    "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
+    "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra [gold]Gold[/gold] in the next Act.",
+    "id": "SPOILS_MAP",
+    "image": "https://assets.test/card_atlas/quest/spoils_map.png",
+    "index": -1,
+    "name": "Spoils Map",
+    "rarity": "Quest",
+    "stats": {},
+    "target_type": "None",
+    "type": "Quest",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "green",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_SILENT",
+    "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
     },
     "target_type": "None",
     "type": "Attack",
@@ -259,7 +237,7 @@
     "upgraded": false
    }
   ],
-  "draw_pile_count": 6,
+  "draw_pile_count": 11,
   "enemies": [
    {
     "block": 0,
@@ -307,12 +285,12 @@
     "index": 1,
     "intents": [
      {
-      "base_damage": 14,
-      "damage": 22,
-      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_4.png",
+      "base_damage": 8,
+      "damage": 15,
+      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_3.png",
       "modifiers": [
        {
-        "add": 8,
+        "add": 7,
         "image": "https://assets.test/power_atlas/strength_power.png",
         "kind": "power",
         "name": "STRENGTH",
@@ -321,16 +299,21 @@
        }
       ],
       "type": "Attack"
+     },
+     {
+      "damage": 1,
+      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
+      "type": "Buff"
      }
     ],
     "kind": "Fogmog",
     "max_hp": 74,
-    "move_state": "HEADBUTT",
+    "move_state": "SWIPE",
     "name": "Fogmog",
     "powers": [
      {
-      "amount": 8,
-      "display_amount": 8,
+      "amount": 7,
+      "display_amount": 7,
       "id": "STRENGTH",
       "image": "https://assets.test/power_atlas/strength_power.png",
       "image_big": "https://assets.test/power_big/strength_power.png",
@@ -390,6 +373,67 @@
   "floor": 11,
   "hand": [
    {
+    "base_cost": 1,
+    "can_play": true,
+    "color": "colorless",
+    "cost": 1,
+    "damage_preview": {
+     "0": 14,
+     "1": 14
+    },
+    "description": "Deal 14 damage.",
+    "description_rich": "Deal 14 damage.",
+    "id": "ULTIMATE_STRIKE",
+    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+    "index": 0,
+    "name": "Ultimate Strike",
+    "rarity": "Uncommon",
+    "stats": {
+     "damage": 14
+    },
+    "target_type": "AnyEnemy",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": true,
+    "color": "green",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_SILENT",
+    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+    "index": 1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": true,
+    "color": "green",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_SILENT",
+    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+    "index": 2,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
     "base_cost": 2,
     "can_play": true,
     "color": "green",
@@ -398,7 +442,7 @@
     "description_rich": "[gold]Retain[/gold].\nApply 7 [gold]Poison[/gold].",
     "id": "SNAKEBITE",
     "image": "https://assets.test/card_atlas/silent/snakebite.png",
-    "index": 0,
+    "index": 3,
     "name": "Snakebite",
     "rarity": "Common",
     "stats": {},
@@ -419,7 +463,7 @@
     "description_rich": "Deal 6 damage.",
     "id": "STRIKE_SILENT",
     "image": "https://assets.test/card_atlas/silent/strike_silent.png",
-    "index": 1,
+    "index": 4,
     "name": "Strike",
     "rarity": "Basic",
     "stats": {
@@ -434,56 +478,19 @@
     "can_play": true,
     "color": "green",
     "cost": 1,
-    "description": "Gain 6 Block.\nAdd 1 Shiv into your Hand.",
-    "description_rich": "Gain 6 [gold]Block[/gold].\nAdd 1 [gold]Shiv[/gold] into your [gold]Hand[/gold].",
-    "id": "CLOAK_AND_DAGGER",
-    "image": "https://assets.test/card_atlas/silent/cloak_and_dagger.png",
-    "index": 2,
-    "name": "Cloak and Dagger",
-    "rarity": "Common",
-    "stats": {
-     "block": 6
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "quest",
-    "cost": 0,
-    "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
-    "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra [gold]Gold[/gold] in the next Act.",
-    "id": "SPOILS_MAP",
-    "image": "https://assets.test/card_atlas/quest/spoils_map.png",
-    "index": 3,
-    "name": "Spoils Map",
-    "rarity": "Quest",
-    "stats": {},
-    "target_type": "None",
-    "type": "Quest",
-    "unplayable_reason": "blocked",
-    "upgraded": false
-   },
-   {
-    "base_cost": 2,
-    "can_play": true,
-    "color": "green",
-    "cost": 2,
     "damage_preview": {
-     "0": 15,
-     "1": 15
+     "0": 3,
+     "1": 3
     },
-    "description": "Deal 15 damage.\nNext turn, draw 2 cards.",
-    "description_rich": "Deal 15 damage.\nNext turn, draw 2 cards.",
-    "id": "PREDATOR",
-    "image": "https://assets.test/card_atlas/silent/predator.png",
-    "index": 4,
-    "name": "Predator",
+    "description": "Deal 3 damage.\nAdd 2 Shivs into your Hand.",
+    "description_rich": "Deal 3 damage.\nAdd 2 [gold]Shivs[/gold] into your [gold]Hand[/gold].",
+    "id": "LEADING_STRIKE",
+    "image": "https://assets.test/card_atlas/silent/leading_strike.png",
+    "index": 5,
+    "name": "Leading Strike",
     "rarity": "Common",
     "stats": {
-     "damage": 15
+     "damage": 3
     },
     "target_type": "AnyEnemy",
     "type": "Attack",
@@ -494,18 +501,22 @@
     "can_play": true,
     "color": "green",
     "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_SILENT",
-    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
-    "index": 5,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
+    "damage_preview": {
+     "0": 8,
+     "1": 8
     },
-    "target_type": "None",
-    "type": "Skill",
+    "description": "Deal 8 damage.\nApply 1 Weak.",
+    "description_rich": "Deal 8 damage.\nApply 1 [gold]Weak[/gold].",
+    "id": "SUCKER_PUNCH",
+    "image": "https://assets.test/card_atlas/silent/sucker_punch.png",
+    "index": 6,
+    "name": "Sucker Punch",
+    "rarity": "Common",
+    "stats": {
+     "damage": 8
+    },
+    "target_type": "AnyEnemy",
+    "type": "Attack",
     "upgraded": false
    }
   ],
@@ -750,7 +761,7 @@
     }
    ],
    "gold": 92,
-   "hp": 8,
+   "hp": 6,
    "image": "https://assets.test/character_sprites/silent.png",
    "max_hp": 70,
    "name": "Silent",
@@ -782,6 +793,6 @@
    "rig_scale": 0.29
   },
   "player_powers": [],
-  "round": 14
+  "round": 13
  }
 }

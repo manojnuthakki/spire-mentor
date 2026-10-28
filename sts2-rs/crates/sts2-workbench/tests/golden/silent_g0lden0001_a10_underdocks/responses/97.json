@@ -305,6 +305,10 @@
       "damage": 3,
       "intent_image": "https://assets.test/intent_atlas/intent_debuff.png",
       "type": "Debuff"
+     },
+     {
+      "intent_image": null,
+      "type": "StatusCard"
      }
     ],
     "kind": "HauntedShip",

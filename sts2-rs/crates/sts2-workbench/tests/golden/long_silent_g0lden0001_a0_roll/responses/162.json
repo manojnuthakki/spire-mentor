@@ -12,7 +12,7 @@
   "bg_seed": 1772253313,
   "floor": 11,
   "step_no": 0,
-  "turn": 2
+  "turn": 1
  },
  "pv": null,
  "scores": [],
@@ -121,45 +121,10 @@
     "target_type": "None",
     "type": "Skill",
     "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "green",
-    "cost": 1,
-    "description": "Gain 6 Block.\nAdd 1 Shiv into your Hand.",
-    "description_rich": "Gain 6 [gold]Block[/gold].\nAdd 1 [gold]Shiv[/gold] into your [gold]Hand[/gold].",
-    "id": "CLOAK_AND_DAGGER",
-    "image": "https://assets.test/card_atlas/silent/cloak_and_dagger.png",
-    "index": -1,
-    "name": "Cloak and Dagger",
-    "rarity": "Common",
-    "stats": {
-     "block": 6
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "green",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_SILENT",
-    "image": "https://assets.test/card_atlas/silent/strike_silent.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
+   }
+  ],
+  "discard_pile_count": 5,
+  "draw_pile": [
    {
     "base_cost": 1,
     "can_play": false,
@@ -179,28 +144,6 @@
     "type": "Skill",
     "upgraded": false
    },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "green",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_SILENT",
-    "image": "https://assets.test/card_atlas/silent/strike_silent.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   }
-  ],
-  "discard_pile_count": 9,
-  "draw_pile": [
    {
     "base_cost": 1,
     "can_play": false,
@@ -240,6 +183,25 @@
     "upgraded": false
    },
    {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "green",
+    "cost": 0,
+    "description": "Deal 3 damage.\nApply 1 Weak.",
+    "description_rich": "Deal 3 damage.\nApply 1 [gold]Weak[/gold].",
+    "id": "NEUTRALIZE",
+    "image": "https://assets.test/card_atlas/silent/neutralize.png",
+    "index": -1,
+    "name": "Neutralize",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 3
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
     "base_cost": 2,
     "can_play": false,
     "color": "green",
@@ -253,6 +215,61 @@
     "rarity": "Common",
     "stats": {
      "damage": 15
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": -1,
+    "can_play": false,
+    "color": "quest",
+    "cost": 0,
+    "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
+    "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra [gold]Gold[/gold] in the next Act.",
+    "id": "SPOILS_MAP",
+    "image": "https://assets.test/card_atlas/quest/spoils_map.png",
+    "index": -1,
+    "name": "Spoils Map",
+    "rarity": "Quest",
+    "stats": {},
+    "target_type": "None",
+    "type": "Quest",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "green",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_SILENT",
+    "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "green",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_SILENT",
+    "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
     },
     "target_type": "None",
     "type": "Attack",
@@ -316,23 +333,22 @@
     "upgraded": false
    }
   ],
-  "draw_pile_count": 6,
+  "draw_pile_count": 11,
   "enemies": [
    {
     "block": 0,
-    "hp": 48,
+    "hp": 54,
     "image": "https://assets.test/monsters/fogmog.png",
-    "index": 1,
+    "index": 0,
     "intents": [
      {
-      "damage": 8,
-      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_2.png",
-      "type": "Attack"
+      "intent_image": "https://assets.test/intent_atlas/intent_summon.png",
+      "type": "Summon"
      }
     ],
     "kind": "Fogmog",
     "max_hp": 74,
-    "move_state": "SWIPE",
+    "move_state": "ILLUSION",
     "name": "Fogmog",
     "powers": [],
     "rig": "https://assets.test/monster_rigs/fogmog/fogmog",
@@ -349,6 +365,26 @@
   "floor": 11,
   "hand": [
    {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "green",
+    "cost": 1,
+    "description": "Gain 6 Block.\nAdd 1 Shiv into your Hand.",
+    "description_rich": "Gain 6 [gold]Block[/gold].\nAdd 1 [gold]Shiv[/gold] into your [gold]Hand[/gold].",
+    "id": "CLOAK_AND_DAGGER",
+    "image": "https://assets.test/card_atlas/silent/cloak_and_dagger.png",
+    "index": 0,
+    "name": "Cloak and Dagger",
+    "rarity": "Common",
+    "stats": {
+     "block": 6
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "unplayable_reason": "cost",
+    "upgraded": false
+   },
+   {
     "base_cost": 2,
     "can_play": false,
     "color": "green",
@@ -357,7 +393,7 @@
     "description_rich": "[gold]Retain[/gold].\nApply 7 [gold]Poison[/gold].",
     "id": "SNAKEBITE",
     "image": "https://assets.test/card_atlas/silent/snakebite.png",
-    "index": 0,
+    "index": 1,
     "name": "Snakebite",
     "rarity": "Common",
     "stats": {},
@@ -365,52 +401,12 @@
     "type": "Skill",
     "unplayable_reason": "cost",
     "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": true,
-    "color": "green",
-    "cost": 0,
-    "damage_preview": {
-     "1": 3
-    },
-    "description": "Deal 3 damage.\nApply 1 Weak.",
-    "description_rich": "Deal 3 damage.\nApply 1 [gold]Weak[/gold].",
-    "id": "NEUTRALIZE",
-    "image": "https://assets.test/card_atlas/silent/neutralize.png",
-    "index": 1,
-    "name": "Neutralize",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 3
-    },
-    "target_type": "AnyEnemy",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "quest",
-    "cost": 0,
-    "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
-    "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra [gold]Gold[/gold] in the next Act.",
-    "id": "SPOILS_MAP",
-    "image": "https://assets.test/card_atlas/quest/spoils_map.png",
-    "index": 2,
-    "name": "Spoils Map",
-    "rarity": "Quest",
-    "stats": {},
-    "target_type": "None",
-    "type": "Quest",
-    "unplayable_reason": "blocked",
-    "upgraded": false
    }
   ],
   "max_energy": 3,
   "options": [],
   "player": {
-   "block": 5,
+   "block": 15,
    "deck": [
     {
      "color": "green",
@@ -648,7 +644,7 @@
     }
    ],
    "gold": 92,
-   "hp": 57,
+   "hp": 53,
    "image": "https://assets.test/character_sprites/silent.png",
    "max_hp": 70,
    "name": "Silent",
@@ -680,6 +676,6 @@
    "rig_scale": 0.29
   },
   "player_powers": [],
-  "round": 2
+  "round": 1
  }
 }

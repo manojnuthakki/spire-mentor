@@ -1,0 +1,775 @@
+{
+ "action_label": "Play Cold Snap → Nibbit",
+ "assets_base": "https://assets.test",
+ "chosen_action": {
+  "action": "play_card",
+  "args": {
+   "action": "play",
+   "card_index": 2,
+   "target_index": 0
+  },
+  "cmd": "action",
+  "label": "Play Cold Snap → Nibbit",
+  "replay": {
+   "action": "play_card",
+   "args": {
+    "card_index": 2,
+    "target_index": 0
+   }
+  }
+ },
+ "combat_log": [
+  {
+   "actor": "The Defect",
+   "actor_side": "player",
+   "actor_uid": null,
+   "amount": 6,
+   "blocked": 0,
+   "hp_after": 22,
+   "kind": "damage",
+   "noun": null,
+   "round": 1,
+   "side": "player",
+   "source": "Cold Snap",
+   "source_card": "COLD_SNAP",
+   "source_kind": "card",
+   "source_monster": null,
+   "source_move_id": null,
+   "source_upgraded": false,
+   "target": "Nibbit",
+   "target_side": "enemy",
+   "target_uid": 2,
+   "text": "The Defect dealt 6 damage to Nibbit using Cold Snap.",
+   "verb": "dealt"
+  },
+  {
+   "actor": "The Defect",
+   "actor_side": "player",
+   "actor_uid": null,
+   "amount": null,
+   "kind": "orb_channeled",
+   "noun": "Frost Orb",
+   "round": 1,
+   "side": "player",
+   "source": "Cold Snap",
+   "source_card": "COLD_SNAP",
+   "source_kind": "card",
+   "source_monster": null,
+   "source_move_id": null,
+   "source_upgraded": false,
+   "target": null,
+   "target_side": null,
+   "target_uid": null,
+   "text": "The Defect channeled Frost Orb.",
+   "verb": "channeled"
+  }
+ ],
+ "decision": "combat_play",
+ "idx": 118,
+ "legal_actions": [],
+ "meta": {
+  "act": 1,
+  "act_name": "Overgrowth",
+  "advice": null,
+  "bg_col": 1,
+  "bg_row": 12,
+  "bg_seed": null,
+  "floor": 12,
+  "step_no": 119,
+  "turn": 1
+ },
+ "pv": null,
+ "scores": [],
+ "source": "log",
+ "state": {
+  "act": 1,
+  "act1": "overgrowth",
+  "act_name": "Overgrowth",
+  "ascension": 0,
+  "bg_col": 1,
+  "bg_row": 12,
+  "bg_seed": 1772253313,
+  "decision": "combat_play",
+  "discard_pile": [
+   {
+    "base_cost": -1,
+    "can_play": false,
+    "color": "colorless",
+    "cost": 0,
+    "description": "Unplayable.\nEthereal.",
+    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
+    "id": "DAZED",
+    "image": "https://assets.test/card_atlas/status/dazed.png",
+    "index": -1,
+    "name": "Dazed",
+    "rarity": "Status",
+    "stats": {},
+    "target_type": "None",
+    "type": "Status",
+    "upgraded": false
+   },
+   {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Gain 6 Block.\nAdd a Dazed into your Discard Pile.",
+    "description_rich": "Gain 6 [gold]Block[/gold].\nAdd a [gold]Dazed[/gold] into your [gold]Discard Pile[/gold].",
+    "id": "BOOST_AWAY",
+    "image": "https://assets.test/card_atlas/defect/boost_away.png",
+    "index": -1,
+    "name": "Boost Away",
+    "rarity": "Common",
+    "stats": {
+     "block": 6
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "colorless",
+    "cost": 1,
+    "description": "Deal 14 damage.",
+    "description_rich": "Deal 14 damage.",
+    "id": "ULTIMATE_STRIKE",
+    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+    "index": -1,
+    "name": "Ultimate Strike",
+    "rarity": "Uncommon",
+    "stats": {
+     "damage": 14
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   }
+  ],
+  "discard_pile_count": 3,
+  "draw_pile": [
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Evoke your rightmost Orb twice.",
+    "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
+    "id": "DUALCAST",
+    "image": "https://assets.test/card_atlas/defect/dualcast.png",
+    "index": -1,
+    "name": "Dualcast",
+    "rarity": "Basic",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+    "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 [gold]Weak[/gold].",
+    "id": "GO_FOR_THE_EYES",
+    "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+    "index": -1,
+    "name": "Go for the Eyes",
+    "rarity": "Common",
+    "stats": {
+     "damage": 3
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": -1,
+    "can_play": false,
+    "color": "quest",
+    "cost": 0,
+    "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
+    "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra [gold]Gold[/gold] in the next Act.",
+    "id": "SPOILS_MAP",
+    "image": "https://assets.test/card_atlas/quest/spoils_map.png",
+    "index": -1,
+    "name": "Spoils Map",
+    "rarity": "Quest",
+    "stats": {},
+    "target_type": "None",
+    "type": "Quest",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Deal 9 damage.",
+    "description_rich": "Deal 9 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 9
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": true
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Deal 6 damage to ALL enemies.\nDraw 1 card.",
+    "description_rich": "Deal 6 damage to ALL enemies.\nDraw 1 card.",
+    "id": "SWEEPING_BEAM",
+    "image": "https://assets.test/card_atlas/defect/sweeping_beam.png",
+    "index": -1,
+    "name": "Sweeping Beam",
+    "rarity": "Common",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Gain Energy.\nAdd a Void into your Discard Pile.",
+    "description_rich": "Gain Energy.\nAdd a [gold]Void[/gold] into your [gold]Discard Pile[/gold].",
+    "id": "TURBO",
+    "image": "https://assets.test/card_atlas/defect/turbo.png",
+    "index": -1,
+    "name": "TURBO",
+    "rarity": "Common",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   }
+  ],
+  "draw_pile_count": 12,
+  "enemies": [
+   {
+    "block": 0,
+    "hp": 28,
+    "hue_jitter": 0.0474,
+    "image": "https://assets.test/monsters/nibbit.png",
+    "index": 0,
+    "intents": [
+     {
+      "damage": 6,
+      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_2.png",
+      "type": "Attack"
+     },
+     {
+      "intent_image": "https://assets.test/intent_atlas/intent_defend.png",
+      "type": "Defend"
+     }
+    ],
+    "kind": "Nibbit",
+    "max_hp": 42,
+    "move_state": "SLICE",
+    "name": "Nibbit",
+    "powers": [],
+    "rig": "https://assets.test/monster_rigs/nibbit/nibbit",
+    "rig_bounds_h": 146.0,
+    "rig_bounds_w": 270.0,
+    "rig_scale": 0.28,
+    "size_jitter": 1.0,
+    "uid": 2
+   },
+   {
+    "block": 0,
+    "hp": 43,
+    "hue_jitter": 0.0379,
+    "image": "https://assets.test/monsters/nibbit.png",
+    "index": 1,
+    "intents": [
+     {
+      "damage": 2,
+      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
+      "type": "Buff"
+     }
+    ],
+    "kind": "Nibbit",
+    "max_hp": 43,
+    "move_state": "HISS",
+    "name": "Nibbit",
+    "powers": [],
+    "rig": "https://assets.test/monster_rigs/nibbit/nibbit",
+    "rig_bounds_h": 146.0,
+    "rig_bounds_w": 270.0,
+    "rig_scale": 0.28,
+    "size_jitter": 1.0,
+    "uid": 3
+   }
+  ],
+  "energy": 2,
+  "energy_image": "https://assets.test/sprite_fonts/defect_energy_icon.png",
+  "exhaust_pile": [],
+  "exhaust_pile_count": 0,
+  "floor": 12,
+  "hand": [
+   {
+    "base_cost": 0,
+    "can_play": true,
+    "color": "blue",
+    "cost": 0,
+    "damage_preview": {
+     "0": 3,
+     "1": 3
+    },
+    "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+    "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 [gold]Weak[/gold].",
+    "id": "GO_FOR_THE_EYES",
+    "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+    "index": 0,
+    "name": "Go for the Eyes",
+    "rarity": "Common",
+    "stats": {
+     "damage": 3
+    },
+    "target_type": "AnyEnemy",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": true,
+    "color": "blue",
+    "cost": 1,
+    "description": "Channel 1 Lightning.",
+    "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
+    "id": "ZAP",
+    "image": "https://assets.test/card_atlas/defect/zap.png",
+    "index": 1,
+    "name": "Zap",
+    "rarity": "Basic",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": true,
+    "color": "blue",
+    "cost": 1,
+    "damage_preview": {
+     "0": 6,
+     "1": 6
+    },
+    "description": "Deal 6 damage.\nChannel 1 Frost.",
+    "description_rich": "Deal 6 damage.\n[gold]Channel[/gold] 1 [gold]Frost[/gold].",
+    "id": "COLD_SNAP",
+    "image": "https://assets.test/card_atlas/defect/cold_snap.png",
+    "index": 2,
+    "name": "Cold Snap",
+    "rarity": "Common",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "AnyEnemy",
+    "type": "Attack",
+    "upgraded": false
+   }
+  ],
+  "max_energy": 3,
+  "orb_slots": 3,
+  "orbs": [
+   {
+    "evoke": 8,
+    "image": "https://assets.test/orb_atlas/lightning.png",
+    "index": 0,
+    "name": "LIGHTNING_ORB.title",
+    "passive": 3,
+    "type": "Lightning"
+   }
+  ],
+  "player": {
+   "block": 6,
+   "deck": [
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 9 damage.",
+     "description_rich": "Deal 9 damage.",
+     "id": "STRIKE_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+     "index": 0,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": true
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+     "index": 1,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+     "index": 2,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "index": 3,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "index": 4,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "index": 5,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "index": 6,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Channel 1 Lightning.",
+     "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
+     "id": "ZAP",
+     "image": "https://assets.test/card_atlas/defect/zap.png",
+     "index": 7,
+     "name": "Zap",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Evoke your rightmost Orb twice.",
+     "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
+     "id": "DUALCAST",
+     "image": "https://assets.test/card_atlas/defect/dualcast.png",
+     "index": 8,
+     "name": "Dualcast",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "colorless",
+     "cost": 1,
+     "description": "Deal 14 damage.",
+     "description_rich": "Deal 14 damage.",
+     "id": "ULTIMATE_STRIKE",
+     "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+     "index": 9,
+     "name": "Ultimate Strike",
+     "rarity": "Uncommon",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 0,
+     "description": "Gain 6 Block.\nAdd a Dazed into your Discard Pile.",
+     "description_rich": "Gain 6 Block.\nAdd a Dazed into your Discard Pile.",
+     "id": "BOOST_AWAY",
+     "image": "https://assets.test/card_atlas/defect/boost_away.png",
+     "index": 10,
+     "name": "Boost Away",
+     "rarity": "Common",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 0,
+     "description": "Gain Energy.\nAdd a Void into your Discard Pile.",
+     "description_rich": "Gain Energy.\nAdd a [gold]Void[/gold] into your [gold]Discard Pile[/gold].",
+     "id": "TURBO",
+     "image": "https://assets.test/card_atlas/defect/turbo.png",
+     "index": 11,
+     "name": "TURBO",
+     "rarity": "Common",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage to ALL enemies.\nDraw 1 card.",
+     "description_rich": "Deal 6 damage to ALL enemies.\nDraw 1 card.",
+     "id": "SWEEPING_BEAM",
+     "image": "https://assets.test/card_atlas/defect/sweeping_beam.png",
+     "index": 12,
+     "name": "Sweeping Beam",
+     "rarity": "Common",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "quest",
+     "cost": "X",
+     "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
+     "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra Gold in the next Act.",
+     "id": "SPOILS_MAP",
+     "image": "https://assets.test/card_atlas/quest/spoils_map.png",
+     "index": 13,
+     "name": "Spoils Map",
+     "rarity": "Quest",
+     "type": "Quest",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 0,
+     "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "id": "GO_FOR_THE_EYES",
+     "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+     "index": 14,
+     "name": "Go for the Eyes",
+     "rarity": "Common",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 0,
+     "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "id": "GO_FOR_THE_EYES",
+     "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+     "index": 15,
+     "name": "Go for the Eyes",
+     "rarity": "Common",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage.\nChannel 1 Frost.",
+     "description_rich": "Deal 6 damage.\nChannel 1 Frost.",
+     "id": "COLD_SNAP",
+     "image": "https://assets.test/card_atlas/defect/cold_snap.png",
+     "index": 16,
+     "name": "Cold Snap",
+     "rarity": "Common",
+     "type": "Attack",
+     "upgraded": false
+    }
+   ],
+   "gold": 107,
+   "hp": 45,
+   "image": "https://assets.test/character_sprites/defect.png",
+   "max_hp": 75,
+   "name": "Defect",
+   "potion_slots": 3,
+   "potions": [],
+   "relics": [
+    {
+     "description": "At the start of each combat, Channel 1 Lightning.",
+     "id": "CRACKED_CORE",
+     "image": "https://assets.test/relic_atlas/cracked_core.png",
+     "name": "Cracked Core"
+    },
+    {
+     "description": "Upon pickup, choose 1 of 2 Colorless cards to add to your Deck.",
+     "id": "LEAD_PAPERWEIGHT",
+     "image": "https://assets.test/relic_atlas/lead_paperweight.png",
+     "name": "Lead Paperweight"
+    },
+    {
+     "description": "The first time you lose HP each combat, draw 3 cards.",
+     "id": "CENTENNIAL_PUZZLE",
+     "image": "https://assets.test/relic_atlas/centennial_puzzle.png",
+     "name": "Centennial Puzzle"
+    }
+   ],
+   "rig": "https://assets.test/character_rigs/defect/defect",
+   "rig_bounds_h": 260.0,
+   "rig_bounds_w": 250.0,
+   "rig_scale": 0.125
+  },
+  "player_powers": [],
+  "round": 1
+ },
+ "wpa": null
+}

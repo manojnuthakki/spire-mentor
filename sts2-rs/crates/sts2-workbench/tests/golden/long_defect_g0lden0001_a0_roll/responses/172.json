@@ -1,3 +1,19 @@
 {
- "detail": "no prior combat move to assess"
+ "act": null,
+ "best_label": "Go for the Eyes",
+ "best_win_prob": 1.0,
+ "drop_pct": 0,
+ "floor": null,
+ "idx": 123,
+ "is_blunder": false,
+ "matched_best": false,
+ "message": "Turn 2: Strike instead of Go for the Eyes dropped P(win) 100%→100% (−0 pts)",
+ "n_actions": 5,
+ "node_id": null,
+ "played_label": "Strike",
+ "played_win_prob": 1.0,
+ "player_rank": 0,
+ "regret": 0.0,
+ "turn": 2,
+ "visits": 4
 }

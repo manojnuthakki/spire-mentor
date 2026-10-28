@@ -1,3 +1,124 @@
 {
- "detail": "search tree only available for combat decisions"
+ "points": [
+  {
+   "act": 1,
+   "deck_size": 12,
+   "floor": 0,
+   "idx": 0,
+   "scores": {
+    "block": 48.2,
+    "damage": 28.6,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 13,
+   "floor": 0,
+   "idx": 2,
+   "scores": {
+    "block": 44.8,
+    "damage": 35.2,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 14,
+   "floor": 1,
+   "idx": 24,
+   "scores": {
+    "block": 49.5,
+    "damage": 33.5,
+    "velocity": 28.6,
+    "volume": 36.2
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 2,
+   "idx": 40,
+   "scores": {
+    "block": 47.7,
+    "damage": 34.5,
+    "velocity": 27.5,
+    "volume": 35.6
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 16,
+   "floor": 4,
+   "idx": 60,
+   "scores": {
+    "block": 46.6,
+    "damage": 33.8,
+    "velocity": 25.4,
+    "volume": 34.2
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 17,
+   "floor": 5,
+   "idx": 62,
+   "scores": {
+    "block": 43.8,
+    "damage": 32.9,
+    "velocity": 24.7,
+    "volume": 32.9
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 18,
+   "floor": 6,
+   "idx": 99,
+   "scores": {
+    "block": 42.1,
+    "damage": 32.2,
+    "velocity": 41.3,
+    "volume": 38.3
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 19,
+   "floor": 8,
+   "idx": 103,
+   "scores": {
+    "block": 40.6,
+    "damage": 34.0,
+    "velocity": 38.9,
+    "volume": 37.7
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 18,
+   "floor": 8,
+   "idx": 106,
+   "scores": {
+    "block": 42.2,
+    "damage": 33.1,
+    "velocity": 43.2,
+    "volume": 39.2
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 18,
+   "floor": 10,
+   "idx": 111,
+   "scores": {
+    "block": 42.2,
+    "damage": 34.3,
+    "velocity": 43.2,
+    "volume": 39.7
+   }
+  }
+ ]
 }

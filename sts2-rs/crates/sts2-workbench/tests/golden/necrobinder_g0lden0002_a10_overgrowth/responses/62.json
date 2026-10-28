@@ -223,6 +223,10 @@
        }
       ],
       "type": "Attack"
+     },
+     {
+      "intent_image": "https://assets.test/intent_atlas/intent_defend.png",
+      "type": "Defend"
      }
     ],
     "kind": "Nibbit",

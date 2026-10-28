@@ -1,12 +1,59 @@
 {
- "runs": [
+ "config": {
+  "c_puct": 2.5,
+  "depth": 200,
+  "draw_widening_c": 2.0,
+  "hidden_info": "beliefdraw",
+  "rollout_policy": "heuristic",
+  "seed": 1,
+  "sims": 48,
+  "threads": 1
+ },
+ "pv": null,
+ "scores": [
   {
-   "enemy_min_pct": 3.125,
-   "final_floor": 11,
-   "final_turn": null,
-   "stem": "20260101_000000_Silent_G0LDEN0001",
-   "turn1_q": null,
-   "won": false
+   "action": "ULTIMATE_STRIKE.title",
+   "is_best": true,
+   "low_confidence": false,
+   "q": 1.235,
+   "q_saturated": false,
+   "stable_idx": 6,
+   "target_index": null,
+   "visits": 12,
+   "win_prob": 1.0
+  },
+  {
+   "action": "STRIKE_SILENT.title",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.2329,
+   "q_saturated": false,
+   "stable_idx": 0,
+   "target_index": null,
+   "visits": 12,
+   "win_prob": 1.0
+  },
+  {
+   "action": "DEFEND_SILENT.title",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.2305,
+   "q_saturated": false,
+   "stable_idx": 2,
+   "target_index": null,
+   "visits": 12,
+   "win_prob": 1.0
+  },
+  {
+   "action": "end turn",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.2156,
+   "q_saturated": false,
+   "stable_idx": -1,
+   "target_index": null,
+   "visits": 12,
+   "win_prob": 1.0
   }
  ]
 }

@@ -1,0 +1,81 @@
+{
+ "active_leaf": 3,
+ "active_path": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "nodes": [
+  {
+   "act": 1,
+   "child_ids": [
+    1
+   ],
+   "combat_log": [],
+   "decision": "event_choice",
+   "details": [],
+   "error": false,
+   "floor": 0,
+   "id": 0,
+   "idx": 0,
+   "label": "Started Silent (seed G0LDEN0001, A0, act1 roll)",
+   "parent_id": null,
+   "turn": null,
+   "value": null
+  },
+  {
+   "act": 1,
+   "child_ids": [
+    2
+   ],
+   "combat_log": [],
+   "decision": "card_select",
+   "details": [
+    "+Relic Lead Paperweight"
+   ],
+   "error": false,
+   "floor": 0,
+   "id": 1,
+   "idx": 1,
+   "label": "Choose: Lead Paperweight",
+   "parent_id": 0,
+   "turn": null,
+   "value": null
+  },
+  {
+   "act": 1,
+   "child_ids": [
+    3
+   ],
+   "combat_log": [],
+   "decision": "map_select",
+   "details": [],
+   "error": false,
+   "floor": 0,
+   "id": 2,
+   "idx": 2,
+   "label": "Select Ultimate Strike",
+   "parent_id": 1,
+   "turn": null,
+   "value": null
+  },
+  {
+   "act": 1,
+   "child_ids": [],
+   "combat_log": [],
+   "decision": "combat_play",
+   "details": [
+    "Spawned: Fuzzy Wurm Crawler"
+   ],
+   "error": false,
+   "floor": 1,
+   "id": 3,
+   "idx": 3,
+   "label": "Map → (2,1)",
+   "parent_id": 2,
+   "turn": 1,
+   "value": null
+  }
+ ]
+}

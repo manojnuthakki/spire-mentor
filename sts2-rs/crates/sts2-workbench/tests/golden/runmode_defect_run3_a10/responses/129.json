@@ -55,6 +55,10 @@
        }
       ],
       "type": "Attack"
+     },
+     {
+      "damage": 2,
+      "type": "Buff"
      }
     ],
     "kind": "CubexConstruct",

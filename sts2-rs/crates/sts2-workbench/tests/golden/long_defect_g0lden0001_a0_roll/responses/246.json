@@ -2,17 +2,17 @@
  "action_label": "",
  "assets_base": "https://assets.test",
  "chosen_action": null,
- "decision": "combat_play",
+ "decision": "map_select",
  "idx": 0,
  "meta": {
   "act": 1,
   "act_name": "Overgrowth",
-  "bg_col": 3,
-  "bg_row": 16,
+  "bg_col": 0,
+  "bg_row": 14,
   "bg_seed": 1772253313,
-  "floor": 16,
+  "floor": 14,
   "step_no": 0,
-  "turn": 3
+  "turn": null
  },
  "pv": null,
  "scores": [],
@@ -22,483 +22,982 @@
   "act1": "overgrowth",
   "act_name": "Overgrowth",
   "ascension": 0,
-  "bg_col": 3,
-  "bg_row": 16,
+  "bg_col": 0,
+  "bg_row": 14,
   "bg_seed": 1772253313,
-  "decision": "combat_play",
-  "discard_pile": [
+  "choices": [
    {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Deal 14 damage.",
-    "description_rich": "Deal 14 damage.",
-    "id": "ULTIMATE_STRIKE",
-    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-    "index": -1,
-    "name": "Ultimate Strike",
-    "rarity": "Uncommon",
-    "stats": {
-     "damage": 14
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 6 damage.\nChannel 1 Frost.",
-    "description_rich": "Deal 6 damage.\n[gold]Channel[/gold] 1 [gold]Frost[/gold].",
-    "id": "COLD_SNAP",
-    "image": "https://assets.test/card_atlas/defect/cold_snap.png",
-    "index": -1,
-    "name": "Cold Snap",
-    "rarity": "Common",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Channel 1 Lightning.",
-    "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
-    "id": "ZAP",
-    "image": "https://assets.test/card_atlas/defect/zap.png",
-    "index": -1,
-    "name": "Zap",
-    "rarity": "Basic",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 6 Block.\nTransform all Status cards in your Hand into Fuel.",
-    "description_rich": "Gain 6 [gold]Block[/gold].\n[gold]Transform[/gold] all Status cards in your [gold]Hand[/gold] into [gold]Fuel[/gold].",
-    "id": "COMPACT",
-    "image": "https://assets.test/card_atlas/defect/beta/compact.png",
-    "index": -1,
-    "name": "Compact",
-    "rarity": "Uncommon",
-    "stats": {
-     "block": 6
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 6 damage to ALL enemies.\nDraw 1 card.",
-    "description_rich": "Deal 6 damage to ALL enemies.\nDraw 1 card.",
-    "id": "SWEEPING_BEAM",
-    "image": "https://assets.test/card_atlas/defect/sweeping_beam.png",
-    "index": -1,
-    "name": "Sweeping Beam",
-    "rarity": "Common",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "blue",
-    "cost": 0,
-    "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-    "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 [gold]Weak[/gold].",
-    "id": "GO_FOR_THE_EYES",
-    "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
-    "index": -1,
-    "name": "Go for the Eyes",
-    "rarity": "Common",
-    "stats": {
-     "damage": 3
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.\nEthereal.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
-    "id": "DAZED",
-    "image": "https://assets.test/card_atlas/status/dazed.png",
-    "index": -1,
-    "name": "Dazed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "blue",
-    "cost": 0,
-    "description": "Gain 6 Block.\nAdd a Dazed into your Discard Pile.",
-    "description_rich": "Gain 6 [gold]Block[/gold].\nAdd a [gold]Dazed[/gold] into your [gold]Discard Pile[/gold].",
-    "id": "BOOST_AWAY",
-    "image": "https://assets.test/card_atlas/defect/boost_away.png",
-    "index": -1,
-    "name": "Boost Away",
-    "rarity": "Common",
-    "stats": {
-     "block": 6
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "quest",
-    "cost": 0,
-    "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
-    "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra [gold]Gold[/gold] in the next Act.",
-    "id": "SPOILS_MAP",
-    "image": "https://assets.test/card_atlas/quest/spoils_map.png",
-    "index": -1,
-    "name": "Spoils Map",
-    "rarity": "Quest",
-    "stats": {},
-    "target_type": "None",
-    "type": "Quest",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 9 Block.",
-    "description_rich": "Gain 9 [gold]Block[/gold].",
-    "id": "LEAP",
-    "image": "https://assets.test/card_atlas/defect/leap.png",
-    "index": -1,
-    "name": "Leap",
-    "rarity": "Common",
-    "stats": {
-     "block": 9
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "blue",
-    "cost": 0,
-    "description": "Deal 3 damage.\nApply 1 Vulnerable.",
-    "description_rich": "Deal 3 damage.\nApply 1 [gold]Vulnerable[/gold].",
-    "id": "BEAM_CELL",
-    "image": "https://assets.test/card_atlas/defect/beam_cell.png",
-    "index": -1,
-    "name": "Beam Cell",
-    "rarity": "Common",
-    "stats": {
-     "damage": 3
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "blue",
-    "cost": 0,
-    "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-    "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 [gold]Weak[/gold].",
-    "id": "GO_FOR_THE_EYES",
-    "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
-    "index": -1,
-    "name": "Go for the Eyes",
-    "rarity": "Common",
-    "stats": {
-     "damage": 3
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
+    "col": 1,
+    "icon": "https://assets.test/run_history/rest_site.png",
+    "row": 15,
+    "type": "RestSite"
    }
   ],
-  "discard_pile_count": 16,
-  "draw_pile": [
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
+  "decision": "map_select",
+  "floor": 14,
+  "full_map": {
+   "boss": {
+    "col": 3,
+    "icon": "https://assets.test/run_history/vantom_boss.png",
+    "id": "VANTOM_BOSS",
+    "kind": "Vantom",
+    "name": "Vantom",
+    "row": 16,
+    "type": "Boss"
    },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 9 damage.",
-    "description_rich": "Deal 9 damage.",
-    "id": "STRIKE_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 9
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": true
+   "current_coord": {
+    "col": 0,
+    "row": 14
    },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "blue",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_DEFECT",
-    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "blue",
-    "cost": 0,
-    "description": "Gain Energy.\nAdd a Void into your Discard Pile.",
-    "description_rich": "Gain Energy.\nAdd a [gold]Void[/gold] into your [gold]Discard Pile[/gold].",
-    "id": "TURBO",
-    "image": "https://assets.test/card_atlas/defect/turbo.png",
-    "index": -1,
-    "name": "TURBO",
-    "rarity": "Common",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   }
-  ],
-  "draw_pile_count": 4,
-  "enemies": [
-   {
-    "block": 0,
-    "hp": 165,
-    "image": "https://assets.test/monsters/vantom.png",
-    "index": 0,
-    "intents": [
+   "path_plan": {
+    "baseline_col": 1,
+    "best_col": 1,
+    "columns": [
      {
-      "base_damage": 26,
-      "damage": 19,
-      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_3.png",
-      "modifiers": [
+      "baseline_score": 0.8311,
+      "can_skip_elite": false,
+      "col": 1,
+      "is_pick": true,
+      "max_elites": 0,
+      "min_elites": 0,
+      "n_paths": 1,
+      "score": 0.8311
+     }
+    ],
+    "diverged": false,
+    "first_col": 1,
+    "route": [
+     {
+      "col": 1,
+      "row": 15
+     }
+    ]
+   },
+   "rows": [
+    [
+     {
+      "children": [
        {
-        "image": "https://assets.test/power_atlas/weak_power.png",
-        "kind": "power",
-        "mul": [
-         3,
-         4
-        ],
-        "name": "WEAK",
-        "side": "enemy",
-        "title": "Weak"
+        "col": 2,
+        "row": 1
+       },
+       {
+        "col": 4,
+        "row": 1
+       },
+       {
+        "col": 5,
+        "row": 1
        }
       ],
-      "type": "Attack"
+      "col": 3,
+      "current": false,
+      "icon": "https://assets.test/run_history/ancient.png",
+      "row": 0,
+      "type": "Ancient",
+      "visited": false
      }
     ],
-    "kind": "Vantom",
-    "max_hp": 173,
-    "move_state": "DISMEMBER",
-    "name": "Vantom",
-    "powers": [
+    [
      {
-      "amount": 3,
-      "display_amount": 3,
-      "id": "WEAK",
-      "image": "https://assets.test/power_atlas/weak_power.png",
-      "image_big": "https://assets.test/power_big/weak_power.png",
-      "name": "Weak"
+      "children": [
+       {
+        "col": 2,
+        "row": 2
+       }
+      ],
+      "col": 2,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 1,
+      "type": "Monster",
+      "visited": true
      },
      {
-      "amount": 1,
-      "display_amount": 1,
-      "id": "VULNERABLE",
-      "image": "https://assets.test/power_atlas/vulnerable_power.png",
-      "image_big": "https://assets.test/power_big/vulnerable_power.png",
-      "name": "Vulnerable"
+      "children": [
+       {
+        "col": 4,
+        "row": 2
+       },
+       {
+        "col": 3,
+        "row": 2
+       }
+      ],
+      "col": 4,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 1,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 2
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 1,
+      "type": "Monster",
+      "visited": false
      }
     ],
-    "rig": "https://assets.test/monster_rigs/vantom/vantom",
-    "rig_bounds_h": 441.0,
-    "rig_bounds_w": 404.0,
-    "rig_scale": 0.25,
-    "uid": 2
-   }
-  ],
-  "energy": 1,
-  "energy_image": "https://assets.test/sprite_fonts/defect_energy_icon.png",
-  "exhaust_pile": [],
-  "exhaust_pile_count": 0,
-  "floor": 16,
-  "hand": [
+    [
+     {
+      "children": [
+       {
+        "col": 2,
+        "row": 3
+       }
+      ],
+      "col": 2,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 2,
+      "type": "Monster",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 4,
+        "row": 3
+       },
+       {
+        "col": 2,
+        "row": 3
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": null,
+      "row": 2,
+      "type": "Unknown",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 3
+       }
+      ],
+      "col": 4,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 2,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 3
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/shop.png",
+      "row": 2,
+      "type": "Shop",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 1,
+        "row": 4
+       },
+       {
+        "col": 3,
+        "row": 4
+       }
+      ],
+      "col": 2,
+      "current": false,
+      "icon": null,
+      "row": 3,
+      "type": "Unknown",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 4
+       }
+      ],
+      "col": 4,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 3,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 4
+       },
+       {
+        "col": 5,
+        "row": 4
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": null,
+      "row": 3,
+      "type": "Unknown",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 1,
+        "row": 5
+       }
+      ],
+      "col": 1,
+      "current": false,
+      "icon": null,
+      "row": 4,
+      "type": "Unknown",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 5
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 4,
+      "type": "Monster",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 5
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 4,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 5
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": null,
+      "row": 4,
+      "type": "Unknown",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 1,
+        "row": 6
+       }
+      ],
+      "col": 1,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 5,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 6
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": null,
+      "row": 5,
+      "type": "Unknown",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 6
+       },
+       {
+        "col": 5,
+        "row": 6
+       },
+       {
+        "col": 4,
+        "row": 6
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 5,
+      "type": "Monster",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 2,
+        "row": 7
+       }
+      ],
+      "col": 1,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 6,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 2,
+        "row": 7
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 6,
+      "type": "Monster",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 7
+       }
+      ],
+      "col": 4,
+      "current": false,
+      "icon": "https://assets.test/run_history/elite.png",
+      "row": 6,
+      "type": "Elite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 4,
+        "row": 7
+       },
+       {
+        "col": 5,
+        "row": 7
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 6,
+      "type": "RestSite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 7
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": null,
+      "row": 6,
+      "type": "Unknown",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 8
+       },
+       {
+        "col": 2,
+        "row": 8
+       }
+      ],
+      "col": 2,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 7,
+      "type": "RestSite",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 8
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 7,
+      "type": "RestSite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 8
+       },
+       {
+        "col": 3,
+        "row": 8
+       }
+      ],
+      "col": 4,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 7,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 8
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 7,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 8
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 7,
+      "type": "Monster",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 2,
+        "row": 9
+       }
+      ],
+      "col": 2,
+      "current": false,
+      "icon": "https://assets.test/run_history/shop.png",
+      "row": 8,
+      "type": "Shop",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 2,
+        "row": 9
+       },
+       {
+        "col": 3,
+        "row": 9
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": "https://assets.test/run_history/elite.png",
+      "row": 8,
+      "type": "Elite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 9
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": null,
+      "row": 8,
+      "type": "Unknown",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 9
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 8,
+      "type": "Monster",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 1,
+        "row": 10
+       }
+      ],
+      "col": 2,
+      "current": false,
+      "icon": "https://assets.test/run_history/treasure.png",
+      "row": 9,
+      "type": "Treasure",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 10
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": "https://assets.test/run_history/treasure.png",
+      "row": 9,
+      "type": "Treasure",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 10
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/treasure.png",
+      "row": 9,
+      "type": "Treasure",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 10
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": "https://assets.test/run_history/treasure.png",
+      "row": 9,
+      "type": "Treasure",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 2,
+        "row": 11
+       },
+       {
+        "col": 0,
+        "row": 11
+       }
+      ],
+      "col": 1,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 10,
+      "type": "RestSite",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 11
+       },
+       {
+        "col": 2,
+        "row": 11
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": null,
+      "row": 10,
+      "type": "Unknown",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 11
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/elite.png",
+      "row": 10,
+      "type": "Elite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 11
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 10,
+      "type": "RestSite",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 0,
+        "row": 12
+       }
+      ],
+      "col": 0,
+      "current": false,
+      "icon": "https://assets.test/run_history/elite.png",
+      "row": 11,
+      "type": "Elite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 1,
+        "row": 12
+       }
+      ],
+      "col": 2,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 11,
+      "type": "Monster",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 4,
+        "row": 12
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 11,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 12
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 11,
+      "type": "RestSite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 12
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 11,
+      "type": "Monster",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 0,
+        "row": 13
+       }
+      ],
+      "col": 0,
+      "current": false,
+      "icon": null,
+      "row": 12,
+      "type": "Unknown",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 0,
+        "row": 13
+       }
+      ],
+      "col": 1,
+      "current": false,
+      "icon": null,
+      "row": 12,
+      "type": "Unknown",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 13
+       }
+      ],
+      "col": 4,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 12,
+      "type": "RestSite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 13
+       },
+       {
+        "col": 6,
+        "row": 13
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 12,
+      "type": "Monster",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 0,
+        "row": 14
+       }
+      ],
+      "col": 0,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 13,
+      "type": "Monster",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 4,
+        "row": 14
+       },
+       {
+        "col": 6,
+        "row": 14
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 13,
+      "type": "Monster",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 6,
+        "row": 14
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": "https://assets.test/run_history/shop.png",
+      "row": 13,
+      "type": "Shop",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 1,
+        "row": 15
+       }
+      ],
+      "col": 0,
+      "current": true,
+      "icon": "https://assets.test/run_history/monster.png",
+      "row": 14,
+      "type": "Monster",
+      "visited": true
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 15
+       }
+      ],
+      "col": 4,
+      "current": false,
+      "icon": "https://assets.test/run_history/elite.png",
+      "row": 14,
+      "type": "Elite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 5,
+        "row": 15
+       }
+      ],
+      "col": 6,
+      "current": false,
+      "icon": null,
+      "row": 14,
+      "type": "Unknown",
+      "visited": false
+     }
+    ],
+    [
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 16
+       }
+      ],
+      "col": 1,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 15,
+      "type": "RestSite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 16
+       }
+      ],
+      "col": 3,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 15,
+      "type": "RestSite",
+      "visited": false
+     },
+     {
+      "children": [
+       {
+        "col": 3,
+        "row": 16
+       }
+      ],
+      "col": 5,
+      "current": false,
+      "icon": "https://assets.test/run_history/rest_site.png",
+      "row": 15,
+      "type": "RestSite",
+      "visited": false
+     }
+    ]
+   ],
+   "second_boss": null
+  },
+  "options": [
    {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "blue",
-    "cost": 1,
-    "description": "Evoke your rightmost Orb twice.",
-    "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
-    "id": "DUALCAST",
-    "image": "https://assets.test/card_atlas/defect/dualcast.png",
-    "index": 0,
-    "name": "Dualcast",
-    "rarity": "Basic",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   }
-  ],
-  "max_energy": 3,
-  "options": [],
-  "orb_slots": 3,
-  "orbs": [
-   {
-    "evoke": 8,
-    "image": "https://assets.test/orb_atlas/lightning.png",
-    "index": 0,
-    "name": "LIGHTNING_ORB.title",
-    "passive": 3,
-    "type": "Lightning"
+    "action": "select_map_node",
+    "args": {
+     "col": 1,
+     "row": 15
+    },
+    "enabled": true,
+    "label": "RestSite (1,15)"
    }
   ],
   "player": {
-   "block": 14,
+   "block": 0,
    "deck": [
     {
      "color": "blue",
@@ -762,12 +1261,18 @@
     }
    ],
    "gold": 158,
-   "hp": 53,
-   "image": "https://assets.test/character_sprites/defect.png",
+   "hp": 1,
    "max_hp": 75,
    "name": "Defect",
    "potion_slots": 3,
-   "potions": [],
+   "potions": [
+    {
+     "description": "Apply 3 Weak.",
+     "id": "WEAK_POTION",
+     "image": "https://assets.test/potion_atlas/weak_potion.png",
+     "name": "Weak Potion"
+    }
+   ],
    "relics": [
     {
      "description": "At the start of each combat, Channel 1 Lightning.",
@@ -787,13 +1292,7 @@
      "image": "https://assets.test/relic_atlas/centennial_puzzle.png",
      "name": "Centennial Puzzle"
     }
-   ],
-   "rig": "https://assets.test/character_rigs/defect/defect",
-   "rig_bounds_h": 260.0,
-   "rig_bounds_w": 250.0,
-   "rig_scale": 0.125
-  },
-  "player_powers": [],
-  "round": 3
+   ]
+  }
  }
 }

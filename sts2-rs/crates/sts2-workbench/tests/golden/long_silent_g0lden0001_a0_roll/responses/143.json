@@ -1,0 +1,327 @@
+{
+ "details": [],
+ "error": null,
+ "label": "Map → (2,7)",
+ "step": {
+  "action_label": "",
+  "assets_base": "https://assets.test",
+  "chosen_action": null,
+  "decision": "rest_site",
+  "idx": 0,
+  "meta": {
+   "act": 1,
+   "act_name": "Overgrowth",
+   "bg_col": 2,
+   "bg_row": 7,
+   "bg_seed": 1772253313,
+   "floor": 7,
+   "step_no": 0,
+   "turn": null
+  },
+  "pv": null,
+  "scores": [],
+  "source": "live",
+  "state": {
+   "act": 1,
+   "act1": "overgrowth",
+   "act_name": "Overgrowth",
+   "ascension": 0,
+   "bg_col": 2,
+   "bg_row": 7,
+   "bg_seed": 1772253313,
+   "decision": "rest_site",
+   "floor": 7,
+   "options": [
+    {
+     "action": "choose_option",
+     "args": {
+      "option_index": 0
+     },
+     "enabled": true,
+     "label": "HEAL"
+    },
+    {
+     "action": "choose_option",
+     "args": {
+      "option_index": 1
+     },
+     "enabled": true,
+     "label": "SMITH"
+    }
+   ],
+   "player": {
+    "block": 0,
+    "deck": [
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_SILENT",
+      "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+      "index": 0,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_SILENT",
+      "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+      "index": 1,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_SILENT",
+      "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+      "index": 2,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_SILENT",
+      "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+      "index": 3,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_SILENT",
+      "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+      "index": 4,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_SILENT",
+      "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+      "index": 5,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_SILENT",
+      "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+      "index": 6,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_SILENT",
+      "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+      "index": 7,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_SILENT",
+      "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+      "index": 8,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_SILENT",
+      "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+      "index": 9,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 0,
+      "description": "Deal 3 damage.\nApply 1 Weak.",
+      "description_rich": "Deal 3 damage.\nApply 1 Weak.",
+      "id": "NEUTRALIZE",
+      "image": "https://assets.test/card_atlas/silent/neutralize.png",
+      "index": 10,
+      "name": "Neutralize",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Gain 8 Block.\nDiscard 1 card.",
+      "description_rich": "Gain 8 Block.\nDiscard 1 card.",
+      "id": "SURVIVOR",
+      "image": "https://assets.test/card_atlas/silent/survivor.png",
+      "index": 11,
+      "name": "Survivor",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "colorless",
+      "cost": 1,
+      "description": "Deal 14 damage.",
+      "description_rich": "Deal 14 damage.",
+      "id": "ULTIMATE_STRIKE",
+      "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+      "index": 12,
+      "name": "Ultimate Strike",
+      "rarity": "Uncommon",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Gain 6 Block.\nAdd 1 Shiv into your Hand.",
+      "description_rich": "Gain 6 Block.\nAdd 1 Shiv into your Hand.",
+      "id": "CLOAK_AND_DAGGER",
+      "image": "https://assets.test/card_atlas/silent/cloak_and_dagger.png",
+      "index": 13,
+      "name": "Cloak and Dagger",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Deal 8 damage.\nApply 1 Weak.",
+      "description_rich": "Deal 8 damage.\nApply 1 Weak.",
+      "id": "SUCKER_PUNCH",
+      "image": "https://assets.test/card_atlas/silent/sucker_punch.png",
+      "index": 14,
+      "name": "Sucker Punch",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 2,
+      "description": "Retain.\nApply 7 Poison.",
+      "description_rich": "[gold]Retain[/gold].\nApply 7 Poison.",
+      "id": "SNAKEBITE",
+      "image": "https://assets.test/card_atlas/silent/snakebite.png",
+      "index": 15,
+      "name": "Snakebite",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "quest",
+      "cost": "X",
+      "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
+      "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra Gold in the next Act.",
+      "id": "SPOILS_MAP",
+      "image": "https://assets.test/card_atlas/quest/spoils_map.png",
+      "index": 16,
+      "name": "Spoils Map",
+      "rarity": "Quest",
+      "type": "Quest",
+      "upgraded": false
+     },
+     {
+      "color": "green",
+      "cost": 1,
+      "description": "Deal 3 damage.\nAdd 2 Shivs into your Hand.",
+      "description_rich": "Deal 3 damage.\nAdd 2 Shivs into your Hand.",
+      "id": "LEADING_STRIKE",
+      "image": "https://assets.test/card_atlas/silent/leading_strike.png",
+      "index": 17,
+      "name": "Leading Strike",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": false
+     }
+    ],
+    "gold": 221,
+    "hp": 32,
+    "max_hp": 70,
+    "name": "Silent",
+    "potion_slots": 3,
+    "potions": [],
+    "relics": [
+     {
+      "description": "At the start of each combat, draw 2 additional cards.",
+      "id": "RING_OF_THE_SNAKE",
+      "image": "https://assets.test/relic_atlas/ring_of_the_snake.png",
+      "name": "Ring of the Snake"
+     },
+     {
+      "description": "Upon pickup, choose 1 of 2 Colorless cards to add to your Deck.",
+      "id": "LEAD_PAPERWEIGHT",
+      "image": "https://assets.test/relic_atlas/lead_paperweight.png",
+      "name": "Lead Paperweight"
+     }
+    ]
+   },
+   "rest_options": [
+    {
+     "index": 0,
+     "is_enabled": true,
+     "name": "Rest",
+     "option_id": "HEAL"
+    },
+    {
+     "index": 1,
+     "is_enabled": true,
+     "name": "Smith",
+     "option_id": "SMITH"
+    }
+   ]
+  }
+ }
+}

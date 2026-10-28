@@ -1,19 +1,19 @@
 {
  "act": null,
- "best_label": "Dualcast",
+ "best_label": "Ultimate Strike",
  "best_win_prob": 1.0,
  "drop_pct": 0,
  "floor": null,
  "idx": 98,
  "is_blunder": false,
  "matched_best": true,
- "message": "Turn 3: Dualcast matched the MCTS line (P(win) 100%)",
- "n_actions": 2,
+ "message": "Turn 3: Ultimate Strike matched the MCTS line (P(win) 100%)",
+ "n_actions": 5,
  "node_id": null,
- "played_label": "Dualcast",
+ "played_label": "Ultimate Strike",
  "played_win_prob": 1.0,
  "player_rank": 0,
  "regret": 0.0,
  "turn": 3,
- "visits": 12
+ "visits": 4
 }

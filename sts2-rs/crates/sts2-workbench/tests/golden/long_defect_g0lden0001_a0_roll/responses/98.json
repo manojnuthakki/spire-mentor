@@ -1,8 +1,3 @@
 {
- "action": "choose_option",
- "args": {
-  "option_index": 1
- },
- "fallback": true,
- "policy": "ppo"
+ "detail": "no recommendation here"
 }

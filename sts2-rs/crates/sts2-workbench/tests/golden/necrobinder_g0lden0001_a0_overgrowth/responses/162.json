@@ -332,6 +332,10 @@
       "damage": 2,
       "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
       "type": "Buff"
+     },
+     {
+      "intent_image": null,
+      "type": "StatusCard"
      }
     ],
     "kind": "Wriggler",
@@ -411,6 +415,10 @@
       "damage": 2,
       "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
       "type": "Buff"
+     },
+     {
+      "intent_image": null,
+      "type": "StatusCard"
      }
     ],
     "kind": "Wriggler",

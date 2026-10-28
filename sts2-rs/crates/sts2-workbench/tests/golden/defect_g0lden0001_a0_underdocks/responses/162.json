@@ -336,6 +336,11 @@
        }
       ],
       "type": "Attack"
+     },
+     {
+      "damage": 6,
+      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
+      "type": "Buff"
      }
     ],
     "kind": "TerrorEel",

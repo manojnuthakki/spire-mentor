@@ -1,101 +1,110 @@
 {
- "action_label": "",
+ "action_label": "Choose: Lead Paperweight",
  "assets_base": "https://assets.test",
- "chosen_action": null,
- "decision": "card_reward",
+ "chosen_action": {
+  "action": "choose_option",
+  "args": {
+   "option_index": 0
+  },
+  "cmd": "action",
+  "label": "Choose: Lead Paperweight",
+  "replay": {
+   "action": "choose_option",
+   "args": {
+    "option_index": 0
+   }
+  }
+ },
+ "combat_log": [],
+ "decision": "event_choice",
  "idx": 0,
+ "legal_actions": [],
  "meta": {
   "act": 1,
   "act_name": "Overgrowth",
-  "bg_col": 3,
-  "bg_row": 16,
-  "bg_seed": 1772253313,
-  "floor": 16,
-  "step_no": 0,
+  "advice": null,
+  "bg_col": null,
+  "bg_row": null,
+  "bg_seed": null,
+  "floor": 0,
+  "step_no": 1,
   "turn": null
  },
  "pv": null,
  "scores": [],
- "source": "live",
+ "source": "log",
  "state": {
   "act": 1,
   "act1": "overgrowth",
   "act_name": "Overgrowth",
+  "art": {
+   "illustration": null
+  },
   "ascension": 0,
-  "bg_col": 3,
-  "bg_row": 16,
   "bg_seed": 1772253313,
-  "can_skip": true,
-  "cards": [
+  "decision": "event_choice",
+  "description": "",
+  "event_name": "Neow",
+  "event_options": [
    {
-    "color": "blue",
-    "cost": 1,
-    "description": "At the start of your turn, draw 1 additional card.",
-    "description_rich": "At the start of your turn, draw 1 additional card.",
-    "id": "MACHINE_LEARNING",
-    "image": "https://assets.test/card_atlas/defect/machine_learning.png",
+    "description": "Upon pickup, choose 1 of 2 Colorless cards to add to your Deck.",
+    "image": "https://assets.test/relic_atlas/lead_paperweight.png",
     "index": 0,
-    "name": "Machine Learning",
-    "rarity": "Rare",
-    "type": "Power"
+    "is_locked": false,
+    "title": "Lead Paperweight"
    },
    {
-    "color": "blue",
-    "cost": 1,
-    "description": "Gain 1 Focus.",
-    "description_rich": "Gain 1 Focus.",
-    "id": "DEFRAGMENT",
-    "image": "https://assets.test/card_atlas/defect/defragment.png",
+    "description": "Upon pickup, obtain a random Relic.",
+    "image": "https://assets.test/relic_atlas/small_capsule.png",
     "index": 1,
-    "name": "Defragment",
-    "rarity": "Rare",
-    "type": "Power"
+    "is_locked": false,
+    "title": "Small Capsule"
    },
    {
-    "color": "blue",
-    "cost": 2,
-    "description": "Exhaust ALL your Status cards.\nDeal 8 damage to a random enemy for each card Exhausted.",
-    "description_rich": "Exhaust ALL your Status cards.\nDeal 8 damage to a random enemy for each card Exhausted.",
-    "id": "FLAK_CANNON",
-    "image": "https://assets.test/card_atlas/defect/flak_cannon.png",
+    "description": "Upon pickup, remove 2 cards from your Deck and lose 16 HP.",
+    "image": "https://assets.test/relic_atlas/precarious_shears.png",
     "index": 2,
-    "name": "Flak Cannon",
-    "rarity": "Rare",
-    "type": "Attack"
+    "is_locked": false,
+    "title": "Precarious Shears"
    }
   ],
-  "decision": "card_reward",
-  "floor": 16,
+  "floor": 0,
   "options": [
    {
-    "action": "select_card_reward",
-    "args": {
-     "card_index": 0
-    },
-    "enabled": true,
-    "label": "MACHINE_LEARNING.title"
+    "description": "",
+    "fallback_description": "Gain a positive relic.",
+    "fallback_title": "LEAD_PAPERWEIGHT",
+    "index": 0,
+    "is_locked": false,
+    "option_id": "positive_1",
+    "text_key": "LEAD_PAPERWEIGHT",
+    "title": "LEAD_PAPERWEIGHT.title",
+    "title_vars": {},
+    "vars": {}
    },
    {
-    "action": "select_card_reward",
-    "args": {
-     "card_index": 1
-    },
-    "enabled": true,
-    "label": "DEFRAGMENT.title"
+    "description": "",
+    "fallback_description": "Gain a positive relic.",
+    "fallback_title": "SMALL_CAPSULE",
+    "index": 1,
+    "is_locked": false,
+    "option_id": "positive_2",
+    "text_key": "SMALL_CAPSULE",
+    "title": "SMALL_CAPSULE.title",
+    "title_vars": {},
+    "vars": {}
    },
    {
-    "action": "select_card_reward",
-    "args": {
-     "card_index": 2
-    },
-    "enabled": true,
-    "label": "FLAK_CANNON.title"
-   },
-   {
-    "action": "skip_card_reward",
-    "args": {},
-    "enabled": true,
-    "label": "Skip"
+    "description": "",
+    "fallback_description": "Gain a cursed relic.",
+    "fallback_title": "PRECARIOUS_SHEARS",
+    "index": 2,
+    "is_locked": false,
+    "option_id": "cursed",
+    "text_key": "PRECARIOUS_SHEARS",
+    "title": "PRECARIOUS_SHEARS.title",
+    "title_vars": {},
+    "vars": {}
    }
   ],
   "player": {
@@ -104,15 +113,15 @@
     {
      "color": "blue",
      "cost": 1,
-     "description": "Deal 9 damage.",
-     "description_rich": "Deal 9 damage.",
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
      "id": "STRIKE_DEFECT",
      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
      "index": 0,
      "name": "Strike",
      "rarity": "Basic",
      "type": "Attack",
-     "upgraded": true
+     "upgraded": false
     },
     {
      "color": "blue",
@@ -143,14 +152,14 @@
     {
      "color": "blue",
      "cost": 1,
-     "description": "Gain 5 Block.",
-     "description_rich": "Gain 5 Block.",
-     "id": "DEFEND_DEFECT",
-     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
      "index": 3,
-     "name": "Defend",
+     "name": "Strike",
      "rarity": "Basic",
-     "type": "Skill",
+     "type": "Attack",
      "upgraded": false
     },
     {
@@ -195,11 +204,24 @@
     {
      "color": "blue",
      "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "index": 7,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
      "description": "Channel 1 Lightning.",
      "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
      "id": "ZAP",
      "image": "https://assets.test/card_atlas/defect/zap.png",
-     "index": 7,
+     "index": 8,
      "name": "Zap",
      "rarity": "Basic",
      "type": "Skill",
@@ -212,158 +234,15 @@
      "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
      "id": "DUALCAST",
      "image": "https://assets.test/card_atlas/defect/dualcast.png",
-     "index": 8,
+     "index": 9,
      "name": "Dualcast",
      "rarity": "Basic",
      "type": "Skill",
      "upgraded": false
-    },
-    {
-     "color": "colorless",
-     "cost": 1,
-     "description": "Deal 14 damage.",
-     "description_rich": "Deal 14 damage.",
-     "id": "ULTIMATE_STRIKE",
-     "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-     "index": 9,
-     "name": "Ultimate Strike",
-     "rarity": "Uncommon",
-     "type": "Attack",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 0,
-     "description": "Gain 6 Block.\nAdd a Dazed into your Discard Pile.",
-     "description_rich": "Gain 6 Block.\nAdd a Dazed into your Discard Pile.",
-     "id": "BOOST_AWAY",
-     "image": "https://assets.test/card_atlas/defect/boost_away.png",
-     "index": 10,
-     "name": "Boost Away",
-     "rarity": "Common",
-     "type": "Skill",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 0,
-     "description": "Gain Energy.\nAdd a Void into your Discard Pile.",
-     "description_rich": "Gain Energy.\nAdd a [gold]Void[/gold] into your [gold]Discard Pile[/gold].",
-     "id": "TURBO",
-     "image": "https://assets.test/card_atlas/defect/turbo.png",
-     "index": 11,
-     "name": "TURBO",
-     "rarity": "Common",
-     "type": "Skill",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Deal 6 damage to ALL enemies.\nDraw 1 card.",
-     "description_rich": "Deal 6 damage to ALL enemies.\nDraw 1 card.",
-     "id": "SWEEPING_BEAM",
-     "image": "https://assets.test/card_atlas/defect/sweeping_beam.png",
-     "index": 12,
-     "name": "Sweeping Beam",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgraded": false
-    },
-    {
-     "color": "quest",
-     "cost": "X",
-     "description": "Unplayable.\nMarks a site of 600 extra Gold in the next Act.",
-     "description_rich": "[gold]Unplayable[/gold].\nMarks a site of 600 extra Gold in the next Act.",
-     "id": "SPOILS_MAP",
-     "image": "https://assets.test/card_atlas/quest/spoils_map.png",
-     "index": 13,
-     "name": "Spoils Map",
-     "rarity": "Quest",
-     "type": "Quest",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 0,
-     "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-     "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-     "id": "GO_FOR_THE_EYES",
-     "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
-     "index": 14,
-     "name": "Go for the Eyes",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 0,
-     "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-     "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-     "id": "GO_FOR_THE_EYES",
-     "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
-     "index": 15,
-     "name": "Go for the Eyes",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Deal 6 damage.\nChannel 1 Frost.",
-     "description_rich": "Deal 6 damage.\nChannel 1 Frost.",
-     "id": "COLD_SNAP",
-     "image": "https://assets.test/card_atlas/defect/cold_snap.png",
-     "index": 16,
-     "name": "Cold Snap",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Gain 6 Block.\nTransform all Status cards in your Hand into Fuel.",
-     "description_rich": "Gain 6 Block.\nTransform all Status cards in your Hand into Fuel.",
-     "id": "COMPACT",
-     "image": "https://assets.test/card_atlas/defect/beta/compact.png",
-     "index": 17,
-     "name": "Compact",
-     "rarity": "Uncommon",
-     "type": "Skill",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 0,
-     "description": "Deal 3 damage.\nApply 1 Vulnerable.",
-     "description_rich": "Deal 3 damage.\nApply 1 Vulnerable.",
-     "id": "BEAM_CELL",
-     "image": "https://assets.test/card_atlas/defect/beam_cell.png",
-     "index": 18,
-     "name": "Beam Cell",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Gain 9 Block.",
-     "description_rich": "Gain 9 Block.",
-     "id": "LEAP",
-     "image": "https://assets.test/card_atlas/defect/leap.png",
-     "index": 19,
-     "name": "Leap",
-     "rarity": "Common",
-     "type": "Skill",
-     "upgraded": false
     }
    ],
-   "gold": 258,
-   "hp": 10,
+   "gold": 99,
+   "hp": 75,
    "max_hp": 75,
    "name": "Defect",
    "potion_slots": 3,
@@ -374,20 +253,9 @@
      "id": "CRACKED_CORE",
      "image": "https://assets.test/relic_atlas/cracked_core.png",
      "name": "Cracked Core"
-    },
-    {
-     "description": "Upon pickup, choose 1 of 2 Colorless cards to add to your Deck.",
-     "id": "LEAD_PAPERWEIGHT",
-     "image": "https://assets.test/relic_atlas/lead_paperweight.png",
-     "name": "Lead Paperweight"
-    },
-    {
-     "description": "The first time you lose HP each combat, draw 3 cards.",
-     "id": "CENTENNIAL_PUZZLE",
-     "image": "https://assets.test/relic_atlas/centennial_puzzle.png",
-     "name": "Centennial Puzzle"
     }
    ]
   }
- }
+ },
+ "wpa": null
 }
