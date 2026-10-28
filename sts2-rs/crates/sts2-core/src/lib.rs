@@ -7699,8 +7699,9 @@ impl CombatState {
     pub fn exhaust_from_draw_pile(&mut self, count: i32) {
         let iters = usize::try_from(count).unwrap_or(0);
         for _ in 0..iters {
-            // Each exhaust's entry check (`exhaust_may_begin`), before its
-            // reshuffle: a refused exhaust moves no card and draws no Shuffle.
+            // An already-ending combat neither reshuffles nor draws Shuffle (in
+            // addition to the admission check at the move,
+            // `exhaust_one_from_draw_at`).
             if !crate::combat_loop::exhaust_may_begin(self) {
                 break;
             }
@@ -7757,7 +7758,8 @@ impl CombatState {
     /// pile is empty (C# `await ShuffleIfNecessary`), then no-ops if both piles
     /// are empty. Bead `sts2-rs-70anj.1` (ToastyMittens before-draw timing fix).
     pub fn exhaust_top_from_draw_skipping_innate(&mut self, skip_innate: bool) {
-        // The exhaust's entry check, before its reshuffle (`exhaust_may_begin`).
+        // An already-ending combat doesn't reshuffle (in addition to the
+        // admission check at the move, `exhaust_one_from_draw_at`).
         if !crate::combat_loop::exhaust_may_begin(self) {
             return;
         }
@@ -7794,6 +7796,16 @@ impl CombatState {
     /// for both the top-card path and the skip-Innate path
     /// ([`Self::exhaust_top_from_draw_skipping_innate`]).
     fn exhaust_one_from_draw_at(&mut self, idx: usize) {
+        // The draw-pile exhaust's admission check, immediately before the card
+        // moves: after the prerequisite reshuffle and its reactions (The
+        // Abacus' block firing Juggernaut can end the combat there), as C#
+        // `CardCmd.Exhaust` checks only once it is called (`CardCmd.cs:239`).
+        // The entry points' earlier check only spares an already-ending combat
+        // the reshuffle and its Shuffle draws. Once admitted, the move and both
+        // buses always run.
+        if !crate::combat_loop::exhaust_may_begin(self) {
+            return;
+        }
         let uid = self.player.draw.remove(idx);
         self.player.exhaust.push(uid);
 

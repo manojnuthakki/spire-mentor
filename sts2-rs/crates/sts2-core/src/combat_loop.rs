@@ -5802,8 +5802,13 @@ pub fn combat_is_ending(state: &CombatState) -> bool {
 /// nothing once the combat is over or ending, and once begun it moves the card
 /// and walks every `AfterCardExhausted` listener (`Hook.cs`) to the end, even
 /// if a reaction ends the combat meanwhile (Dark Embrace drawing a Hellraiser
-/// kill). Every exhaust path asks this ONCE, before its first mutation or bus,
-/// and then fires both buses unconditionally (sts2-agent fork).
+/// kill). Every exhaust asks this ONCE, at its own boundary: immediately
+/// before the card moves, after any prerequisite step (a reshuffle, a
+/// selection, a draw) and its reactions. The choke points are
+/// `exhaust_from_play`, `CombatState::exhaust_one_from_draw_at`,
+/// `card_effects::exhaust_card_uid`, the content helper `exhaust_hand_card`,
+/// the end-of-turn ethereal sweep (per card) and the Corruption dupe. Once
+/// admitted, the move and both buses always run (sts2-agent fork).
 #[must_use]
 pub fn exhaust_may_begin(state: &CombatState) -> bool {
     !combat_is_ending(state)

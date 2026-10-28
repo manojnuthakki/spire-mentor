@@ -4555,3 +4555,69 @@ fn fiend_fire_after_its_killing_blow_is_not_exhausted() {
         .map(|r| r.counter);
     assert_eq!(counter, Some(1), "Joss Paper counts Defend only");
 }
+
+/// The admission check sits at the exhaust's own boundary, after its
+/// prerequisite reshuffle and that reshuffle's reactions (C#
+/// `ToastyMittens.cs` awaits `ShuffleIfNecessary` before `CardCmd.Exhaust`,
+/// whose check runs then: `CardCmd.cs:239`). The Abacus' block on the reshuffle
+/// fires Juggernaut into the last enemy, so the exhaust that follows is
+/// refused: both cards stay in the draw pile, Exhaust stays empty and Joss
+/// Paper isn't told. Both draw-pile entry points.
+#[test]
+fn a_reshuffle_that_ends_the_combat_refuses_the_exhaust_after_it() {
+    for skip_innate_path in [false, true] {
+        install_pool();
+        crate::cards::dispatch::ensure_installed();
+        crate::relics::dispatch::ensure_installed();
+        let (mut state, enemy) = fresh_state_with_enemy(5);
+        state.init_player_creature();
+        for (raw, kind) in [
+            (1, sts2_core::RelicKind::TheAbacus),
+            (2, sts2_core::RelicKind::JossPaper),
+        ] {
+            state.relics.push(sts2_core::Relic {
+                id: NonZeroU32::new(raw).expect("non-zero"),
+                kind,
+                counter: 0,
+                is_wax: false,
+                is_melted: false,
+            });
+        }
+        let _ = push_play_card(&mut state, CardId::JuggernautCard, 0, 0);
+        let _ = dispatch(&mut state, CardId::JuggernautCard, None);
+        state.player.play.clear();
+        assert!(
+            state.player_power_amount(PowerKind::Juggernaut) >= 5,
+            "Juggernaut deals at least the enemy's 5 HP"
+        );
+        let a = push_draw_tail(&mut state, CardId::DefendIronclad, CardType::Skill, 0);
+        let b = push_draw_tail(&mut state, CardId::DefendIronclad, CardType::Skill, 0);
+        state.player.draw.clear();
+        state.player.discard.extend([a, b]);
+        if skip_innate_path {
+            state.exhaust_top_from_draw_skipping_innate(false);
+        } else {
+            state.exhaust_from_draw_pile(1);
+        }
+        let enemy_hp = state
+            .creatures
+            .iter()
+            .find(|c| CreatureUid(c.id) == enemy)
+            .map(|c| c.current_hp);
+        assert_eq!(
+            enemy_hp,
+            Some(0),
+            "the reshuffle's reactions killed the enemy"
+        );
+        let mut draw = state.player.draw.to_vec();
+        draw.sort_unstable();
+        assert_eq!(draw, [a, b], "both cards stay in the draw pile");
+        assert!(state.player.exhaust.is_empty(), "the exhaust was refused");
+        let counter = state
+            .relics
+            .iter()
+            .find(|r| r.kind == sts2_core::RelicKind::JossPaper)
+            .map(|r| r.counter);
+        assert_eq!(counter, Some(0), "Joss Paper isn't told");
+    }
+}
