@@ -1532,10 +1532,18 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
             // a small list either way.
             if let ListenerRef::Power(uid) = listener {
                 let pid = uid.0;
+                let was_tangled = state
+                    .powers
+                    .get_by_id(pid)
+                    .is_some_and(|p| p.kind == PowerKind::Tangled);
                 state.powers.retain(|p| p.id != pid);
                 state.player.powers.retain(|u| u.0 != pid);
                 for c in &mut state.creatures {
                     c.powers.retain(|u| u.0 != pid);
+                }
+                // C# `TangledPower.AfterRemoved` clears the Entangled cards.
+                if was_tangled && state.player_power_amount(PowerKind::Tangled) <= 0 {
+                    crate::monster_power_effects::tangled_after_removed(state);
                 }
             }
         }
@@ -5390,21 +5398,23 @@ pub fn modify_card_cost(
             }
         }
         PowerKind::Tangled => {
-            // Bead `sts2-rs-g0gs9`: C# `TangledPower.TryModifyEnergyCostInCombat`
-            // (../sts2-wiki/decompiled/v0.103.2/MegaCrit.Sts2.Core.Models.Powers/TangledPower.cs)
-            // returns `originalCost + Amount` for Entangled Attack cards
-            // owned by the player. `TangledPower.AfterApplied` afflicts
-            // EVERY player Attack card with `Entangled` (and
-            // `AfterCardEnteredCombat` afflicts new ones), so the net
-            // observable is "+Amount on every player Attack card while
-            // Tangled is active". We model that directly on `card_type ==
-            // Attack` rather than tracking the per-card Entangled affliction
-            // (which is not parity-tracked). This is an ADDITIVE
-            // contribution — a min-fold of `Override`s cannot express it,
-            // hence the [`CardCostMod`] split. Tangled is removed at the
-            // player's turn end (see the `PowerKind::Tangled` arm in
-            // [`after_turn_end`]).
-            if power.amount > 0 && card_type == CardType::Attack {
+            // C# `TangledPower.TryModifyEnergyCostInCombat`
+            // (`TangledPower.cs:59-68`): `originalCost + Amount` for a card
+            // whose affliction is Entangled. `AfterApplied` Entangles every
+            // unafflicted player Attack and `AfterCardEnteredCombat` each new
+            // one (`monster_power_effects::tangled_after_applied`), so an
+            // Attack carrying another affliction pays its base cost. A cost
+            // asked by type alone (no card) keeps the Attack rule. Additive,
+            // hence [`CardCostMod::Add`]. Tangled is removed at the player's
+            // turn end (the `PowerKind::Tangled` arm in [`after_turn_end`]).
+            let entangled = ctx.card_uid.map_or(card_type == CardType::Attack, |uid| {
+                crate::card_by_uid(&state.cards, uid).is_some_and(|c| {
+                    c.affliction.is_some_and(|a| {
+                        a.kind == crate::card_afflictions::CardAfflictionKind::Entangled
+                    })
+                })
+            });
+            if power.amount > 0 && entangled {
                 Some(CardCostMod::Add(power.amount))
             } else {
                 None
@@ -7194,9 +7204,7 @@ pub fn after_turn_end(
             // (VineShambler GRASPING_VINES), surcharges the player's Attack
             // cards for their next turn (via the `modify_card_cost` arm),
             // then removes itself at the player's turn end. `AfterRemoved`
-            // also clears the per-card Entangled affliction in C#; that
-            // affliction is not modeled here (not parity-tracked), so a
-            // plain RemovePower suffices.
+            // (clearing the Entangled cards) runs inside `Effect::RemovePower`.
             let owner = owner_of_listener(state, listener)?;
             if creature_ref_side(owner) != ctx.side {
                 return None;

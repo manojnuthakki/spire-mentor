@@ -458,16 +458,18 @@ fn kin_priest_ritual_effect(state: &mut CombatState, owner: CreatureUid) {
 /// `await PowerCmd.Apply<TangledPower>(targets, 1m, base.Creature, null)`.
 /// The `Intent::Debuff{Tangled,1}` telegraph metadata only mirrors the
 /// `CardDebuffIntent` icon; the real apply lives here per the DSL
-/// convention. `TangledPower`'s combat behaviour is wired (bead
-/// `sts2-rs-g0gs9`): +amount energy cost on the player's Attack cards
-/// (the `PowerKind::Tangled` arm in `hooks::modify_card_cost`) and
-/// removal at the player's turn end (`hooks::after_turn_end`). The
-/// per-card `Entangled` affliction C# uses as the cost-surcharge marker
-/// is not modeled separately — it's not parity-tracked, and since
-/// Tangled afflicts every player Attack card the net cost effect is
-/// captured by the `card_type == Attack` guard.
+/// convention. `TangledPower`'s combat behaviour is wired: a fresh instance
+/// Entangles the player's unafflicted Attacks (`AfterApplied`, C# fires it
+/// only for a new instance, `PowerCmd.Apply`), an Entangled card costs
+/// +amount (the `PowerKind::Tangled` arm in `hooks::modify_card_cost`), and
+/// its removal at the player's turn end clears them (`hooks::after_turn_end`,
+/// `monster_power_effects::tangled_after_removed`).
 fn vine_shambler_grasping_vines_effect(state: &mut CombatState, _owner: CreatureUid) {
+    let fresh = state.player_power_amount(PowerKind::Tangled) <= 0;
     apply_power_to_player_via_legacy_surface(state, PowerKind::Tangled, 1);
+    if fresh && state.player_power_amount(PowerKind::Tangled) > 0 {
+        sts2_core::monster_power_effects::tangled_after_applied(state);
+    }
 }
 
 /// Cooldown-aware branch builder. Mirrors the C# `RandomBranchState`
@@ -3215,6 +3217,30 @@ mod tests {
         let mut state = CombatState::default();
         vine_shambler_grasping_vines_effect(&mut state, CreatureUid::new(1).expect("nz"));
         assert_eq!(player_power_amount(&state, PowerKind::Tangled), 1);
+    }
+
+    /// GRASPING_VINES' Tangled Entangles the player's Attacks as it lands
+    /// (`TangledPower.AfterApplied`, `TangledPower.cs:23-30`), not their type.
+    #[test]
+    fn vine_shambler_grasping_vines_entangles_the_players_attacks() {
+        use sts2_core::card_afflictions::CardAfflictionKind;
+        use sts2_core::cards::{Card, CardType};
+        let mut state = CombatState::default();
+        for (i, ct) in [CardType::Attack, CardType::Skill].into_iter().enumerate() {
+            let uid = sts2_core::CardUid::new(u32::try_from(i + 1).unwrap()).unwrap();
+            state.cards.push(Card {
+                uid,
+                card_type: ct,
+                ..Card::pod_defaults()
+            });
+            state.player.hand.push(uid);
+        }
+        vine_shambler_grasping_vines_effect(&mut state, CreatureUid::new(1).expect("nz"));
+        assert_eq!(
+            state.cards[0].affliction.map(|a| a.kind),
+            Some(CardAfflictionKind::Entangled)
+        );
+        assert_eq!(state.cards[1].affliction, None);
     }
 
     /// `apply_power_to_player_via_legacy_surface` stacks a repeated application

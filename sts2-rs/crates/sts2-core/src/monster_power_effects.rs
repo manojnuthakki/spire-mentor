@@ -194,8 +194,15 @@ pub fn dispatch_after_card_entered_combat_on_monster_powers(
     // `fire_after_card_entered_combat` bundle plus the four content sites that
     // inline it) covers Smoggy without a per-site edit.
     let smoggy = smoggy_after_card_entered_combat(state, card_uid);
+    // `TangledPower.AfterCardEnteredCombat` sits on the player too (same leg).
+    let tangled = tangled_after_card_entered_combat(state, card_uid);
+    let player_legs = if tangled == EffectResult::Resolved {
+        tangled
+    } else {
+        smoggy
+    };
     if is_empty_after_card_entered_combat_power() {
-        return smoggy;
+        return player_legs;
     }
     // Snapshot the (owner, kind) pairs first so the per-handler call
     // can take `&mut CombatState` without holding an immutable borrow.
@@ -821,6 +828,87 @@ pub fn smoggy_after_side_turn_end(state: &mut CombatState) {
 }
 
 // ---------------------------------------------------------------------------
+// TangledPower hook bodies
+// ---------------------------------------------------------------------------
+//
+// C# source: `MegaCrit.Sts2.Core.Models.Powers/TangledPower.cs`. Vine
+// Shambler's GRASPING_VINES applies it to the player through the legacy
+// player surface (as Smoggy, so these are dedicated functions, not registry
+// listeners). `Entangled` is a pure marker (`Afflictions/Entangled.cs`); the
+// power holds its logic:
+//
+//   * `AfterApplied` (a fresh instance only, `PowerCmd.Apply`) — every player
+//     Attack in `AllCards` with no affliction is Entangled.
+//     → [`tangled_after_applied`], called by the applier.
+//   * `AfterCardEnteredCombat` — an unafflicted Attack entering combat is
+//     Entangled. → [`tangled_after_card_entered_combat`], on the
+//     card-entered bus.
+//   * `AfterRemoved` — every Entangled card is cleared.
+//     → [`tangled_after_removed`], from `Effect::RemovePower`.
+//   * `TryModifyEnergyCostInCombat` — an Entangled card costs `Amount` more
+//     (the `PowerKind::Tangled` arm in `hooks::modify_card_cost`).
+
+/// Entangle one card iff it is an Attack with no affliction (C#
+/// `card.Affliction == null && card.Type == CardType.Attack`; the AfterApplied
+/// path reaches the same set through `AfflictionModel.CanAfflict`, Entangled
+/// not being stackable).
+fn entangle_if_unafflicted_attack(state: &mut CombatState, card_uid: CardUid) -> bool {
+    use crate::card_afflictions::{CardAffliction, CardAfflictionKind};
+    let idx = (card_uid.0.get() as usize).saturating_sub(1);
+    let Some(card) = state.cards.get_mut(idx) else {
+        return false;
+    };
+    if card.affliction.is_some() || card.card_type != crate::cards::CardType::Attack {
+        return false;
+    }
+    // `CardCmd.Afflict<Entangled>(item, 1m)`.
+    card.set_affliction(CardAffliction::new(CardAfflictionKind::Entangled, 1))
+}
+
+/// C# `TangledPower.AfterApplied` (`TangledPower.cs:23-30`): Entangle every
+/// unafflicted player Attack in `AllCards`. The applier calls it when it puts
+/// a fresh Tangled instance on the player (C# fires `AfterApplied` only then,
+/// not when an existing instance stacks).
+pub fn tangled_after_applied(state: &mut CombatState) {
+    for uid in all_player_card_uids(state) {
+        entangle_if_unafflicted_attack(state, uid);
+    }
+}
+
+/// C# `TangledPower.AfterCardEnteredCombat` (`TangledPower.cs:32-38`).
+fn tangled_after_card_entered_combat(state: &mut CombatState, card_uid: CardUid) -> EffectResult {
+    if state.player_power_amount(PowerKind::Tangled) <= 0 {
+        return EffectResult::NotImplemented;
+    }
+    if entangle_if_unafflicted_attack(state, card_uid) {
+        EffectResult::Resolved
+    } else {
+        EffectResult::NotImplemented
+    }
+}
+
+/// C# `TangledPower.AfterRemoved` (`TangledPower.cs:49-57`): clear every
+/// Entangled card. Called once the player's Tangled is gone.
+pub fn tangled_after_removed(state: &mut CombatState) {
+    use crate::card_afflictions::{CardAffliction, CardAfflictionKind};
+    for uid in all_player_card_uids(state) {
+        let idx = (uid.0.get() as usize).saturating_sub(1);
+        let Some(card) = state.cards.get_mut(idx) else {
+            continue;
+        };
+        if matches!(
+            card.affliction,
+            Some(CardAffliction {
+                kind: CardAfflictionKind::Entangled,
+                ..
+            })
+        ) {
+            let _ = card.clear_affliction();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Test-support: clear all registries (for nextest's process-global state)
 // ---------------------------------------------------------------------------
 
@@ -962,6 +1050,126 @@ mod tests {
                 ..
             })
         )
+    }
+
+    // -----------------------------------------------------------------------
+    // TangledPower (`TangledPower.cs`)
+    // -----------------------------------------------------------------------
+
+    /// Tangled(1) on the legacy player surface, as GRASPING_VINES applies it;
+    /// returns the power's id.
+    fn give_player_tangled(state: &mut CombatState) -> std::num::NonZeroU32 {
+        let id = std::num::NonZeroU32::new(
+            state
+                .powers
+                .iter()
+                .map(|p| p.id.get())
+                .max()
+                .map_or(1, |m| m + 1),
+        )
+        .unwrap();
+        state.powers.push(crate::Power {
+            id,
+            kind: PowerKind::Tangled,
+            amount: 1,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state.player.powers.push(crate::PowerUid(id));
+        id
+    }
+
+    fn affliction_of(state: &CombatState, uid: CardUid) -> Option<CardAfflictionKind> {
+        state.cards[uid.0.get() as usize - 1]
+            .affliction
+            .map(|a| a.kind)
+    }
+
+    /// C# `TangledPower.AfterApplied` (`TangledPower.cs:23-30`): every player
+    /// Attack in `AllCards` is afflicted with Entangled; a Skill isn't, and an
+    /// Attack already carrying another affliction keeps it (`Entangled` isn't
+    /// stackable, so `AfflictionModel.CanAfflict` refuses it).
+    #[test]
+    fn tangled_applied_entangles_every_unafflicted_attack() {
+        let mut state = CombatState::default();
+        let drawn = push_card(&mut state, 1, CardType::Attack);
+        let in_hand = push_card(&mut state, 2, CardType::Attack);
+        state.player.draw.retain(|u| *u != in_hand);
+        state.player.hand.push(in_hand);
+        let skill = push_card(&mut state, 3, CardType::Skill);
+        let smogged = push_card(&mut state, 4, CardType::Attack);
+        state.cards[3].affliction = Some(CardAffliction::new(CardAfflictionKind::Smog, 1));
+        give_player_tangled(&mut state);
+        tangled_after_applied(&mut state);
+        assert_eq!(
+            affliction_of(&state, drawn),
+            Some(CardAfflictionKind::Entangled)
+        );
+        assert_eq!(
+            affliction_of(&state, in_hand),
+            Some(CardAfflictionKind::Entangled)
+        );
+        assert_eq!(affliction_of(&state, skill), None);
+        assert_eq!(
+            affliction_of(&state, smogged),
+            Some(CardAfflictionKind::Smog)
+        );
+    }
+
+    /// C# `TangledPower.AfterCardEnteredCombat` (`TangledPower.cs:32-38`): an
+    /// unafflicted Attack entering combat while Tangled lasts is Entangled; one
+    /// entering without Tangled is not.
+    #[test]
+    fn tangled_entangles_an_attack_entering_combat_while_it_lasts() {
+        let mut state = CombatState::default();
+        let before = push_card(&mut state, 1, CardType::Attack);
+        let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, before);
+        assert_eq!(affliction_of(&state, before), None);
+        give_player_tangled(&mut state);
+        let during = push_card(&mut state, 2, CardType::Attack);
+        let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, during);
+        assert_eq!(
+            affliction_of(&state, during),
+            Some(CardAfflictionKind::Entangled)
+        );
+        let skill = push_card(&mut state, 3, CardType::Skill);
+        let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, skill);
+        assert_eq!(affliction_of(&state, skill), None);
+    }
+
+    /// C# `TangledPower.AfterRemoved` (`TangledPower.cs:49-57`) clears every
+    /// Entangled card, and `TryModifyEnergyCostInCombat` (`:59-68`) surcharges
+    /// only an Entangled card: an Attack with another affliction costs its
+    /// base while Tangled lasts.
+    #[test]
+    fn tangled_surcharges_entangled_cards_only_and_its_removal_clears_them() {
+        let mut state = CombatState::default();
+        let attack = push_card(&mut state, 1, CardType::Attack);
+        let smogged = push_card(&mut state, 2, CardType::Attack);
+        let other = push_card(&mut state, 3, CardType::Skill);
+        for c in &mut state.cards {
+            c.cost = 1;
+        }
+        state.cards[1].affliction = Some(CardAffliction::new(CardAfflictionKind::Smog, 1));
+        state.cards[2].affliction = Some(CardAffliction::new(CardAfflictionKind::Smog, 1));
+        let id = give_player_tangled(&mut state);
+        tangled_after_applied(&mut state);
+        assert_eq!(crate::hooks::effective_card_cost(&state, attack), 2);
+        assert_eq!(crate::hooks::effective_card_cost(&state, smogged), 1);
+        crate::hooks::apply_effects(
+            &mut state,
+            &[crate::hooks::Effect::RemovePower {
+                listener: crate::hooks::ListenerRef::Power(crate::PowerUid(id)),
+            }],
+        );
+        assert_eq!(affliction_of(&state, attack), None);
+        assert_eq!(
+            affliction_of(&state, smogged),
+            Some(CardAfflictionKind::Smog)
+        );
+        assert_eq!(affliction_of(&state, other), Some(CardAfflictionKind::Smog));
+        assert_eq!(crate::hooks::effective_card_cost(&state, attack), 1);
     }
 
     /// (a) C# `SmoggyPower.AfterCardPlayed` (`SmoggyPower.cs:22-37`): playing a
