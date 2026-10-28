@@ -156,6 +156,7 @@ fn make_nibbit_combat(seed: u64) -> CombatState {
         escaped_creatures: 0,
         heist_recovered_gold: 0,
         room_extra_rewards: Vec::new(),
+        deck_card_uids: Vec::new(),
         event_combat_timed_out: false,
         gold: 0,
         is_over: false,

@@ -3778,6 +3778,15 @@ impl RunManager {
         &self.boss_relic_options
     }
 
+    /// Complete a relic purchase (sts2-agent fork): the `on_item_purchased`
+    /// hook (Maw Bank), then The Courier's restock, in the order
+    /// [`crate::shop::buy_relic`] runs them. Called at once, or once the reward
+    /// sets the bought relic offered are closed.
+    fn finish_relic_purchase(&mut self, (slot, gold_spent): (crate::shop::ShopSlot, i32)) {
+        let _ = crate::run_effects::dispatch_on_item_purchased(&mut self.run_state, gold_spent);
+        self.restock_slot_if_courier(slot);
+    }
+
     /// After a successful merchant purchase, re-populate the just-bought
     /// slot when the player owns `TheCourier` (the only relic whose C#
     /// `ShouldRefillMerchantEntry` returns `true`). Re-rolls the slot's
@@ -3785,14 +3794,6 @@ impl RunManager {
     /// content-layer [`ContentCallbacks::restock_shop_entry`], keeping
     /// the streams aligned with C# `RestockAfterPurchase` for any later
     /// shop visit. No-op without Courier or when the callback is unwired.
-    /// A relic purchase's completion: the `on_item_purchased` hook (Maw Bank),
-    /// then The Courier's restock, as [`crate::shop::buy_relic`] and the
-    /// immediate path order them. sts2-agent fork.
-    fn finish_relic_purchase(&mut self, (slot, gold_spent): (crate::shop::ShopSlot, i32)) {
-        let _ = crate::run_effects::dispatch_on_item_purchased(&mut self.run_state, gold_spent);
-        self.restock_slot_if_courier(slot);
-    }
-
     fn restock_slot_if_courier(&mut self, slot: crate::shop::ShopSlot) {
         if !self
             .run_state

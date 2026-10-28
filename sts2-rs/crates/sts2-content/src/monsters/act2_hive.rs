@@ -513,7 +513,7 @@ fn decimillipede_reattach_effect(state: &mut CombatState, owner: CreatureUid) {
 /// (out-of-combat deck restoration, `SwipePower.cs:53-67`) — zero combat /
 /// PILE_COUNT impact — but its PRESENCE is observable in `monsters[*].powers`,
 /// so it must be modelled for state parity (bead `sts2-rs-ybtmu`).
-fn thieving_hopper_thievery_effect(state: &mut CombatState, owner: CreatureUid) {
+pub fn thieving_hopper_thievery_effect(state: &mut CombatState, owner: CreatureUid) {
     use crate::cards::spec_index::rarity_for_card_id;
     use crate::cards::CardRarity;
     use sts2_core::cards::{CardType, EnchantmentId};
@@ -596,18 +596,17 @@ fn thieving_hopper_thievery_effect(state: &mut CombatState, owner: CreatureUid) 
     // does `SwipePower.Steal(card)` → `CardPileCmd.RemoveFromDeck(card
     // .DeckVersion)` (`SwipePower.cs:70`): the steal PERMANENTLY removes the
     // card from the RUN DECK, not just the combat pile. Record the stolen
-    // card's master-deck identity (`(card_id, upgraded)`) here so `exit_combat`
+    // card's master-deck link (its deck index) here so `exit_combat`
     // removes it from `master_deck`; a killed thief reclaims it
     // (`SwipePower.BeforeDeath` → `CombatState::reclaim_swipe_on_death`). The
     // candidate filter above already excludes combat-generated cards
     // (`DeckVersion == null`), so the stolen card always has a master-deck
     // counterpart. Bead `sts2-rs-RP13`.
-    let (stolen_card_id, stolen_upgraded) = {
-        let c = &state.cards[stolen.get() as usize - 1];
-        (c.card_id, c.upgraded)
-    };
+    // sts2-agent fork: recorded by the card's deck link
+    // (`CombatState::deck_card_uids`), not its combat state: an upgrade made in
+    // this fight (Armaments) must not hide which permanent card was taken.
+    state.record_swipe_steal_of(owner, stolen);
     let _ = sts2_core::card_effects::remove_card_from_any_pile(state, stolen);
-    state.record_swipe_steal(owner, stolen_card_id, stolen_upgraded);
 
     // `ThievingHopper.cs:234-236`: one `SwipePower` stack per stolen card.
     // Exactly one card is stolen per THIEVERY, so apply a single stack. The

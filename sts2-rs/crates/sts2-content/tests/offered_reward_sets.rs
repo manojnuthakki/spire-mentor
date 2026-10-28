@@ -538,3 +538,103 @@ fn a_hooks_fixed_gold_reads_nothing_off_the_rewards_stream() {
         "the hook's gold is listed"
     );
 }
+
+/// A card upgraded only in this fight (Armaments+), stolen by a Thieving
+/// Hopper that is then killed, is the room's special card reward: out of the
+/// deck until claimed, and claimed as its permanent, unupgraded version (C#
+/// `SwipePower` holds the card's `DeckVersion`).
+#[test]
+fn a_stolen_card_upgraded_in_the_fight_comes_back_as_its_deck_version() {
+    sts2_content::relics::dispatch::ensure_installed();
+    sts2_content::cards::dispatch::ensure_installed();
+    let mut rm = sts2_content::run_callbacks::new_run_manager_for_character_with_ascension(
+        11,
+        CharacterId::Ironclad,
+        0,
+    );
+    rm.run_state.interactive_rewards = true;
+    sts2_content::run_callbacks::initialize_run_setup(&mut rm);
+    let uppercut =
+        sts2_content::cards::spec_index::card_pod_from_id(CardId::Uppercut, false).unwrap();
+    let mut stole = false;
+    for _ in 0..2000 {
+        if rm.reward_screen().is_some() {
+            break;
+        }
+        if rm.phase() == Phase::Combat {
+            if !stole {
+                rm.debug_set_player(Some(9999), Some(9999), None);
+                let combat = rm.combat.as_mut().unwrap();
+                let uid = combat
+                    .player
+                    .draw
+                    .iter()
+                    .chain(combat.player.discard.iter())
+                    .chain(combat.player.hand.iter())
+                    .copied()
+                    .find(|u| combat.cards[u.get() as usize - 1].card_id == CardId::Uppercut)
+                    .expect("Uppercut in the fight");
+                // Armaments+'s in-combat upgrade.
+                assert!(sts2_core::card_effects::upgrade_card_uid(combat, uid));
+                assert!(combat.cards[uid.get() as usize - 1].upgraded);
+                // Keep it stealable (draw or discard), the only Uncommon.
+                if let Some(pos) = combat.player.hand.iter().position(|u| *u == uid) {
+                    combat.player.hand.remove(pos);
+                    combat.player.discard.push(uid);
+                }
+                let thief = combat.enemy_uids[0];
+                sts2_content::monsters::act2_hive::thieving_hopper_thievery_effect(combat, thief);
+                assert_eq!(combat.swipe_stolen.len(), 1);
+                assert_eq!(combat.swipe_stolen[0].card_id, CardId::Uppercut);
+                // The thief's death (the damage chokepoint's call).
+                combat.reclaim_swipe_on_death(thief);
+                stole = true;
+            }
+            let actions = rm.get_available_actions();
+            let a = actions
+                .iter()
+                .copied()
+                .find(|a| matches!(a, RunAction::PlayCard { .. }))
+                .unwrap_or(actions[0]);
+            rm.take_action(a);
+        } else {
+            if !stole
+                && rm
+                    .run_state
+                    .master_deck
+                    .iter()
+                    .all(|c| c.card_id != CardId::Uppercut)
+            {
+                rm.run_state.master_deck.push(uppercut);
+            }
+            let a = rm.get_available_actions()[0];
+            rm.take_action(a);
+        }
+    }
+    assert!(stole);
+    let count = |rm: &RunManager| {
+        rm.run_state
+            .master_deck
+            .iter()
+            .filter(|c| c.card_id == CardId::Uppercut)
+            .count()
+    };
+    assert_eq!(count(&rm), 0, "out of the deck until claimed");
+    let special = rm
+        .reward_screen()
+        .expect("the room's screen")
+        .iter()
+        .position(
+            |r| matches!(r, ScreenReward::SpecialCard { card } if card.card_id == CardId::Uppercut),
+        )
+        .expect("Uppercut offered as a special card reward");
+    rm.take_action(RunAction::ClaimReward { idx: special });
+    let back: Vec<_> = rm
+        .run_state
+        .master_deck
+        .iter()
+        .filter(|c| c.card_id == CardId::Uppercut)
+        .collect();
+    assert_eq!(back.len(), 1);
+    assert!(!back[0].upgraded, "the permanent, unupgraded version");
+}

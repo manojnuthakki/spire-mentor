@@ -3529,6 +3529,10 @@ pub struct SwipeStolen {
     /// `true` once the thief died (C# `SwipePower.BeforeDeath` restored the
     /// card); such entries are NOT removed from the run deck.
     pub reclaimed: bool,
+    /// The stolen card's master-deck index (its `DeckVersion`), when the
+    /// combat knows it ([`CombatState::deck_card_uids`]); `None` falls back to
+    /// pairing by `(card_id, upgraded)`. sts2-agent fork.
+    pub deck_index: Option<usize>,
 }
 
 /// One reward a fight added to its combat room (C# `CombatRoom.AddExtraReward`),
@@ -3541,6 +3545,8 @@ pub enum CombatExtraReward {
     SpecialCard {
         card_id: crate::cards::CardId,
         upgraded: bool,
+        /// The stolen card's master-deck index, when known.
+        deck_index: Option<usize>,
     },
     /// `CardReward(ForRoom(room), 3)` (The Hunt).
     RoomCard,
@@ -3802,6 +3808,13 @@ pub struct CombatState {
     /// sts2-agent fork.
     pub room_extra_rewards: Vec<CombatExtraReward>,
 
+    /// The arena uid of each master-deck card, by deck index, as the combat was
+    /// built from the deck (C# a combat card's `DeckVersion`): the link from a
+    /// combat card back to its permanent card, unaffected by combat-only
+    /// changes (an upgrade, a cost). Empty for a combat built without a run
+    /// deck. sts2-agent fork.
+    pub deck_card_uids: Vec<CardUid>,
+
     /// Set true when a `BattlewornDummyTimeLimit` timer expires and the
     /// dummy flees instead of being killed (C#
     /// `BattlewornDummyTimeLimitPower.AfterTurnEnd` → set
@@ -4031,6 +4044,7 @@ impl Default for CombatState {
             escaped_creatures: 0,
             heist_recovered_gold: 0,
             room_extra_rewards: Vec::new(),
+            deck_card_uids: Vec::new(),
             event_combat_timed_out: false,
             gold: 0,
 
@@ -7677,6 +7691,34 @@ impl CombatState {
             card_id,
             upgraded,
             reclaimed: false,
+            deck_index: None,
+        });
+    }
+
+    /// The master-deck index of combat card `uid` (its `DeckVersion`), or
+    /// `None` for a card the combat generated or a combat built without a run
+    /// deck. sts2-agent fork.
+    #[must_use]
+    pub fn deck_index_of(&self, uid: CardUid) -> Option<usize> {
+        self.deck_card_uids.iter().position(|&u| u == uid)
+    }
+
+    /// [`Self::record_swipe_steal`] for the combat card `uid`, keeping its
+    /// master-deck index so the steal (and a return) pairs with the permanent
+    /// card even after a combat-only change such as an Armaments upgrade.
+    /// sts2-agent fork.
+    pub fn record_swipe_steal_of(&mut self, thief: CreatureUid, uid: CardUid) {
+        let Some(card) = self.cards.get(uid.get() as usize - 1) else {
+            return;
+        };
+        let (card_id, upgraded) = (card.card_id, card.upgraded);
+        let deck_index = self.deck_index_of(uid);
+        self.swipe_stolen.push(SwipeStolen {
+            thief,
+            card_id,
+            upgraded,
+            reclaimed: false,
+            deck_index,
         });
     }
 
@@ -7696,6 +7738,7 @@ impl CombatState {
                     .push(CombatExtraReward::SpecialCard {
                         card_id: s.card_id,
                         upgraded: s.upgraded,
+                        deck_index: s.deck_index,
                     });
             }
         }

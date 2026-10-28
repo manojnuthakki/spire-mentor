@@ -315,9 +315,17 @@ pub fn enter_combat_from_roster(
     // Feed the deck in REVERSE so the front-inserts land the pre-shuffle
     // pile in forward master-deck order, matching C#'s append. Bead
     // `sts2-rs-jenwp` (M3b — first-combat draw parity).
-    for card in rs.master_deck.iter().rev() {
-        let _ = state.add_card_to_draw_pile(*card);
-    }
+    let mut deck_card_uids: Vec<sts2_core::CardUid> = rs
+        .master_deck
+        .iter()
+        .rev()
+        .map(|card| state.add_card_to_draw_pile(*card))
+        .collect();
+    // sts2-agent fork: each deck card's combat uid, by deck index (C#
+    // `DeckVersion`), so the exit finds a combat card's permanent card by
+    // identity, not by its combat state.
+    deck_card_uids.reverse();
+    state.deck_card_uids = deck_card_uids;
 
     // Bead `sts2-rs-01o`: seed the combat-side potion belt from the
     // run-level belt so potions procured out of combat (Lost Coffer,
@@ -555,13 +563,6 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
         rs.add_card_removal_reward(grimoire_stacks as u32);
     }
 
-    // Bead `sts2-rs-RP13`: ThievingHopper / SwipePower run-deck steal. C#
-    // `SwipePower.Steal` permanently removes the stolen card from the run deck
-    // (`CardPileCmd.RemoveFromDeck(card.DeckVersion)`); a thief that DIES
-    // restores it (`SwipePower.BeforeDeath`), which the combat already recorded
-    // as `reclaimed`. Drop each un-reclaimed stolen card from `master_deck`.
-    remove_swiped_cards_from_master_deck(rs, combat);
-
     // Bead `sts2-rs-RP15`: combat gold-reward proportion. C#
     // `CombatRoom.cs:216` `GoldProportion = 1 - EscapedCreatures.Count /
     // Encounter.MonstersWithSlots.Count` — every monster that FLEES
@@ -651,14 +652,17 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // card so the next combat starts boosted. Bead `sts2-rs-RP114`.
     propagate_scaling_cards_to_master_deck(rs, combat);
 
-    // sts2-agent fork: the room's extra rewards, staged after the deck's
-    // persistent changes (a scaled Scythe) reach its cards, so a card a killed
-    // thief returns carries them (C# returns the updated `DeckVersion`), and
-    // before Fishing Rod's combat-end upgrade, which picks only from the deck
-    // (the returned card is in it only once claimed).
-    if extras {
-        stage_room_extra_rewards(rs, combat);
-    }
+    // Bead `sts2-rs-RP13`: ThievingHopper / SwipePower run-deck steal. C#
+    // `SwipePower.Steal` permanently removes the stolen card from the run deck
+    // (`CardPileCmd.RemoveFromDeck(card.DeckVersion)`); a thief that DIES
+    // restores it (`SwipePower.BeforeDeath`), which the combat already recorded
+    // as `reclaimed`. sts2-agent fork: under the rewards screen a restored card
+    // is a special card reward, out of the deck until claimed, and the room's
+    // extra rewards are staged with it. Both run after the deck's persistent
+    // changes (a scaled Scythe) reach its cards, so a returned card carries
+    // them (C# returns the updated `DeckVersion`), and before Fishing Rod's
+    // combat-end upgrade, which picks only from the deck.
+    settle_swiped_cards_and_extras(rs, combat, extras);
 
     // Flush the combat's RNG streams back to the run. C# uses ONE
     // `RunState.Rng` for the whole run, so a combat's advances to
@@ -784,84 +788,106 @@ const fn is_run_persistent_damage_scaler(id: sts2_core::cards::CardId) -> bool {
 /// master card's `base_damage` is set to the combat copy's accumulated value
 /// (which started equal to the master's at `enter_combat` and only grew),
 /// guarded by `max` so a never-played Scythe can't shrink the master value.
-/// Remove each card stolen by a surviving/escaped `SwipePower` thief
-/// (`ThievingHopper`) from the run `master_deck`, mirroring C#
-/// `SwipePower.Steal` → `CardPileCmd.RemoveFromDeck(card.DeckVersion)`. Entries
-/// the combat flagged `reclaimed` (the thief died → `SwipePower.BeforeDeath`
-/// restored the card) are skipped, so a killed thief leaves the deck unchanged.
-///
-/// Each entry is paired to one `master_deck` card by `(card_id, upgraded)` —
-/// identical to the multiset deck_size/composition the parity harness compares,
-/// so matching any one same-identity card is exact. A stolen card with no
-/// surviving master-deck match is silently skipped (defensive; the steal's
-/// `DeckVersion != null` filter guarantees a match in practice). Bead
-/// `sts2-rs-RP13`.
-fn remove_swiped_cards_from_master_deck(rs: &mut RunState, combat: &CombatState) {
-    for stolen in &combat.swipe_stolen {
-        if stolen.reclaimed {
-            continue;
-        }
-        if let Some(idx) = rs
-            .master_deck
-            .iter()
-            .position(|c| c.card_id == stolen.card_id && c.upgraded == stolen.upgraded)
-        {
-            rs.master_deck.remove(idx);
-        }
-    }
-}
-
-/// A won room's extra rewards for its rewards screen (sts2-agent fork,
-/// `interactive_rewards`), one entry per C# `CombatRoom.AddExtraReward` call
-/// in the order the game makes them: those the fight added
-/// ([`CombatState::room_extra_rewards`]: a killed Heist carrier's gold, a killed
-/// thief's card, The Hunt's card reward), then the combat-end ones in the
-/// player's power order (`Hook.AfterCombatEnd`: Royalties' gold, one removal
-/// per Forbidden Grimoire stack). A thief's card leaves the deck (C#
-/// `SwipePower.Steal` removed it; `BeforeDeath` offers it back), so it is in the
-/// deck again only once claimed; paired by `(card_id, upgraded)` as
-/// [`remove_swiped_cards_from_master_deck`] does.
-fn stage_room_extra_rewards(rs: &mut RunState, combat: &CombatState) {
+/// The stolen cards and the room's extra rewards at a combat's exit. Each
+/// stolen card is found in `master_deck` by its deck link
+/// ([`sts2_core::SwipeStolen::deck_index`], C# `DeckVersion`), or for a combat
+/// without one by `(card_id, upgraded)`. A card a surviving or escaped thief
+/// keeps (`SwipePower.Steal` → `RemoveFromDeck`) leaves the deck for good. With
+/// `extras` (sts2-agent fork, `interactive_rewards`, a won fight) the room's
+/// extra rewards are staged in the order the game adds them: those the fight
+/// added ([`CombatState::room_extra_rewards`]: a killed Heist carrier's gold, a
+/// killed thief's card, The Hunt's card reward), then the combat-end ones in
+/// the player's power order (`Hook.AfterCombatEnd`: Royalties' gold, one
+/// removal per Forbidden Grimoire stack); a killed thief's card leaves the deck
+/// as a special card reward, in it again only once claimed. Without `extras` a
+/// killed thief's card stays in the deck. Bead `sts2-rs-RP13`.
+fn settle_swiped_cards_and_extras(rs: &mut RunState, combat: &CombatState, extras: bool) {
     use sts2_core::{CombatExtraReward, OfferedReward};
-    for extra in &combat.room_extra_rewards {
-        let offered = match *extra {
-            CombatExtraReward::Gold(amount) => OfferedReward::Gold(amount),
-            CombatExtraReward::RoomCard => OfferedReward::RoomCard,
-            CombatExtraReward::SpecialCard { card_id, upgraded } => {
-                let Some(idx) = rs
-                    .master_deck
-                    .iter()
-                    .position(|c| c.card_id == card_id && c.upgraded == upgraded)
-                else {
-                    continue;
-                };
-                OfferedReward::SpecialCard(rs.master_deck.remove(idx))
-            }
-        };
-        rs.room_extra_rewards.push(offered);
+    let mut taken: Vec<usize> = Vec::new();
+    let mut find = |rs: &RunState,
+                    deck_index: Option<usize>,
+                    card_id: sts2_core::cards::CardId,
+                    upgraded: bool|
+     -> Option<usize> {
+        let idx = deck_index
+            .filter(|i| *i < rs.master_deck.len())
+            .or_else(|| {
+                (0..rs.master_deck.len()).find(|i| {
+                    !taken.contains(i)
+                        && rs.master_deck[*i].card_id == card_id
+                        && rs.master_deck[*i].upgraded == upgraded
+                })
+            })?;
+        (!taken.contains(&idx)).then(|| {
+            taken.push(idx);
+            idx
+        })
+    };
+    for stolen in combat.swipe_stolen.iter().filter(|s| !s.reclaimed) {
+        let _ = find(rs, stolen.deck_index, stolen.card_id, stolen.upgraded);
     }
-    for puid in combat.player_power_uids() {
-        let Some(p) = combat.powers.get_by_id(puid.0) else {
-            continue;
-        };
-        match p.kind {
-            sts2_core::PowerKind::Royalties if p.amount > 0 => {
-                rs.room_extra_rewards.push(OfferedReward::Gold(
-                    sts2_core::powers::regent::royalties_gold_on_victory(p.amount),
-                ));
-            }
-            sts2_core::PowerKind::ForbiddenGrimoire => {
-                for _ in 0..p.amount.max(0) {
-                    rs.room_extra_rewards.push(OfferedReward::RemoveCard);
+    if extras {
+        for extra in &combat.room_extra_rewards {
+            let offered = match *extra {
+                CombatExtraReward::Gold(amount) => OfferedReward::Gold(amount),
+                CombatExtraReward::RoomCard => OfferedReward::RoomCard,
+                CombatExtraReward::SpecialCard {
+                    card_id,
+                    upgraded,
+                    deck_index,
+                } => {
+                    let Some(idx) = find(rs, deck_index, card_id, upgraded) else {
+                        continue;
+                    };
+                    OfferedReward::SpecialCard(rs.master_deck[idx])
                 }
-            }
-            _ => {}
+            };
+            rs.room_extra_rewards.push(offered);
         }
+        for puid in combat.player_power_uids() {
+            let Some(p) = combat.powers.get_by_id(puid.0) else {
+                continue;
+            };
+            match p.kind {
+                sts2_core::PowerKind::Royalties if p.amount > 0 => {
+                    rs.room_extra_rewards.push(OfferedReward::Gold(
+                        sts2_core::powers::regent::royalties_gold_on_victory(p.amount),
+                    ));
+                }
+                sts2_core::PowerKind::ForbiddenGrimoire => {
+                    for _ in 0..p.amount.max(0) {
+                        rs.room_extra_rewards.push(OfferedReward::RemoveCard);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    taken.sort_unstable();
+    for idx in taken.into_iter().rev() {
+        rs.master_deck.remove(idx);
     }
 }
 
 fn propagate_scaling_cards_to_master_deck(rs: &mut RunState, combat: &CombatState) {
     use sts2_core::cards::CardId;
+
+    // sts2-agent fork: with the combat's deck links, each master card takes
+    // its own combat copy's value (C# `DeckVersion.BuffFromPlay`), whatever
+    // combat-only change (an upgrade) that copy went through.
+    if !combat.deck_card_uids.is_empty() && combat.deck_card_uids.len() == rs.master_deck.len() {
+        for (m, uid) in rs.master_deck.iter_mut().zip(&combat.deck_card_uids) {
+            if !is_run_persistent_damage_scaler(m.card_id) {
+                continue;
+            }
+            if let Some(c) = combat.cards.get(uid.get() as usize - 1) {
+                if c.card_id == m.card_id {
+                    m.base_damage = m.base_damage.max(c.base_damage);
+                }
+            }
+        }
+        return;
+    }
 
     // Distinct scaler ids present in the master deck (tiny set; usually 0–1).
     let mut scaler_ids: SmallVec<[CardId; 2]> = SmallVec::new();
@@ -2114,7 +2140,8 @@ mod tests {
             combat.room_extra_rewards,
             vec![sts2_core::CombatExtraReward::SpecialCard {
                 card_id: stolen.card_id,
-                upgraded: stolen.upgraded
+                upgraded: stolen.upgraded,
+                deck_index: None,
             }]
         );
         let deck = rs.master_deck.len();
@@ -2615,7 +2642,7 @@ mod tests {
         );
     }
 
-    /// `remove_swiped_cards_from_master_deck` matches the stolen card by
+    /// `settle_swiped_cards_and_extras` matches the stolen card by
     /// `(card_id && upgraded)`. With two same-id cards differing only by upgrade,
     /// stealing the UPGRADED one must remove the upgraded copy — never the
     /// un-upgraded one. An `&&`→`||` mutant matches on id alone and would strip
