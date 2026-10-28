@@ -7033,6 +7033,9 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
         if state.is_over {
             resolve_inline_auto_play_choices(state);
         } else {
+            // The body's attack commands have finished by the time it asks
+            // (C# `AfterAttack` fired): Skittish's block shows at the pick.
+            crate::hooks::grant_latched_skittish(state);
             state.pending_play = Some(crate::PendingPlay { finish: fin });
             return StepResult::PendingChoice;
         }

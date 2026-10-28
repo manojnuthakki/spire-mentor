@@ -13961,6 +13961,70 @@ const AFTER_CARD_PLAYED_ORDERED_ENEMY_HIT_KINDS: crate::PowerKindSet =
         PowerKind::Panache,
     ]);
 
+/// C# `SkittishPower.AfterAttack`
+/// (`../sts2-wiki/decompiled/v0.107.1/MegaCrit.Sts2.Core.Models.Powers/SkittishPower.cs:56-69`):
+/// ONCE PER TURN, when a card-sourced (`command.ModelSource is CardModel`)
+/// `ValueProp.Move` attack lands UNBLOCKED damage on the owner, the owner
+/// gains `Amount` block with `ValueProp.Unpowered`.
+///
+/// Two-phase like CurlUp: the content `skittish_after_damage` hook
+/// arms `skip_next_tick` on the hit, and the grant lands HERE — after the
+/// whole card resolves — so none of the triggering card's own hits are
+/// absorbed by the fresh block (C# grants after the `AttackCommand`, which
+/// is the same boundary for every single-command card; see the hook's
+/// doc-comment for the residual two-command case). A play that pauses on a
+/// selection after its attack (Headbutt's discard pick) has finished that
+/// command too, so `combat_loop::play_card` grants here before surfacing
+/// the choice.
+///
+/// `counter` is C#'s `Data.hasGainedBlockThisTurn`: set to 1 on grant, reset
+/// to 0 by the `AfterSideTurnEnd(side != Owner.Side)` analogue in
+/// [`dispatch_after_turn_end`] (player-side turn end, since Skittish only
+/// ever lives on a monster). The power is NOT removed — unlike CurlUp it
+/// re-arms every turn.
+pub(crate) fn grant_latched_skittish(state: &mut CombatState) {
+    // present_kinds lane gate (perf): no live Skittish ⇒ nothing latched.
+    if power_kind_live(state, PowerKind::Skittish) {
+        let latched: SmallVec<[(CreatureUid, i32, crate::PowerUid); 2]> = state
+            .powers
+            .iter()
+            .filter(|p| {
+                p.kind == PowerKind::Skittish && p.skip_next_tick && p.counter == 0 && p.amount > 0
+            })
+            .filter_map(|p| {
+                state
+                    .creatures
+                    .iter()
+                    .find(|c| c.powers.iter().any(|pu| pu.0 == p.id) && c.current_hp > 0)
+                    .map(|c| (CreatureUid(c.id), p.amount, crate::PowerUid(p.id)))
+            })
+            .collect();
+        for (owner, amount, pid) in latched {
+            // C# `CreatureCmd.GainBlock(Owner, Amount, ValueProp.Unpowered)` —
+            // `Effect::GainBlockCreature` is the enemy-side unpowered grant
+            // (monster block never scales with the player's Dexterity/Frail).
+            apply_effects(
+                state,
+                &[Effect::GainBlockCreature {
+                    target: CreatureRef::Enemy(owner),
+                    amount,
+                }],
+            );
+            if let Some(p) = state.powers.get_mut_by_id(pid.0) {
+                p.skip_next_tick = false;
+                p.counter = 1;
+            }
+        }
+        // Disarm any latch that could not be granted (owner died to the very
+        // card that armed it) so it cannot fire on a later play this turn.
+        for p in &mut state.powers {
+            if p.kind == PowerKind::Skittish {
+                p.skip_next_tick = false;
+            }
+        }
+    }
+}
+
 pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
     // ── Read-only listener walk ─────────────────────────────────────────
     // Listener bodies are `() -> ()` no-ops at this pin (`noop_hook!`). Perf
@@ -14997,64 +15061,8 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
     }
 
     // ── React: Skittish (enemy, PhantasmalGardener) ────────────────────
-    // C# `SkittishPower.AfterAttack`
-    // (`../sts2-wiki/decompiled/v0.107.1/MegaCrit.Sts2.Core.Models.Powers/SkittishPower.cs:56-69`):
-    // ONCE PER TURN, when a card-sourced (`command.ModelSource is CardModel`)
-    // `ValueProp.Move` attack lands UNBLOCKED damage on the owner, the owner
-    // gains `Amount` block with `ValueProp.Unpowered`.
-    //
-    // Two-phase like CurlUp above: the content `skittish_after_damage` hook
-    // arms `skip_next_tick` on the hit, and the grant lands HERE — after the
-    // whole card resolves — so none of the triggering card's own hits are
-    // absorbed by the fresh block (C# grants after the `AttackCommand`, which
-    // is the same boundary for every single-command card; see the hook's
-    // doc-comment for the residual two-command case).
-    //
-    // `counter` is C#'s `Data.hasGainedBlockThisTurn`: set to 1 on grant, reset
-    // to 0 by the `AfterSideTurnEnd(side != Owner.Side)` analogue in
-    // [`dispatch_after_turn_end`] (player-side turn end, since Skittish only
-    // ever lives on a monster). The power is NOT removed — unlike CurlUp it
-    // re-arms every turn.
-    // present_kinds lane gate (perf): no live Skittish ⇒ nothing latched.
-    if power_kind_live(state, PowerKind::Skittish) {
-        let latched: SmallVec<[(CreatureUid, i32, crate::PowerUid); 2]> = state
-            .powers
-            .iter()
-            .filter(|p| {
-                p.kind == PowerKind::Skittish && p.skip_next_tick && p.counter == 0 && p.amount > 0
-            })
-            .filter_map(|p| {
-                state
-                    .creatures
-                    .iter()
-                    .find(|c| c.powers.iter().any(|pu| pu.0 == p.id) && c.current_hp > 0)
-                    .map(|c| (CreatureUid(c.id), p.amount, crate::PowerUid(p.id)))
-            })
-            .collect();
-        for (owner, amount, pid) in latched {
-            // C# `CreatureCmd.GainBlock(Owner, Amount, ValueProp.Unpowered)` —
-            // `Effect::GainBlockCreature` is the enemy-side unpowered grant
-            // (monster block never scales with the player's Dexterity/Frail).
-            apply_effects(
-                state,
-                &[Effect::GainBlockCreature {
-                    target: CreatureRef::Enemy(owner),
-                    amount,
-                }],
-            );
-            if let Some(p) = state.powers.get_mut_by_id(pid.0) {
-                p.skip_next_tick = false;
-                p.counter = 1;
-            }
-        }
-        // Disarm any latch that could not be granted (owner died to the very
-        // card that armed it) so it cannot fire on a later play this turn.
-        for p in &mut state.powers {
-            if p.kind == PowerKind::Skittish {
-                p.skip_next_tick = false;
-            }
-        }
-    }
+    // See [`grant_latched_skittish`].
+    grant_latched_skittish(state);
 
     // ── React: Monologue (Regent power) ────────────────────────────────
     // C# `MonologuePower.AfterCardPlayed` (MonologuePower.cs:63-72): for every

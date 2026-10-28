@@ -164,7 +164,8 @@ fn phantasmal_gardener_enlarge_effect(state: &mut CombatState, owner: sts2_core:
 /// AFTER the whole `AttackCommand` — so none of that command's own hits are
 /// absorbed by the fresh block. This hook therefore only LATCHES
 /// (`Power::skip_next_tick = true`); the grant runs in the core
-/// `dispatch_after_card_played` Skittish lane, which is the engine's
+/// `hooks::grant_latched_skittish`, from the `dispatch_after_card_played`
+/// lane (or before a mid-play selection surfaces), which is the engine's
 /// established surrogate for C#'s per-command `AfterAttack` boundary (the same
 /// collapse Vigor / Gigantification / CurlUp use). The residual difference is
 /// a card that issues TWO separate attack commands — C# would grant between

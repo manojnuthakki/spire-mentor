@@ -187,3 +187,41 @@ fn skittish_ignores_a_fully_blocked_attack() {
         "hasGainedBlockThisTurn stays false for a fully-blocked hit"
     );
 }
+
+/// A card whose attack is followed by a selection in the same play (Headbutt:
+/// `DamageCmd.Attack(...).Execute`, then the discard pick) pauses with the
+/// attack command complete, so C#'s `AfterAttack` has already granted the
+/// block at the pick (A6d4: V7W8Q5R79A at A5, step 76, Headless 6 where the
+/// engine showed 0 until the pick resolved).
+#[test]
+fn skittish_block_shows_at_a_mid_play_selection_after_the_attack() {
+    let mut state = gardener_state(0);
+    let headbutt = push_card(&mut state, CardId::Headbutt, 9);
+    let strike = push_card(&mut state, CardId::StrikeIronclad, 6);
+    let defend = push_card(&mut state, CardId::DefendIronclad, 0);
+    state.player.discard.push(strike);
+    state.player.discard.push(defend);
+    state.player.hand.push(headbutt);
+    let step = sts2_core::combat_loop::play_card(&mut state, 0, Some(0));
+    assert_eq!(
+        step,
+        sts2_core::StepResult::PendingChoice,
+        "Headbutt asks for a discard card"
+    );
+    assert_eq!(state.creatures[0].current_hp, 200 - 9);
+    assert_eq!(
+        state.creatures[0].block, 6,
+        "the attack command finished before the pick: Skittish's block is there"
+    );
+    assert_eq!(skittish_counter(&state), 1);
+    let _ = sts2_core::apply(
+        &mut state,
+        sts2_core::Action::ResolveChoice {
+            selection: smallvec::smallvec![0],
+        },
+    );
+    assert_eq!(
+        state.creatures[0].block, 6,
+        "granted once, not again at the play's end"
+    );
+}
