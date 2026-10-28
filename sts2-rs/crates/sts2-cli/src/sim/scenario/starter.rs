@@ -179,6 +179,7 @@ pub fn build_state_with_ascension(
         swipe_stolen: Vec::new(),
         escaped_creatures: 0,
         heist_recovered_gold: 0,
+        room_extra_rewards: Vec::new(),
         event_combat_timed_out: false,
         // The player's run gold, carried into combat. NOT zero: the C# parity
         // oracle builds its synthetic combats out of a real run

@@ -264,6 +264,10 @@ pub enum RunAction {
     /// Rewards screen: leave it, skipping every reward still listed (C#
     /// `Reward.OnSkipped`), and continue the run. sts2-agent fork.
     ProceedRewards,
+    /// Rewards screen: back out of a claimed card removal's selection (C#
+    /// `CardRemovalReward`'s cancelable prefs); the reward stays. sts2-agent
+    /// fork.
+    CancelRewardClaim,
     /// Discard the held potion at belt position `slot` (C#
     /// `PotionModel.Discard`); combat-side belt in a fight, the run belt
     /// otherwise. Only offered under
@@ -623,6 +627,11 @@ impl core::fmt::Debug for ContentCallbacks {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RoomRewardRoll {
     pub gold: Vec<i32>,
+    /// Gold rewards the reward hooks add (C# `Hook.ModifyRewards`: Amethyst
+    /// Aubergine's), listed and populated after the room's own rewards and its
+    /// extras, as `RewardsSet.GenerateWithoutOffering` does. Under the rewards
+    /// screen only; the auto path folds them into `gold`.
+    pub hook_gold: Vec<i32>,
     pub potion: Option<crate::potions::PotionKind>,
 }
 
@@ -795,6 +804,15 @@ pub struct RunManager {
     /// The screen entry whose card reward is open right now (its options in
     /// `card_reward_options`). sts2-agent fork.
     screen_card_claim: Option<usize>,
+    /// The screen entry whose card removal is open now (C#
+    /// `CardRemovalReward.OnSelect`: a cancelable removal; the reward is used
+    /// up only when a card is removed). sts2-agent fork.
+    screen_removal_claim: Option<usize>,
+    /// Shop restocks (The Courier) a purchase owes once the reward sets the
+    /// bought relic offered are done (C# `MerchantEntry.OnTryPurchaseWrapper`
+    /// restocks after `OnTryPurchase`, which awaits the obtain and its sets).
+    /// sts2-agent fork.
+    restocks_after_reward_sets: Vec<crate::shop::ShopSlot>,
 }
 
 impl RunManager {
@@ -960,6 +978,8 @@ impl RunManager {
             reward_sets: Vec::new(),
             rewards_resume_phase: None,
             screen_card_claim: None,
+            screen_removal_claim: None,
+            restocks_after_reward_sets: Vec::new(),
         }
     }
 
@@ -1189,6 +1209,15 @@ impl RunManager {
     /// `sts2-rs-7kl4f`.
     #[must_use]
     pub fn get_available_actions(&self) -> Vec<RunAction> {
+        // sts2-agent fork: a card removal claimed from the rewards screen: one
+        // pick per removable card, or back out (the reward stays).
+        if self.screen_removal_claim.is_some() && self.run_state.pending_deck_removals == 0 {
+            let n = self.run_state.removal_offer_order().len();
+            return (0..n)
+                .map(|idx| RunAction::RemoveDeckCard { idx })
+                .chain(std::iter::once(RunAction::CancelRewardClaim))
+                .collect();
+        }
         // Interactive deck removal preempts the current phase's actions:
         // an on-obtain relic (e.g. Precise Scissors) queues removals that
         // the player resolves before the run continues, regardless of which
@@ -1701,6 +1730,18 @@ impl RunManager {
         // Phase-agnostic: a pending interactive deck removal is resolved
         // before any phase action (it preempts the action surface in
         // `get_available_actions`).
+        // sts2-agent fork: a removal claimed from the rewards screen (its own
+        // cancelable selection, apart from forced removals).
+        if self.screen_removal_claim.is_some() && self.run_state.pending_deck_removals == 0 {
+            return match action {
+                RunAction::RemoveDeckCard { idx } => self.do_reward_removal_at(idx),
+                RunAction::CancelRewardClaim => {
+                    self.screen_removal_claim = None;
+                    ActionResult::Advanced
+                }
+                _ => ActionResult::InvalidForPhase,
+            };
+        }
         if let RunAction::RemoveDeckCard { idx } = action {
             return self.do_remove_deck_card_at(idx);
         }
@@ -2419,9 +2460,11 @@ impl RunManager {
         // above, so this is reached only on a WON (incl. timed-out) fight.
         if let Some(req) = self.run_state.event_combat.take() {
             // sts2-agent fork: an event fight has no room rewards screen here;
-            // its extra rewards are offered as a set after the event resumes.
+            // its extra rewards are offered as a set after the event resumes,
+            // unless its encounter offers no rewards (Battleworn Dummy's room
+            // offers an empty set, extras included).
             let extras = std::mem::take(&mut self.run_state.room_extra_rewards);
-            if !extras.is_empty() {
+            if !extras.is_empty() && req.encounter.gives_rewards() {
                 self.run_state.offer_custom_rewards(extras, true);
             }
             return self.finish_event_combat(req);
@@ -2632,6 +2675,13 @@ impl RunManager {
                 screen.push(reward);
             }
         }
+        for amount in roll.hook_gold {
+            if let Some(reward) =
+                self.roll_offered_reward(crate::runstate::OfferedReward::Gold(amount))
+            {
+                screen.push(reward);
+            }
+        }
         screen.sort_by_key(ScreenReward::rewards_set_index);
         self.reward_sets.push(RewardSet {
             rewards: screen,
@@ -2650,7 +2700,12 @@ impl RunManager {
     ) -> Option<ScreenReward> {
         use crate::runstate::OfferedReward;
         Some(match reward {
-            OfferedReward::Gold(amount) => ScreenReward::Gold { amount },
+            OfferedReward::Gold(amount) => {
+                // C# `GoldReward.Populate` reads `Rewards` even for a fixed
+                // amount (`NextInt(min, max + 1)` with `min == max`).
+                let amount = self.run_state.rng.rewards.next_int(amount, amount);
+                ScreenReward::Gold { amount }
+            }
             OfferedReward::Potion(kind) => ScreenReward::Potion {
                 kind: kind.or_else(|| {
                     self.callbacks
@@ -2781,6 +2836,7 @@ impl RunManager {
             || !rs.pending_card_selects.is_empty()
             || !rs.pending_bundles.is_empty()
             || !rs.pending_potion_swaps.is_empty()
+            || self.screen_removal_claim.is_some()
     }
 
     /// With no set open any more, return to the phase the first offered set
@@ -2796,6 +2852,9 @@ impl RunManager {
         self.phase = phase;
         if phase == Phase::CardReward {
             self.advance_after_card_reward();
+        }
+        for slot in std::mem::take(&mut self.restocks_after_reward_sets) {
+            self.restock_slot_if_courier(slot);
         }
         self.drain_post_pick_relic_grants_if_settled();
         self.drain_post_pick_deck_cards_if_settled();
@@ -2861,12 +2920,31 @@ impl RunManager {
                     crate::run_effects::dispatch_on_card_added_to_deck(&mut self.run_state, &ctx);
             }
             ScreenReward::RemoveCard => {
-                // C# `CardRemovalReward.OnSelect`: one deck removal (the
-                // interactive pick preempts the screen until it is made).
-                self.remove_screen_reward(idx);
-                let _ = self.run_state.remove_cards_from_deck(1);
+                // C# `CardRemovalReward.OnSelect`: a cancelable removal of one
+                // card. With no removable card the selection returns nothing
+                // and the reward stays (`DoUnsyncedCardRemoval` returns false).
+                if !self.run_state.removal_offer_order().is_empty() {
+                    self.screen_removal_claim = Some(idx);
+                }
             }
         }
+        self.phase = Phase::CardReward;
+        ActionResult::Advanced
+    }
+
+    /// Remove the card at `idx` of the removal offer for the open removal
+    /// claim; the reward is used up (C# `RemoveFromDeck`, then the claim
+    /// succeeds). sts2-agent fork.
+    fn do_reward_removal_at(&mut self, idx: usize) -> ActionResult {
+        let Some(claim) = self.screen_removal_claim else {
+            return ActionResult::InvalidForPhase;
+        };
+        let Some(&deck_idx) = self.run_state.removal_offer_order().get(idx) else {
+            return ActionResult::InvalidForPhase;
+        };
+        self.run_state.master_deck.remove(deck_idx);
+        self.screen_removal_claim = None;
+        self.remove_screen_reward(claim);
         self.phase = Phase::CardReward;
         ActionResult::Advanced
     }
@@ -3738,7 +3816,14 @@ impl RunManager {
         };
         match crate::shop::buy_relic(&mut self.run_state, inv, idx) {
             crate::shop::ShopPurchaseOutcome::Bought => {
-                self.restock_slot_if_courier(crate::shop::ShopSlot::Relic(idx));
+                // sts2-agent fork: a relic that offered a set (Orrery) holds
+                // the restock until the set is done.
+                let slot = crate::shop::ShopSlot::Relic(idx);
+                if self.run_state.offered_reward_sets.is_empty() {
+                    self.restock_slot_if_courier(slot);
+                } else {
+                    self.restocks_after_reward_sets.push(slot);
+                }
                 ActionResult::Advanced
             }
             other => ActionResult::ShopPurchaseFailed(other),
@@ -5133,6 +5218,14 @@ impl RunManager {
         self.screen_card_claim
     }
 
+    /// The screen entry whose card removal is open now, if any (its
+    /// selection: `RemoveDeckCard` per removable card, or `CancelRewardClaim`).
+    /// sts2-agent fork.
+    #[must_use]
+    pub fn screen_removal_claim(&self) -> Option<usize> {
+        self.screen_removal_claim
+    }
+
     /// Currently-offered card-reward [`crate::cards::CardId`] list for
     /// the `Phase::CardReward` sub-state. Empty when no card-reward
     /// fan-out is pending (e.g. relic-only reward, or outside the
@@ -5620,6 +5713,176 @@ mod tests {
             custom: false,
         }];
         rm
+    }
+
+    /// sts2-agent fork: a fixed gold reward reads `Rewards` when it is
+    /// populated (C# `GoldReward.Populate`: `NextInt(min, max + 1)`), so a
+    /// reward rolled after it in the same set sees the advanced stream.
+    #[test]
+    fn a_fixed_gold_reward_reads_the_rewards_stream_when_populated() {
+        use crate::runstate::OfferedReward;
+        let mut rm = RunManager::new(5, CharacterId::Ironclad);
+        rm.run_state.interactive_rewards = true;
+        rm.phase = Phase::MapChoice;
+        let mut expected = rm.run_state.rng.rewards.clone();
+        let _ = expected.next_int(0, 99);
+        let next_after_gold = expected.next_int(0, 1_000_000);
+        let before = rm.run_state.rng.rewards.counter();
+        rm.run_state
+            .offer_custom_rewards(vec![OfferedReward::Gold(140)], true);
+        rm.open_offered_reward_sets();
+        assert_eq!(
+            rm.reward_screen(),
+            Some(&[ScreenReward::Gold { amount: 140 }][..])
+        );
+        assert_eq!(rm.run_state.rng.rewards.counter(), before + 1);
+        assert_eq!(
+            rm.run_state.rng.rewards.next_int(0, 1_000_000),
+            next_after_gold
+        );
+    }
+
+    /// sts2-agent fork: a removal claimed from the screen is cancelable (the
+    /// reward stays) and is used up only when a card is removed.
+    #[test]
+    fn a_claimed_removal_can_be_cancelled_and_is_used_up_only_by_a_removal() {
+        let mut rm = screen_rm(vec![
+            ScreenReward::Gold { amount: 5 },
+            ScreenReward::RemoveCard,
+        ]);
+        for uid in 300..303u32 {
+            rm.run_state.master_deck.push(crate::Card {
+                uid: crate::CardUid::new(uid).expect("nz"),
+                card_id: crate::cards::CardId::Anger,
+                ..crate::Card::pod_defaults()
+            });
+        }
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 1 }),
+            ActionResult::Advanced
+        );
+        let actions = rm.get_available_actions();
+        assert_eq!(actions.len(), 4, "three removable cards and the cancel");
+        assert_eq!(actions.last(), Some(&RunAction::CancelRewardClaim));
+        assert_eq!(
+            rm.take_action(RunAction::ProceedRewards),
+            ActionResult::InvalidForPhase
+        );
+        assert_eq!(
+            rm.take_action(RunAction::CancelRewardClaim),
+            ActionResult::Advanced
+        );
+        assert_eq!(
+            rm.reward_screen().map(<[_]>::len),
+            Some(2),
+            "the reward stays"
+        );
+        assert_eq!(rm.run_state.master_deck.len(), 3);
+        assert!(rm
+            .get_available_actions()
+            .contains(&RunAction::ProceedRewards));
+        rm.take_action(RunAction::ClaimReward { idx: 1 });
+        assert_eq!(
+            rm.take_action(RunAction::RemoveDeckCard { idx: 2 }),
+            ActionResult::Advanced
+        );
+        assert_eq!(rm.run_state.master_deck.len(), 2);
+        assert_eq!(
+            rm.reward_screen(),
+            Some(&[ScreenReward::Gold { amount: 5 }][..])
+        );
+        assert_eq!(rm.phase(), Phase::CardReward);
+    }
+
+    /// sts2-agent fork: an event fight whose encounter offers no rewards
+    /// (Battleworn Dummy) offers none of its extras either; another event
+    /// fight's extras are offered as a set.
+    #[test]
+    fn an_event_fight_offers_its_extras_only_if_its_encounter_gives_rewards() {
+        use crate::events::{BattlewornDummySetting, EventCombatRequest, EventEncounter, EventId};
+        use crate::runstate::OfferedReward;
+        for (encounter, offered) in [
+            (
+                EventEncounter::BattlewornDummy(BattlewornDummySetting::Setting1),
+                false,
+            ),
+            (EventEncounter::MysteriousKnight, true),
+        ] {
+            let mut rm = RunManager::new(0, CharacterId::Ironclad);
+            rm.run_state.interactive_rewards = true;
+            rm.run_state.event_combat = Some(if encounter.gives_rewards() {
+                EventCombatRequest::no_resume(encounter, EventId::TheLanternKey, Vec::new())
+            } else {
+                EventCombatRequest::resuming(encounter, EventId::BattlewornDummy)
+            });
+            rm.run_state.room_extra_rewards = vec![OfferedReward::RemoveCard];
+            rm.combat = Some(CombatState {
+                player_won: true,
+                ..Default::default()
+            });
+            rm.phase = Phase::Combat;
+            let _ = rm.exit_combat_and_transition();
+            assert!(rm.run_state.room_extra_rewards.is_empty());
+            assert_eq!(
+                !rm.run_state.offered_reward_sets.is_empty(),
+                offered,
+                "{encounter:?}"
+            );
+        }
+    }
+
+    /// sts2-agent fork: a bought relic that offers a set holds The Courier's
+    /// restock until the set is done (C# restocks after `OnTryPurchase`, which
+    /// awaits the obtain and its rewards).
+    #[test]
+    #[serial_test::serial(global_registry)]
+    fn a_relic_purchase_restocks_only_after_the_set_it_offered() {
+        fn stub_restock(
+            _rs: &mut RunState,
+            inv: &mut crate::shop::ShopInventory,
+            slot: crate::shop::ShopSlot,
+        ) {
+            if let crate::shop::ShopSlot::Relic(i) = slot {
+                inv.relics[i].price = 42;
+            }
+        }
+        fn anchor_offers_a_set(rs: &mut RunState) -> crate::EffectResult {
+            if rs.interactive_rewards && rs.last_obtained_relic == Some(crate::RelicId::Anchor) {
+                rs.offer_custom_rewards(
+                    vec![crate::runstate::OfferedReward::Potion(Some(
+                        crate::potions::PotionKind::BlockPotion,
+                    ))],
+                    true,
+                );
+                return crate::EffectResult::Resolved;
+            }
+            crate::EffectResult::NotImplemented
+        }
+        crate::run_effects::register_after_obtained(
+            crate::RelicId::Anchor,
+            anchor_offers_a_set as crate::run_effects::AfterObtainedRunFn,
+        );
+        let mut inv = make_test_shop_inventory();
+        inv.relics[0].price = 100;
+        let mut rm = make_rm_in_shop_phase_with_inventory(inv);
+        rm.run_state.interactive_rewards = true;
+        rm.run_state.max_potion_slots = 3;
+        rm.callbacks.restock_shop_entry = Some(stub_restock);
+        rm.run_state.relics.push(crate::RelicId::TheCourier);
+        rm.run_state.gold = 500;
+        assert_eq!(
+            rm.take_action(RunAction::ShopBuyRelic { idx: 0 }),
+            ActionResult::Advanced
+        );
+        assert_eq!(rm.phase(), Phase::CardReward, "the set is shown");
+        let price = |rm: &RunManager| rm.shop_inventory.as_ref().unwrap().relics[0].price;
+        assert!(
+            !crate::shop::is_shop_entry_available(price(&rm)),
+            "not restocked yet"
+        );
+        rm.take_action(RunAction::ClaimReward { idx: 0 });
+        assert_eq!(rm.phase(), Phase::Shop, "back in the shop");
+        assert_eq!(price(&rm), 42, "restocked once the set is done");
     }
 
     /// The screen offers a claim per reward and a proceed; gold applies on

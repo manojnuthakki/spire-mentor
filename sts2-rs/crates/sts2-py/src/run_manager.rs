@@ -519,6 +519,13 @@ impl PyRunManager {
         self.inner.reward_screen_can_proceed()
     }
 
+    /// The rewards-screen entry whose card removal is open now (sts2-agent
+    /// fork): its selection offers `remove_deck_card` per removable card and
+    /// `cancel_reward_claim`, which keeps the reward.
+    fn screen_removal_claim(&self) -> Option<usize> {
+        self.inner.screen_removal_claim()
+    }
+
     /// How many rewards sets are open, innermost shown (sts2-agent fork).
     fn reward_set_depth(&self) -> usize {
         self.inner.reward_set_depth()

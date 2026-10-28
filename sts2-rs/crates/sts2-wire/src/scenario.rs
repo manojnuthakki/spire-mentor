@@ -467,6 +467,7 @@ pub fn build_scenario_state(
         swipe_stolen: Vec::new(),
         escaped_creatures: 0,
         heist_recovered_gold: 0,
+        room_extra_rewards: Vec::new(),
         event_combat_timed_out: false,
         // The player's run gold, carried into combat — see the same field in
         // `sts2-cli::sim::scenario::starter`. The C# parity oracle builds its

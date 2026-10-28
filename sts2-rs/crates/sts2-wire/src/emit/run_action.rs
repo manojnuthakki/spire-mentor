@@ -130,6 +130,9 @@ pub fn run_action_to_value(a: &RunAction) -> Value {
         RunAction::ProceedRewards => {
             set(&mut d, "action", "proceed_rewards");
         }
+        RunAction::CancelRewardClaim => {
+            set(&mut d, "action", "cancel_reward_claim");
+        }
         RunAction::DiscardPotion { slot } => {
             set(&mut d, "action", "discard_potion");
             set(&mut d, "slot", *slot);
@@ -289,6 +292,7 @@ pub fn run_action_from_value(v: &Value) -> Result<RunAction, EmitError> {
             idx: req_usize(d, "idx")?,
         },
         "proceed_rewards" => RunAction::ProceedRewards,
+        "cancel_reward_claim" => RunAction::CancelRewardClaim,
         "discard_potion" => RunAction::DiscardPotion {
             slot: req_usize(d, "slot")?,
         },

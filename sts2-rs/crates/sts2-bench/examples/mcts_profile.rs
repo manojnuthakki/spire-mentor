@@ -125,6 +125,7 @@ fn make_nibbit_combat(seed: u64) -> CombatState {
         swipe_stolen: Vec::new(),
         escaped_creatures: 0,
         heist_recovered_gold: 0,
+        room_extra_rewards: Vec::new(),
         event_combat_timed_out: false,
         gold: 0,
         is_over: false,

@@ -905,6 +905,16 @@ pub enum EventEncounter {
     FakeMerchant,
 }
 
+impl EventEncounter {
+    /// Whether the fight's room offers rewards (C# `EncounterModel.ShouldGiveRewards`;
+    /// `false` only for `BattlewornDummyEventEncounter`, whose room offers an
+    /// empty set: its extra rewards are never offered). sts2-agent fork.
+    #[must_use]
+    pub const fn gives_rewards(&self) -> bool {
+        !matches!(self, Self::BattlewornDummy(_))
+    }
+}
+
 /// A request, raised by an event-option handler, to enter a real
 /// [`crate::run_manager::Phase::Combat`] against an [`EventEncounter`]
 /// and (optionally) resume the parent event afterward.

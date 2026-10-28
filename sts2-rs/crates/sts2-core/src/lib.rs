@@ -3531,6 +3531,21 @@ pub struct SwipeStolen {
     pub reclaimed: bool,
 }
 
+/// One reward a fight added to its combat room (C# `CombatRoom.AddExtraReward`),
+/// in [`CombatState::room_extra_rewards`]. sts2-agent fork.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CombatExtraReward {
+    /// `GoldReward(amount, wasGoldStolenBack: true)` (Heist).
+    Gold(i32),
+    /// `SpecialCardReward(card.DeckVersion)` (Swipe): the stolen deck card.
+    SpecialCard {
+        card_id: crate::cards::CardId,
+        upgraded: bool,
+    },
+    /// `CardReward(ForRoom(room), 3)` (The Hunt).
+    RoomCard,
+}
+
 /// Top-level combat state. Plain data over arena stores — no trait objects,
 /// no `Arc`, no interior mutability (plan §State).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -3779,6 +3794,14 @@ pub struct CombatState {
     /// won combat — the reward screen a lost combat never shows. GH #604.
     pub heist_recovered_gold: i32,
 
+    /// The combat room's extra rewards in the order the fight added them (C#
+    /// `CombatRoom.AddExtraReward`, one entry per call): a killed Heist
+    /// carrier's gold, a killed thief's card, The Hunt's card reward. The
+    /// combat-end ones (Royalties, Forbidden Grimoire) follow at the exit.
+    /// Read by the run side's rewards screen (`interactive_rewards`);
+    /// sts2-agent fork.
+    pub room_extra_rewards: Vec<CombatExtraReward>,
+
     /// Set true when a `BattlewornDummyTimeLimit` timer expires and the
     /// dummy flees instead of being killed (C#
     /// `BattlewornDummyTimeLimitPower.AfterTurnEnd` → set
@@ -4007,6 +4030,7 @@ impl Default for CombatState {
             swipe_stolen: Vec::new(),
             escaped_creatures: 0,
             heist_recovered_gold: 0,
+            room_extra_rewards: Vec::new(),
             event_combat_timed_out: false,
             gold: 0,
 
@@ -7666,8 +7690,13 @@ impl CombatState {
             return;
         }
         for s in &mut self.swipe_stolen {
-            if s.thief == dead {
+            if s.thief == dead && !s.reclaimed {
                 s.reclaimed = true;
+                self.room_extra_rewards
+                    .push(CombatExtraReward::SpecialCard {
+                        card_id: s.card_id,
+                        upgraded: s.upgraded,
+                    });
             }
         }
     }
@@ -7696,7 +7725,13 @@ impl CombatState {
                 .get_by_id(puid.0)
                 .filter(|p| p.kind == PowerKind::Heist)
             {
-                recovered = recovered.saturating_add(p.amount.max(0));
+                let amount = p.amount.max(0);
+                recovered = recovered.saturating_add(amount);
+                // One reward per Heist instance (its own `BeforeDeath`).
+                if amount > 0 {
+                    self.room_extra_rewards
+                        .push(CombatExtraReward::Gold(amount));
+                }
             }
         }
         if recovered > 0 {
@@ -16594,6 +16629,25 @@ mod tests {
             s.heist_recovered_gold, 37,
             "killing the carrier hands back exactly the HeistPower amount"
         );
+    }
+
+    /// sts2-agent fork: each carrier's death adds its own gold reward to the
+    /// room (C# one `AddExtraReward` per `HeistPower.BeforeDeath`), in death
+    /// order, not one summed reward.
+    #[test]
+    fn each_heist_carrier_adds_its_own_room_reward_in_death_order() {
+        let mut s = CombatState::default();
+        let first = s.spawn_enemy(MonsterKind::FatGremlin);
+        let second = s.spawn_enemy(MonsterKind::FatGremlin);
+        crate::card_effects::apply_power_to_creature(&mut s, first, PowerKind::Heist, 20);
+        crate::card_effects::apply_power_to_creature(&mut s, second, PowerKind::Heist, 10);
+        s.recover_heist_on_death(second);
+        s.recover_heist_on_death(first);
+        assert_eq!(
+            s.room_extra_rewards,
+            vec![CombatExtraReward::Gold(10), CombatExtraReward::Gold(20)]
+        );
+        assert_eq!(s.heist_recovered_gold, 30);
     }
 
     /// GH #604: the loot term prices the three things a fleeing thief takes

@@ -435,3 +435,85 @@ fn the_rooms_set_lists_its_extras_in_the_games_order_and_claims_them() {
     assert_eq!(rm.phase(), Phase::CardReward, "back on the room's screen");
     assert!(can_proceed(&rm));
 }
+
+#[test]
+fn a_removal_with_no_removable_card_leaves_the_reward_and_the_screen_usable() {
+    let mut rm = room_screen_with(vec![OfferedReward::RemoveCard]);
+    let bane =
+        sts2_content::cards::spec_index::card_pod_from_id(CardId::AscendersBane, false).unwrap();
+    rm.run_state.master_deck = vec![bane];
+    assert!(
+        rm.run_state.removal_offer_order().is_empty(),
+        "the Bane is Eternal"
+    );
+    let removal = rm.reward_screen().unwrap().len() - 1;
+    assert_eq!(
+        rm.reward_screen().unwrap()[removal],
+        ScreenReward::RemoveCard
+    );
+    assert_eq!(
+        rm.take_action(RunAction::ClaimReward { idx: removal }),
+        ActionResult::Advanced
+    );
+    assert_eq!(rm.screen_removal_claim(), None, "no selection opens");
+    assert_eq!(
+        rm.reward_screen().unwrap()[removal],
+        ScreenReward::RemoveCard
+    );
+    assert!(can_proceed(&rm), "the run isn't stranded");
+    rm.take_action(RunAction::ProceedRewards);
+    assert_eq!(rm.run_state.master_deck, vec![bane]);
+}
+
+#[test]
+fn the_rooms_gold_lists_its_own_then_the_extras_then_the_hooks() {
+    // Amethyst Aubergine's gold is a reward hook's (C# `Hook.ModifyRewards`),
+    // added after the room's extras.
+    sts2_content::relics::dispatch::ensure_installed();
+    let mut rm = room_screen_with_relic(RelicId::AmethystAubergine, vec![OfferedReward::Gold(20)]);
+    let gold: Vec<i32> = rm
+        .reward_screen()
+        .unwrap()
+        .iter()
+        .filter_map(|r| match r {
+            ScreenReward::Gold { amount } => Some(*amount),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(gold.len(), 3, "{gold:?}");
+    assert_eq!(&gold[1..], &[20, 15], "the extra, then the hook's");
+    rm.take_action(RunAction::ProceedRewards);
+}
+
+fn room_screen_with_relic(relic: RelicId, extras: Vec<OfferedReward>) -> RunManager {
+    sts2_content::relics::dispatch::ensure_installed();
+    sts2_content::cards::dispatch::ensure_installed();
+    let mut rm = sts2_content::run_callbacks::new_run_manager_for_character_with_ascension(
+        11,
+        CharacterId::Ironclad,
+        0,
+    );
+    rm.run_state.interactive_rewards = true;
+    sts2_content::run_callbacks::initialize_run_setup(&mut rm);
+    rm.run_state.relics.push(relic);
+    rm.run_state.room_extra_rewards = extras;
+    for _ in 0..2000 {
+        if rm.reward_screen().is_some() {
+            return rm;
+        }
+        if rm.phase() == Phase::Combat {
+            rm.debug_set_player(Some(9999), Some(9999), None);
+            let actions = rm.get_available_actions();
+            let a = actions
+                .iter()
+                .copied()
+                .find(|a| matches!(a, RunAction::PlayCard { .. }))
+                .unwrap_or(actions[0]);
+            rm.take_action(a);
+        } else {
+            let a = rm.get_available_actions()[0];
+            rm.take_action(a);
+        }
+    }
+    panic!("no rewards screen");
+}

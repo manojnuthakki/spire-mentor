@@ -520,7 +520,7 @@ fn roll_combat_gold_and_potion(
         .into_iter()
         .next();
     }
-    out.gold.extend(
+    out.hook_gold.extend(
         rs.offer_rewards(room_type, Vec::new())
             .iter()
             .filter_map(|r| match r {

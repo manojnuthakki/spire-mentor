@@ -50,6 +50,11 @@ pub(crate) fn play_the_hunt(state: &mut CombatState, target: Option<CreatureUid>
         // run-state, outside the combat engine), so the reward is not
         // wired here — only the power is stacked. Re-wire once P9 exposes
         // extra-reward routing.
+        // sts2-agent fork: the room's extra card reward, for the rewards
+        // screen (`interactive_rewards`; the auto path still drops it).
+        state
+            .room_extra_rewards
+            .push(sts2_core::CombatExtraReward::RoomCard);
         apply_power_to_player(state, PowerKind::TheHunt, 1);
     }
     EffectResult::Resolved
