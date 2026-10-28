@@ -2463,20 +2463,12 @@ pub fn create_queen_ai() -> MonsterAi {
         MonsterState::Move(MoveState {
             id: "YOURE_MINE_MOVE",
             effect: queen_youre_mine_effect,
-            intents: smallvec![
-                Intent::Debuff {
-                    kind: PowerKind::Frail,
-                    amount: 99,
-                },
-                Intent::Debuff {
-                    kind: PowerKind::Weak,
-                    amount: 99,
-                },
-                Intent::Debuff {
-                    kind: PowerKind::Vulnerable,
-                    amount: 99,
-                },
-            ],
+            // One `DebuffIntent` (`Queen.cs:136`); the effect applies all
+            // three powers (Frail, Weak, Vulnerable 99).
+            intents: smallvec![Intent::Debuff {
+                kind: PowerKind::Frail,
+                amount: 99,
+            }],
             follow_up: Some("YOURE_MINE_NOW_BRANCH"),
             must_perform_once: false,
         }),

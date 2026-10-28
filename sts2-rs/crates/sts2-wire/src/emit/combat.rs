@@ -1646,6 +1646,78 @@ mod tests {
         assert_eq!(weak["kind"], "Debuff");
     }
 
+    /// Queen's YOU_ARE_MINE telegraphs one `DebuffIntent` (`Queen.cs:136`)
+    /// though it applies three powers: the wire shows one Debuff.
+    #[test]
+    fn queen_youre_mine_shows_one_debuff() {
+        let (state, _) = board_on_move(MonsterKind::Queen, "YOURE_MINE_MOVE");
+        let intents = wire_intents(&state);
+        let kinds: Vec<&str> = intents
+            .iter()
+            .map(|i| i["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, ["Debuff"]);
+    }
+
+    /// A board at `ascension` with one enemy whose AI is built for it and sits
+    /// on `move_id`, emitted and rebuilt through the wire.
+    fn rebuilt_at(kind: MonsterKind, move_id: &str, ascension: u8) -> (CombatState, CreatureUid) {
+        use sts2_content::monster_dispatch::{
+            build_ai_with_ascension, MonsterSpawnArgs, SpawnPosition,
+        };
+        let mut state = CombatState {
+            ascension,
+            ..CombatState::default()
+        };
+        state.player.current_hp = 70;
+        state.player.max_hp = 70;
+        state.init_player_creature();
+        let uid = state.spawn_enemy(kind);
+        let c = state.creatures.iter_mut().find(|c| c.id == uid.0).unwrap();
+        let mut ai = build_ai_with_ascension(
+            kind,
+            MonsterSpawnArgs::default(),
+            SpawnPosition::default(),
+            ascension,
+        );
+        assert!(ai.force_current_state_by_name(move_id), "{move_id}");
+        c.intent = ai.current_move().intents.first().copied();
+        c.ai = Some(ai);
+        state.phase = sts2_core::CombatPhase::PlayerPlayPhase;
+        state.side = sts2_core::Side::Player;
+        let v = combat_state_to_value(&state).expect("emit");
+        let rebuilt = crate::state_from_wire(&&v).expect("rebuild");
+        let uid = rebuilt.enemy_uids[0];
+        (rebuilt, uid)
+    }
+
+    /// Reconstruction applies the fight's ascension to each enemy's AI, as a
+    /// fresh spawn does: the moves a rebuilt board performs deal and grant
+    /// the scaled values (A8's Louse Progenitor CURL_AND_GROW 18 block, Magi
+    /// Knight PREP 9, Tunneler BURROW 37 through its effect; A9's Gas Bomb
+    /// EXPLODE 9), not the base table's.
+    #[test]
+    fn a_rebuilt_board_performs_its_moves_at_the_fights_ascension() {
+        for (kind, move_id, ascension, block) in [
+            (MonsterKind::LouseProgenitor, "CURL_AND_GROW_MOVE", 8u8, 18),
+            (MonsterKind::MagiKnight, "PREP", 8, 9),
+            (MonsterKind::Tunneler, "BURROW_MOVE", 8, 37),
+        ] {
+            let (mut st, uid) = rebuilt_at(kind, move_id, ascension);
+            let before = st.creatures.iter().find(|c| c.id == uid.0).unwrap().block;
+            let _ = sts2_core::apply(&mut st, sts2_core::Action::EndTurn);
+            let c = st.creatures.iter().find(|c| c.id == uid.0).unwrap();
+            assert_eq!(c.block - before, block, "{kind:?} {move_id} A{ascension}");
+        }
+        let (st, uid) = rebuilt_at(MonsterKind::GasBomb, "EXPLODE", 9);
+        let c = st.creatures.iter().find(|c| c.id == uid.0).unwrap();
+        let mv = c.ai.as_ref().unwrap().current_move();
+        assert_eq!(
+            mv.intents.first().copied(),
+            Some(Intent::DeathBlow { damage: 9 })
+        );
+    }
+
     #[test]
     fn combat_action_dicts_spell_none_targets_as_null() {
         let v = combat_action_to_value(&Action::PlayCard {

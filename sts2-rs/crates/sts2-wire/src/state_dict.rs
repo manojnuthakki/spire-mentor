@@ -40,7 +40,7 @@ use std::num::NonZeroU32;
 
 use smallvec::SmallVec;
 
-use sts2_content::monster_dispatch::{build_ai, MonsterSpawnArgs, SpawnPosition};
+use sts2_content::monster_dispatch::{build_ai_with_ascension, MonsterSpawnArgs, SpawnPosition};
 use sts2_content::names::resolve_card_name;
 use sts2_core::cards::{Card, CardId, EnchantmentId, VarKey};
 use sts2_core::hooks::DamageMul;
@@ -2437,8 +2437,11 @@ const WIRE_MOVE_STATE_ALIASES: &[(MonsterKind, &str, &str)] = &[
     (MonsterKind::TwigSlimeS, "TACKLE_MOVE", "BUTT"),
 ];
 
-/// Look up a [`WIRE_MOVE_STATE_ALIASES`] entry for this monster + wire id.
-fn wire_move_state_alias(kind: MonsterKind, wire_id: &str) -> Option<&'static str> {
+/// Look up a [`WIRE_MOVE_STATE_ALIASES`] entry for this monster + wire id
+/// (the game's `MoveState` id → the engine's state id, where the relaxed
+/// matcher can't find it).
+#[must_use]
+pub fn wire_move_state_alias(kind: MonsterKind, wire_id: &str) -> Option<&'static str> {
     WIRE_MOVE_STATE_ALIASES
         .iter()
         .find(|(k, w, _)| *k == kind && *w == wire_id)
@@ -2748,12 +2751,13 @@ fn ingest_intent(
 /// a fresh AI drops the spawn payload and every mid-fight counter the
 /// reconstruction went to the trouble of recovering, which is what
 /// [`reconstructed_base_damage`] exists to read instead.
-fn wire_base_intent(m: &ParsedEnemy) -> Option<Intent> {
+fn wire_base_intent(m: &ParsedEnemy, ascension: u8) -> Option<Intent> {
     let ms = m.move_state.as_deref()?;
-    let mut ai = build_ai(
+    let mut ai = build_ai_with_ascension(
         m.kind,
         MonsterSpawnArgs::default(),
         SpawnPosition::default(),
+        ascension,
     );
     let resolved = wire_move_state_alias(m.kind, ms)
         .is_some_and(|alias| ai.force_current_state_by_name(alias))
@@ -2813,7 +2817,7 @@ fn infer_surrounded_facing(parsed: &ParsedState) -> Option<i32> {
         if m.is_dead || m.hp <= 0 {
             continue;
         }
-        let Some(base_intent) = wire_base_intent(m) else {
+        let Some(base_intent) = wire_base_intent(m, parsed.ascension) else {
             continue;
         };
         let (Intent::Attack { damage: base } | Intent::MultiAttack { damage: base, .. }) =
@@ -3651,7 +3655,16 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
         // read a base magnitude off it.
         let mut ai_at_wire_move = false;
         let ai: Option<MonsterAi> = m.move_state.as_deref().and_then(|ms| {
-            let mut ai = build_ai(m.kind, spawn_args, SpawnPosition::default());
+            // The fight's ascension patch, as a fresh spawn gets
+            // (`build_ai_with_ascension`): the move table's A8/A9 values
+            // drive every move the rebuilt board performs, and the wire
+            // carries no Defend amount or later move to restore them from.
+            let mut ai = build_ai_with_ascension(
+                m.kind,
+                spawn_args,
+                SpawnPosition::default(),
+                parsed.ascension,
+            );
             // Alias table FIRST: entries are per-monster verified mappings,
             // including CORRECTIVE ones where the generic `_MOVE`-strip
             // lands on the wrong state (BygoneEffigy "SLEEP_MOVE" ≠ engine
@@ -4157,6 +4170,7 @@ pub fn var_key_from_wire(name: &str) -> Option<VarKey> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sts2_content::monster_dispatch::build_ai;
     /// Every [`WIRE_MOVE_STATE_ALIASES`] target must exist as a move
     /// state on the freshly-built AI of its monster — a content-side
     /// state rename would otherwise silently revive the inert-enemy
