@@ -2357,6 +2357,25 @@ pub enum Intent {
 }
 
 impl Intent {
+    /// Whether the game shows this debuff as a `CardDebuffIntent`: its power
+    /// afflicts the player's cards or takes one (`VineShambler.cs:47`
+    /// Tangled, `LivingFog.cs:64` Smoggy, `Queen.cs:135` Chains of Binding,
+    /// `ThievingHopper.cs:166` the steal its `SwipePower` holds). The engine
+    /// keeps these as [`Intent::Debuff`]; only the wire's name differs.
+    #[must_use]
+    pub const fn is_card_debuff(self) -> bool {
+        matches!(
+            self,
+            Self::Debuff {
+                kind: crate::powers::PowerKind::Tangled
+                    | crate::powers::PowerKind::Smoggy
+                    | crate::powers::PowerKind::ChainsOfBinding
+                    | crate::powers::PowerKind::Swipe,
+                ..
+            }
+        )
+    }
+
     /// Python `IntentType.<self>.name` exactly. Used by the parity
     /// exporter's `enemy_data["intent"]` field
     /// (`bridge_replay.py:337`).

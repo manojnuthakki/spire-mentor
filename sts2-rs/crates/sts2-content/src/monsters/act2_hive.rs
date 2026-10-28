@@ -987,7 +987,15 @@ pub fn create_thieving_hopper_ai() -> MonsterAi {
         MonsterState::Move(MoveState {
             id: "THIEVERY_MOVE",
             effect: thieving_hopper_thievery_effect,
-            intents: smallvec![Intent::Attack { damage: 17 }],
+            // `ThievingHopper.cs:166`: `SingleAttackIntent` + `CardDebuffIntent`
+            // (the steal, held by the thief's `SwipePower`; telegraph only).
+            intents: smallvec![
+                Intent::Attack { damage: 17 },
+                Intent::Debuff {
+                    kind: PowerKind::Swipe,
+                    amount: 1
+                }
+            ],
             follow_up: Some("FLUTTER_MOVE"),
             must_perform_once: false,
         }),

@@ -462,6 +462,7 @@ pub fn bare_intent_to_value(intent: Intent) -> Value {
         Intent::Attack { .. } | Intent::MultiAttack { .. } => "Attack",
         Intent::Defend { .. } => "Defend",
         Intent::Buff { .. } => "Buff",
+        Intent::Debuff { .. } if intent.is_card_debuff() => "CardDebuff",
         Intent::Debuff { .. } => "Debuff",
         Intent::DebuffStrong => "DebuffStrong",
         Intent::Sleep => "Sleep",
@@ -484,6 +485,8 @@ pub fn bare_intent_to_value(intent: Intent) -> Value {
         Intent::Attack { damage }
         | Intent::MultiAttack { damage, .. }
         | Intent::DeathBlow { damage } => Some(damage),
+        // C# `CardDebuffIntent` carries no amount.
+        Intent::Debuff { .. } if intent.is_card_debuff() => None,
         Intent::Buff { amount, .. } | Intent::Debuff { amount, .. } => Some(amount),
         _ => None,
     };
@@ -494,6 +497,15 @@ pub fn bare_intent_to_value(intent: Intent) -> Value {
         set(&mut d, "times", i32::from(hits));
     }
     Value::Object(d)
+}
+
+/// Whether `head` is still the telegraph of a move whose first intent is
+/// `first`: the same intent kind, an attack's hit count aside (Painful Stabs
+/// turns a single attack into a multi-attack, `combat_loop` `roll_next_intent`).
+fn same_telegraph(first: Intent, head: Intent) -> bool {
+    let attack = |i: Intent| matches!(i, Intent::Attack { .. } | Intent::MultiAttack { .. });
+    (attack(first) && attack(head))
+        || core::mem::discriminant(&first) == core::mem::discriminant(&head)
 }
 
 /// The `powers` list for one creature: `[{name, amount, display_amount,
@@ -919,53 +931,33 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
             "powers".to_owned(),
             powers_to_value(&c.powers, &state.powers, "$.encounter.powers")?,
         );
-        // `intents` carries the creature's currently-telegraphed move so
-        // display consumers (workbench combat panel) can render it. We emit a
-        // 0-or-1 element list: `Creature.intent` is a single `Option<Intent>`.
-        // `intent_history` stays empty: the parser only needs the current
-        // intent, and Rust's `IntentHistory` shape is private and dropped on
-        // the rebuild path (round-trip equiv ignores it).
+        // `intents` carries the creature's telegraph: the shown head
+        // (`Creature.intent`) and, while that head is still its move's, the
+        // rest of the move's intents. C# `MoveState` takes `params
+        // AbstractIntent[]` and the game shows every one
+        // (`../sts2-wiki/decompiled/v0.107.1/MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine/MoveState.cs:48-53`;
+        // `TerrorEel.cs:72` telegraphs `[Attack x3, Buff]`). A head that
+        // replaced the move's (a stun) is shown alone. The tail is display
+        // only: each move's non-head halves are performed by its `effect_fn`.
         //
-        // ── KNOWN GAP: multi-intent moves are truncated here ──────────────
-        // C# `MoveState` takes `params AbstractIntent[]`
-        // (`../sts2-wiki/decompiled/v0.107.1/MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine/MoveState.cs:48-53`)
-        // and real movesets use it — e.g. `TerrorEel.cs:72`
-        // `new MoveState("THRASH_MOVE", ThrashMove, new MultiAttackIntent(...),
-        // new BuffIntent())`. The world therefore telegraphs `[Attack x3,
-        // Buff]` where this emits `[Attack x3]`.
-        //
-        // The engine's DSL ALREADY models the list —
-        // `monster_ai::MoveState.intents` is a `SmallVec<[Intent; 4]>` and 44
-        // content moves declare two or three — but every consumer collapses it
-        // to `intents.first()` (`combat_loop::perform_intent`, the intent
-        // priming in `hooks`, `parse_enemy`). Widening the wire alone
-        // would be half a fix: a 2026-08 census over the 12-seed live corpus
-        // (`logs/diag/mirror_d1.jsonl`) found 153 world records with a
-        // multi-intent telegraph, of which only 34 sit on a move this repo
-        // declares with a matching intent count. The other 119 span ~26 moves
-        // (Aeonglass EBB/INCREASING_INTENSITY, Stabbot STAB, every
-        // DecimillipedeSegment BULK/CONSTRICT, Queen BURN_BRIGHT_FOR_ME,
-        // MechaKnight WINDUP, Ovicopter TENDERIZER, Axebot BOOT_UP/
-        // HAMMER_UPPERCUT, CubexConstruct REPEATER_BLAST, Nibbit SLICE,
-        // GlobeHead SHOCKING_SLAP/GALVANIC_BURST, TheLost DEBILITATING_SMOG,
-        // KnowledgeDemon PONDER, InfestedPrism PULSATE, TestSubject RESPAWN,
-        // …) whose CONTENT declaration is itself short — so emitting the tail
-        // today would trade a silent truncation for a loud divergence class
-        // dominated by under-declared movesets, taint those sweep runs
-        // (`STS2_MIRROR_OBSERVE`), and still not carry the real telegraph.
-        //
-        // The faithful fix is: (1) audit those ~26 movesets against their C#
-        // `MoveState` ctors, (2) emit the whole `current_move().intents` list
-        // when the primed `c.intent` is still its head, (3) teach
-        // `parse_enemy` to keep the tail. Simulation is NOT affected by the
-        // gap — the non-head halves are performed by each move's `effect_fn`,
-        // not by the intent — so this is a telegraph-fidelity item, not a
-        // combat-correctness one. See `wire_emits_only_the_primed_head_intent`
-        // in `sts2-py/src/state_dict.rs`, which pins the current shape so a
-        // change here is deliberate.
+        // `intent_history` stays empty: the engine keeps no per-turn record
+        // the wire's list could carry (`IntentHistory` is a last-kind/streak
+        // summary for the species-roll path), and a consumer builds the
+        // history from the telegraphs it was shown.
         let mut intents = Vec::new();
-        if let Some(intent) = c.intent {
-            intents.push(intent_to_value(intent, state, CreatureUid(c.id)));
+        if let Some(head) = c.intent {
+            intents.push(intent_to_value(head, state, CreatureUid(c.id)));
+            if let Some(mv) = c.ai.as_ref().and_then(|ai| ai.current_move_opt()) {
+                if mv
+                    .intents
+                    .first()
+                    .is_some_and(|&first| same_telegraph(first, head))
+                {
+                    for &tail in mv.intents.iter().skip(1) {
+                        intents.push(intent_to_value(tail, state, CreatureUid(c.id)));
+                    }
+                }
+            }
         }
         m.insert("intents".to_owned(), Value::Array(intents));
         m.insert("intent_history".to_owned(), Value::Array(Vec::new()));
@@ -1551,6 +1543,107 @@ mod tests {
         assert_eq!(m["times"], 3);
         let s = intent_to_value(Intent::Sleep, &st, uid);
         assert_eq!(s, serde_json::json!({"kind": "Sleep"}));
+    }
+
+    /// A board with one enemy of `kind` whose AI sits on `move_id`, its
+    /// shown intent primed from the move's head as the engine does.
+    fn board_on_move(kind: MonsterKind, move_id: &str) -> (CombatState, CreatureUid) {
+        use sts2_content::monster_dispatch::{build_ai, MonsterSpawnArgs, SpawnPosition};
+        let mut state = CombatState::default();
+        state.player.current_hp = 70;
+        state.player.max_hp = 70;
+        state.init_player_creature();
+        let uid = state.spawn_enemy(kind);
+        let c = state
+            .creatures
+            .iter_mut()
+            .find(|c| c.id == uid.0)
+            .expect("spawned");
+        let mut ai = build_ai(kind, MonsterSpawnArgs::default(), SpawnPosition::default());
+        assert!(ai.force_current_state_by_name(move_id), "{move_id}");
+        c.intent = ai.current_move().intents.first().copied();
+        c.ai = Some(ai);
+        (state, uid)
+    }
+
+    fn wire_intents(state: &CombatState) -> Vec<Value> {
+        let v = combat_state_to_value(state).expect("emit");
+        v["encounter"][0]["intents"]
+            .as_array()
+            .expect("intents list")
+            .clone()
+    }
+
+    /// C# `MoveState` takes `params AbstractIntent[]` and the game shows every
+    /// one (`MoveState.cs:48-53`; `TerrorEel.cs:72`: `MultiAttackIntent(3, 3)`
+    /// and `BuffIntent()`). The wire carries the move's whole list while the
+    /// shown head is the move's.
+    #[test]
+    fn wire_emits_every_intent_of_the_primed_move() {
+        let (state, _) = board_on_move(MonsterKind::TerrorEel, "ThrashMove");
+        let intents = wire_intents(&state);
+        let kinds: Vec<&str> = intents
+            .iter()
+            .map(|i| i["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(kinds, ["Attack", "Buff"]);
+        assert_eq!(intents[0]["times"], 3);
+    }
+
+    /// A head that isn't the move's (a stun's) is shown alone: the move's
+    /// tail belongs to the move, not to whatever replaced its telegraph.
+    #[test]
+    fn wire_emits_the_head_alone_when_it_is_not_the_moves() {
+        let (mut state, uid) = board_on_move(MonsterKind::TerrorEel, "ThrashMove");
+        let c = state.creatures.iter_mut().find(|c| c.id == uid.0).unwrap();
+        c.intent = Some(Intent::Stun);
+        let intents = wire_intents(&state);
+        assert_eq!(intents.len(), 1);
+        assert_eq!(intents[0]["kind"], "Stun");
+    }
+
+    /// The game shows a debuff that afflicts cards as `CardDebuffIntent`
+    /// (`VineShambler.cs:47`, `LivingFog.cs:64`, `Queen.cs:135`,
+    /// `ThievingHopper.cs:166`); the engine keeps them as `Debuff` and the wire
+    /// names them `CardDebuff`.
+    #[test]
+    fn card_afflicting_debuffs_are_card_debuff_on_the_wire() {
+        for (kind, move_id, expected) in [
+            (
+                MonsterKind::VineShambler,
+                "GRASPING_VINES",
+                vec!["Attack", "CardDebuff"],
+            ),
+            (
+                MonsterKind::LivingFog,
+                "ADVANCED_GAS",
+                vec!["Attack", "CardDebuff"],
+            ),
+            (
+                MonsterKind::Queen,
+                "PUPPET_STRINGS_MOVE",
+                vec!["CardDebuff"],
+            ),
+            (
+                MonsterKind::ThievingHopper,
+                "THIEVERY_MOVE",
+                vec!["Attack", "CardDebuff"],
+            ),
+            (MonsterKind::Nibbit, "SLICE", vec!["Attack", "Defend"]),
+        ] {
+            let (state, _) = board_on_move(kind, move_id);
+            let intents = wire_intents(&state);
+            let kinds: Vec<&str> = intents
+                .iter()
+                .map(|i| i["kind"].as_str().unwrap())
+                .collect();
+            assert_eq!(kinds, expected, "{kind:?} {move_id}");
+        }
+        let weak = bare_intent_to_value(Intent::Debuff {
+            kind: PowerKind::Weak,
+            amount: 1,
+        });
+        assert_eq!(weak["kind"], "Debuff");
     }
 
     #[test]

@@ -1647,19 +1647,13 @@ mod tests {
         });
     }
 
-    /// KNOWN GAP pin — see the long comment on the `intents` emit in
-    /// `state_to_dict`. A C# `MoveState` carries `params AbstractIntent[]`
+    /// A C# `MoveState` carries `params AbstractIntent[]`
     /// (`../sts2-wiki/decompiled/v0.107.1/MegaCrit.Sts2.Core.MonsterMoves.MonsterMoveStateMachine/MoveState.cs:48-53`)
     /// and `TerrorEel.cs:72` uses two — `MultiAttackIntent(3, 3)` and
-    /// `BuffIntent()` — so the world telegraphs `[Attack x3, Buff]`.
-    ///
-    /// The engine's DSL already models BOTH (`create_terror_eel_ai`'s
-    /// `ThrashMove` declares them), but the wire only carries the primed head.
-    /// This test asserts exactly that asymmetry, so widening the wire is a
-    /// deliberate act taken together with the ~26 under-declared movesets the
-    /// census in that comment enumerates — not an accident.
+    /// `BuffIntent()` — so the world telegraphs `[Attack x3, Buff]`. The
+    /// Python dict carries both, the primed head first.
     #[test]
-    fn wire_emits_only_the_primed_head_intent() {
+    fn wire_emits_every_intent_of_the_primed_move() {
         use pyo3::types::PyList;
         pyo3::prepare_freethreaded_python();
         Python::with_gil(|py| {
@@ -1708,18 +1702,23 @@ mod tests {
                 .downcast_into::<PyList>()
                 .unwrap();
 
-            // The gap: one element on the wire, two in the move.
+            assert_eq!(intents.len(), 2, "the whole move: [Attack x3, Buff]");
+            let tail = intents
+                .get_item(1)
+                .unwrap()
+                .downcast_into::<PyDict>()
+                .unwrap();
             assert_eq!(
-                intents.len(),
-                1,
-                "KNOWN GAP — the wire truncates a multi-intent move to its \
-                 primed head; widening it requires the moveset audit described \
-                 at the emit site"
+                tail.get_item("kind")
+                    .unwrap()
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap(),
+                "Buff"
             );
-            // The head that DOES ship is the move's first intent — the C#
+            // The head is the move's first intent — the C#
             // `MultiAttackIntent(ThrashDamage=3, ThrashRepeat=3)`, which the
-            // wire spells `kind: "Attack"` + `times: 3`. The `BuffIntent`
-            // second half is what goes missing.
+            // wire spells `kind: "Attack"` + `times: 3`.
             let head = intents
                 .get_item(0)
                 .unwrap()

@@ -292,8 +292,9 @@ pub fn create_nibbit_ai(is_alone: bool, is_front: bool) -> MonsterAi {
             id: "SLICE",
             // 5 block applied in `nibbit_slice_effect` because `perform_intent`
             // dispatches only the primary attack intent (bead `sts2-rs-5i8yj`).
+            // The Defend is the telegraph's second intent (`Nibbit.cs:72`).
             effect: nibbit_slice_effect,
-            intents: smallvec![Intent::Attack { damage: 6 }],
+            intents: smallvec![Intent::Attack { damage: 6 }, Intent::Defend { block: 5 }],
             follow_up: Some("HISS"),
             must_perform_once: false,
         }),

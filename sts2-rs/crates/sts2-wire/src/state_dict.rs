@@ -1531,14 +1531,11 @@ fn parse_enemy<V: WireValue>(d: &V, path: &str) -> WireResult<ParsedEnemy> {
 
     let intents_val = get_item(d, path, "intents")?;
     let intents_list = as_list(&intents_val, &format!("{path}.intents"))?;
-    // Sts2Headless can surface multiple queued intents per monster
-    // (e.g. Bronze Automaton's hyper-beam follow-ups). The *current*
-    // next-to-execute intent is the first entry; subsequent entries
-    // are deferred until the AI ticks, which the search doesn't
-    // simulate at this pin. Translating just the head is sufficient
-    // for one-decision-point lookahead — the rollout will then
-    // execute that intent on the next enemy turn, and the heuristic
-    // doesn't peek further ahead anyway. Bead `sts2-rs-2rp7`.
+    // The list is the shown move's every intent (a C# `MoveState`'s
+    // `params AbstractIntent[]`; Headless and the engine's emitter both send
+    // the whole list). The head is the current intent the rollout performs;
+    // the move's other halves are performed by its effect, so the tail is
+    // parsed only to check it is well formed. Bead `sts2-rs-2rp7`.
     let mut intent_damage_known = true;
     let intent = if intents_list.is_empty() {
         None
@@ -1549,6 +1546,11 @@ fn parse_enemy<V: WireValue>(d: &V, path: &str) -> WireResult<ParsedEnemy> {
             &mut intent_damage_known,
         )?
     };
+    for (i, tail) in intents_list.iter().enumerate().skip(1) {
+        // A tail attack's unknown damage says nothing about the head's.
+        let mut tail_known = true;
+        parse_intent(tail, &format!("{path}.intents[{i}]"), &mut tail_known)?;
+    }
 
     let history_val = get_item(d, path, "intent_history")?;
     let history_list = as_list(&history_val, &format!("{path}.intent_history"))?;
@@ -4185,6 +4187,29 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A move's intents after the head (a C# `MoveState`'s whole
+    /// `params AbstractIntent[]`, which Headless and the engine now emit) are
+    /// parsed too: a well-formed tail, `CardDebuff` included, is accepted and
+    /// the head stays the current intent; a malformed one is refused.
+    #[test]
+    fn parse_enemy_accepts_a_moves_tail_and_checks_it() {
+        let enemy = |tail: serde_json::Value| {
+            serde_json::json!({
+                "kind": "VINE_SHAMBLER", "uid": 2, "hp": 30, "max_hp": 30, "block": 0,
+                "powers": [],
+                "intents": [{"kind": "Attack", "amount": 8}, tail],
+                "intent_history": [], "is_dead": false, "is_escaped": false,
+            })
+        };
+        let ok = enemy(serde_json::json!({"kind": "CardDebuff"}));
+        let parsed = parse_enemy(&&ok, "$.encounter[0]").expect("a CardDebuff tail parses");
+        assert_eq!(parsed.intent, Some(Intent::Attack { damage: 8 }));
+        let bad = enemy(serde_json::json!({"kind": "Attack", "amount": "eight"}));
+        assert!(parse_enemy(&&bad, "$.encounter[0]").is_err());
+        let unknown = enemy(serde_json::json!({"kind": "NotAnIntent"}));
+        assert!(parse_enemy(&&unknown, "$.encounter[0]").is_err());
     }
 
     /// Wire intent amounts are UI-effective; ingestion must invert them
