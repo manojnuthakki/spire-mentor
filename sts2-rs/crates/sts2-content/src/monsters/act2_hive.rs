@@ -764,8 +764,23 @@ fn tough_egg_hatch_effect(state: &mut CombatState, owner: CreatureUid) {
             c.powers.retain(|u| u.0 != pid);
         }
     }
-    // C# `Rng.NextInt(19, 22)` is max-EXCLUSIVE → band 19..=21.
-    let hp = state.run_rng.niche.next_int_exclusive(19, 22);
+    // C# `Rng.NextInt(HatchlingMinHp, HatchlingMaxHp)` is max-EXCLUSIVE →
+    // band 19..=21, 20..=22 at ToughEnemies (`ToughEgg.cs:56-58`).
+    let (lo, hi) = (
+        sts2_core::ascension::get_value_if_ascension(
+            state.ascension,
+            AscensionLevel::ToughEnemies,
+            20,
+            19,
+        ),
+        sts2_core::ascension::get_value_if_ascension(
+            state.ascension,
+            AscensionLevel::ToughEnemies,
+            23,
+            22,
+        ),
+    );
+    let hp = state.run_rng.niche.next_int_exclusive(lo, hi);
     if let Some(c) = state.creatures.iter_mut().find(|c| c.id == owner.0) {
         c.max_hp = hp;
         c.current_hp = hp;
@@ -4102,6 +4117,31 @@ mod tests {
     /// power and re-rolls max+current HP to the Hatchling band via
     /// `Niche.NextInt(19, 22)`; the machine then loops NIBBLE_MOVE
     /// (attack 4).
+    /// C# `ToughEgg.cs:56-58` scales the hatchling's band at ToughEnemies:
+    /// `NextInt(20, 23)` at A8 and above (A6d's walk, 3Y6EYPDL60 at A10:
+    /// Headless 20 and 22 where the engine rolled 19 and 21).
+    #[test]
+    fn tough_egg_hatchling_band_scales_at_tough_enemies() {
+        for (ascension, band) in [(7u8, 19..=21), (8, 20..=22)] {
+            for seed in 0..40u64 {
+                let mut state = CombatState {
+                    ascension,
+                    ..CombatState::default()
+                };
+                state.run_rng.niche = sts2_core::dotnet_rng::Rng::new(i32::try_from(seed).unwrap());
+                let egg = state.spawn_enemy(MonsterKind::ToughEgg);
+                tough_egg_hatch_effect(&mut state, egg);
+                let hp = state
+                    .creatures
+                    .iter()
+                    .find(|c| c.id == egg.0)
+                    .unwrap()
+                    .max_hp;
+                assert!(band.contains(&hp), "A{ascension}: {hp} outside {band:?}");
+            }
+        }
+    }
+
     #[test]
     fn tough_egg_hatch_sheds_powers_and_rerolls_hatchling_hp() {
         let mut state = CombatState::default();

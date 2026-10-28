@@ -2607,6 +2607,18 @@ fn test_subject_burning_growl_effect(state: &mut CombatState, owner: CreatureUid
     }
 }
 
+/// The HP Test Subject revives to (C# `TestSubject.cs:81-85`, `Revive`):
+/// SecondFormHp 200 then ThirdFormHp 300, 212 and 313 at ToughEnemies (A8).
+fn test_subject_revive_hp(ascension: u8, respawns_after: i32) -> i32 {
+    use sts2_core::ascension::{get_value_if_ascension, AscensionLevel::ToughEnemies};
+    use sts2_core::monsters::test_subject;
+    if respawns_after == 1 {
+        get_value_if_ascension(ascension, ToughEnemies, 212, test_subject::SECOND_FORM_HP)
+    } else {
+        get_value_if_ascension(ascension, ToughEnemies, 313, test_subject::THIRD_FORM_HP)
+    }
+}
+
 /// `TestSubject.MultiClawMove` — `ExtraMultiClawCount++` AFTER the attack
 /// resolves (C# TestSubject.cs:310), so the NEXT MULTI_CLAW telegraph shows
 /// one more hit (`MultiClawTotalCount => BaseMultiClawCount +
@@ -2673,7 +2685,6 @@ fn test_subject_multi_claw_effect(state: &mut CombatState, owner: CreatureUid) {
 /// under `sts2-rs-jnf4a`.
 pub(crate) fn adaptable_after_death(state: &mut CombatState, owner: CreatureUid) {
     use sts2_core::card_effects::apply_power_to_creature;
-    use sts2_core::monsters::test_subject;
 
     // Snapshot the power-uid list for the owner so we can look up power data
     // without holding a borrow on `state.creatures` while we mutate `state`.
@@ -2706,11 +2717,7 @@ pub(crate) fn adaptable_after_death(state: &mut CombatState, owner: CreatureUid)
     }
 
     // Determine form HP for this revive.
-    let form_hp = if respawns_after == 1 {
-        test_subject::SECOND_FORM_HP
-    } else {
-        test_subject::THIRD_FORM_HP
-    };
+    let form_hp = test_subject_revive_hp(state.ascension, respawns_after);
 
     // Revive: set max_hp and current_hp to the new form HP, clear block.
     // C# `Revive(baseRespawnHp)`:
@@ -2957,6 +2964,16 @@ mod tests {
 
     /// Smoke test: every ctor produces an AI whose initial move resolves
     /// without panicking.
+    /// Test Subject revives to 200 then 300 HP, 212 then 313 at ToughEnemies
+    /// (C# `TestSubject.cs:81-85`).
+    #[test]
+    fn test_subject_revive_hp_scales_at_tough_enemies() {
+        assert_eq!(test_subject_revive_hp(7, 1), 200);
+        assert_eq!(test_subject_revive_hp(7, 2), 300);
+        assert_eq!(test_subject_revive_hp(8, 1), 212);
+        assert_eq!(test_subject_revive_hp(10, 2), 313);
+    }
+
     #[test]
     fn every_ctor_has_resolvable_initial_move() {
         let smokes: Vec<MonsterAi> = vec![
