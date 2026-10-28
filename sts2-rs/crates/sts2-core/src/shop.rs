@@ -912,19 +912,37 @@ pub fn buy_relic(
     inv: &mut ShopInventory,
     index: usize,
 ) -> ShopPurchaseOutcome {
+    match buy_relic_before_purchase_hook(run_state, inv, index) {
+        Ok(price) => {
+            let _ = crate::run_effects::dispatch_on_item_purchased(run_state, price);
+            ShopPurchaseOutcome::Bought
+        }
+        Err(outcome) => outcome,
+    }
+}
+
+/// [`buy_relic`] up to, not including, the `on_item_purchased` hook: `Ok(gold
+/// spent)` once the relic is obtained, for a caller that must fire the hook
+/// later (sts2-agent fork: after the reward sets the relic offered are done,
+/// C# `MerchantEntry.OnTryPurchaseWrapper`).
+pub fn buy_relic_before_purchase_hook(
+    run_state: &mut crate::runstate::RunState,
+    inv: &mut ShopInventory,
+    index: usize,
+) -> Result<i32, ShopPurchaseOutcome> {
     if index >= inv.relics.len() {
-        return ShopPurchaseOutcome::IndexOutOfBounds;
+        return Err(ShopPurchaseOutcome::IndexOutOfBounds);
     }
     let entry = inv.relics[index];
     if !is_shop_entry_available(entry.price) {
-        return ShopPurchaseOutcome::SoldOut;
+        return Err(ShopPurchaseOutcome::SoldOut);
     }
     let price = merchant_price_with_modifiers(&run_state.active_relics(), entry.price);
     if run_state.gold < price {
-        return ShopPurchaseOutcome::CannotAfford;
+        return Err(ShopPurchaseOutcome::CannotAfford);
     }
     let Some(relic_id) = entry.relic_id else {
-        return ShopPurchaseOutcome::SlotEmpty;
+        return Err(ShopPurchaseOutcome::SlotEmpty);
     };
     run_state.gain_gold(-price);
     run_state.relics.push(relic_id);
@@ -932,8 +950,7 @@ pub fn buy_relic(
     let _ = crate::run_effects::dispatch_after_obtained(run_state);
     run_state.last_obtained_relic = None;
     inv.relics[index].price = SHOP_ENTRY_SOLD_OUT_PRICE;
-    let _ = crate::run_effects::dispatch_on_item_purchased(run_state, price);
-    ShopPurchaseOutcome::Bought
+    Ok(price)
 }
 
 /// Buy from the potion row.

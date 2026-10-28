@@ -551,9 +551,7 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // screen (C# appends `CombatRoom.ExtraRewards` to the room's set) instead
     // of settling it here.
     let extras = rs.interactive_rewards && combat.player_won;
-    if extras {
-        stage_room_extra_rewards(rs, combat);
-    } else if grimoire_stacks > 0 {
+    if !extras && grimoire_stacks > 0 {
         rs.add_card_removal_reward(grimoire_stacks as u32);
     }
 
@@ -652,6 +650,15 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // the accumulated value; fold it back onto the corresponding master-deck
     // card so the next combat starts boosted. Bead `sts2-rs-RP114`.
     propagate_scaling_cards_to_master_deck(rs, combat);
+
+    // sts2-agent fork: the room's extra rewards, staged after the deck's
+    // persistent changes (a scaled Scythe) reach its cards, so a card a killed
+    // thief returns carries them (C# returns the updated `DeckVersion`), and
+    // before Fishing Rod's combat-end upgrade, which picks only from the deck
+    // (the returned card is in it only once claimed).
+    if extras {
+        stage_room_extra_rewards(rs, combat);
+    }
 
     // Flush the combat's RNG streams back to the run. C# uses ONE
     // `RunState.Rng` for the whole run, so a combat's advances to
@@ -2121,6 +2128,60 @@ mod tests {
             rs.room_extra_rewards,
             vec![sts2_core::OfferedReward::SpecialCard(stolen)]
         );
+    }
+
+    /// sts2-agent fork: a card a killed thief returns carries the persistent
+    /// changes the fight made to its deck version (a played Scythe's +4), as an
+    /// untaken one does.
+    #[test]
+    fn a_returned_card_keeps_its_scaled_damage() {
+        use crate::cards::necrobinder::the_scythe::play_the_scythe;
+        use sts2_core::cards::CardId;
+        crate::cards::dispatch::ensure_installed();
+        let played_scythe = |stolen: bool| {
+            let mut rs = fresh_run();
+            rs.interactive_rewards = true;
+            rs.master_deck.push(
+                crate::cards::spec_index::card_pod_from_id(CardId::TheScythe, false)
+                    .expect("scythe spec"),
+            );
+            let mut state = enter_combat(&rs, select_first(act1_normal_pool()));
+            state.player_won = true;
+            let idx = state
+                .cards
+                .iter()
+                .position(|c| c.card_id == CardId::TheScythe)
+                .expect("scythe in combat");
+            let enemy = state.enemy_uids[0];
+            let uid = state.cards[idx].uid;
+            state.player.play.push(uid);
+            play_the_scythe(&mut state, Some(enemy));
+            state.player.play.pop();
+            if stolen {
+                state.record_swipe_steal(enemy, CardId::TheScythe, false);
+                state.reclaim_swipe_on_death(enemy);
+            }
+            exit_combat(&mut rs, &state);
+            rs
+        };
+        let kept = played_scythe(false);
+        let kept_damage = kept
+            .master_deck
+            .iter()
+            .find(|c| c.card_id == CardId::TheScythe)
+            .expect("in the deck")
+            .base_damage;
+        assert_eq!(kept_damage, 17);
+        let returned = played_scythe(true);
+        assert!(returned
+            .master_deck
+            .iter()
+            .all(|c| c.card_id != CardId::TheScythe));
+        let [sts2_core::OfferedReward::SpecialCard(card)] = returned.room_extra_rewards.as_slice()
+        else {
+            panic!("one special card: {:?}", returned.room_extra_rewards);
+        };
+        assert_eq!(card.base_damage, kept_damage);
     }
 
     /// `RoyaltiesPower.AfterCombatEnd` grants `Amount` gold on a WON combat

@@ -808,11 +808,12 @@ pub struct RunManager {
     /// `CardRemovalReward.OnSelect`: a cancelable removal; the reward is used
     /// up only when a card is removed). sts2-agent fork.
     screen_removal_claim: Option<usize>,
-    /// Shop restocks (The Courier) a purchase owes once the reward sets the
-    /// bought relic offered are done (C# `MerchantEntry.OnTryPurchaseWrapper`
-    /// restocks after `OnTryPurchase`, which awaits the obtain and its sets).
+    /// Relic purchases (slot, gold spent) whose completion (the purchase hook,
+    /// The Courier's restock) waits until the reward sets the bought relic
+    /// offered are done (C# `MerchantEntry.OnTryPurchaseWrapper` runs them
+    /// after `OnTryPurchase`, which awaits the obtain and its sets).
     /// sts2-agent fork.
-    restocks_after_reward_sets: Vec<crate::shop::ShopSlot>,
+    purchases_after_reward_sets: Vec<(crate::shop::ShopSlot, i32)>,
 }
 
 impl RunManager {
@@ -979,7 +980,7 @@ impl RunManager {
             rewards_resume_phase: None,
             screen_card_claim: None,
             screen_removal_claim: None,
-            restocks_after_reward_sets: Vec::new(),
+            purchases_after_reward_sets: Vec::new(),
         }
     }
 
@@ -2675,13 +2676,14 @@ impl RunManager {
                 screen.push(reward);
             }
         }
-        for amount in roll.hook_gold {
-            if let Some(reward) =
-                self.roll_offered_reward(crate::runstate::OfferedReward::Gold(amount))
-            {
-                screen.push(reward);
-            }
-        }
+        // A hook's reward is populated only if it isn't already (C#
+        // `GenerateWithoutOffering`: `if (!item.IsPopulated) item.Populate()`);
+        // a fixed `GoldReward(amount)` is, so it reads nothing.
+        screen.extend(
+            roll.hook_gold
+                .into_iter()
+                .map(|amount| ScreenReward::Gold { amount }),
+        );
         screen.sort_by_key(ScreenReward::rewards_set_index);
         self.reward_sets.push(RewardSet {
             rewards: screen,
@@ -2846,15 +2848,17 @@ impl RunManager {
             self.phase = Phase::CardReward;
             return;
         }
+        // What waited on the sets finishes once no set is open, even when the
+        // offered sets rolled nothing and no screen opened.
+        for purchase in std::mem::take(&mut self.purchases_after_reward_sets) {
+            self.finish_relic_purchase(purchase);
+        }
         let Some(phase) = self.rewards_resume_phase.take() else {
             return;
         };
         self.phase = phase;
         if phase == Phase::CardReward {
             self.advance_after_card_reward();
-        }
-        for slot in std::mem::take(&mut self.restocks_after_reward_sets) {
-            self.restock_slot_if_courier(slot);
         }
         self.drain_post_pick_relic_grants_if_settled();
         self.drain_post_pick_deck_cards_if_settled();
@@ -3781,6 +3785,14 @@ impl RunManager {
     /// content-layer [`ContentCallbacks::restock_shop_entry`], keeping
     /// the streams aligned with C# `RestockAfterPurchase` for any later
     /// shop visit. No-op without Courier or when the callback is unwired.
+    /// A relic purchase's completion: the `on_item_purchased` hook (Maw Bank),
+    /// then The Courier's restock, as [`crate::shop::buy_relic`] and the
+    /// immediate path order them. sts2-agent fork.
+    fn finish_relic_purchase(&mut self, (slot, gold_spent): (crate::shop::ShopSlot, i32)) {
+        let _ = crate::run_effects::dispatch_on_item_purchased(&mut self.run_state, gold_spent);
+        self.restock_slot_if_courier(slot);
+    }
+
     fn restock_slot_if_courier(&mut self, slot: crate::shop::ShopSlot) {
         if !self
             .run_state
@@ -3814,19 +3826,20 @@ impl RunManager {
         let Some(inv) = self.shop_inventory.as_mut() else {
             return ActionResult::InvalidForPhase;
         };
-        match crate::shop::buy_relic(&mut self.run_state, inv, idx) {
-            crate::shop::ShopPurchaseOutcome::Bought => {
-                // sts2-agent fork: a relic that offered a set (Orrery) holds
-                // the restock until the set is done.
-                let slot = crate::shop::ShopSlot::Relic(idx);
+        match crate::shop::buy_relic_before_purchase_hook(&mut self.run_state, inv, idx) {
+            Ok(gold_spent) => {
+                // sts2-agent fork: a relic that offered a set (Orrery) finishes
+                // its purchase (the purchase hook, then the restock) once the
+                // set is done (C# `OnTryPurchaseWrapper` awaits the obtain).
+                let purchase = (crate::shop::ShopSlot::Relic(idx), gold_spent);
                 if self.run_state.offered_reward_sets.is_empty() {
-                    self.restock_slot_if_courier(slot);
+                    self.finish_relic_purchase(purchase);
                 } else {
-                    self.restocks_after_reward_sets.push(slot);
+                    self.purchases_after_reward_sets.push(purchase);
                 }
                 ActionResult::Advanced
             }
-            other => ActionResult::ShopPurchaseFailed(other),
+            Err(other) => ActionResult::ShopPurchaseFailed(other),
         }
     }
 
@@ -5831,12 +5844,10 @@ mod tests {
         }
     }
 
-    /// sts2-agent fork: a bought relic that offers a set holds The Courier's
-    /// restock until the set is done (C# restocks after `OnTryPurchase`, which
-    /// awaits the obtain and its rewards).
-    #[test]
-    #[serial_test::serial(global_registry)]
-    fn a_relic_purchase_restocks_only_after_the_set_it_offered() {
+    /// A shop with The Courier selling `relic` for 100 gold, whose pickup
+    /// offers a set (the listeners below), with a purchase hook that counts on
+    /// Anchor's counter (sts2-agent fork test scaffolding).
+    fn courier_shop_selling(relic: crate::RelicId) -> RunManager {
         fn stub_restock(
             _rs: &mut RunState,
             inv: &mut crate::shop::ShopInventory,
@@ -5846,7 +5857,7 @@ mod tests {
                 inv.relics[i].price = 42;
             }
         }
-        fn anchor_offers_a_set(rs: &mut RunState) -> crate::EffectResult {
+        fn offers_a_potion(rs: &mut RunState) -> crate::EffectResult {
             if rs.interactive_rewards && rs.last_obtained_relic == Some(crate::RelicId::Anchor) {
                 rs.offer_custom_rewards(
                     vec![crate::runstate::OfferedReward::Potion(Some(
@@ -5858,31 +5869,99 @@ mod tests {
             }
             crate::EffectResult::NotImplemented
         }
+        // Rolls nothing: raw core wires no card-reward callback.
+        fn offers_an_unrollable_card(rs: &mut RunState) -> crate::EffectResult {
+            if rs.interactive_rewards && rs.last_obtained_relic == Some(crate::RelicId::Akabeko) {
+                rs.offer_custom_rewards(
+                    vec![crate::runstate::OfferedReward::Card {
+                        options: None,
+                        upgraded: Vec::new(),
+                    }],
+                    true,
+                );
+                return crate::EffectResult::Resolved;
+            }
+            crate::EffectResult::NotImplemented
+        }
+        fn counts_purchases(rs: &mut RunState, _gold: i32) -> crate::EffectResult {
+            *rs.relic_counters.entry(crate::RelicId::Anchor).or_insert(0) += 1;
+            crate::EffectResult::Resolved
+        }
         crate::run_effects::register_after_obtained(
             crate::RelicId::Anchor,
-            anchor_offers_a_set as crate::run_effects::AfterObtainedRunFn,
+            offers_a_potion as crate::run_effects::AfterObtainedRunFn,
+        );
+        crate::run_effects::register_after_obtained(
+            crate::RelicId::Akabeko,
+            offers_an_unrollable_card as crate::run_effects::AfterObtainedRunFn,
+        );
+        crate::run_effects::register_on_item_purchased(
+            crate::RelicId::Anchor,
+            counts_purchases as crate::run_effects::OnItemPurchasedRunFn,
         );
         let mut inv = make_test_shop_inventory();
         inv.relics[0].price = 100;
+        inv.relics[0].relic_id = Some(relic);
         let mut rm = make_rm_in_shop_phase_with_inventory(inv);
         rm.run_state.interactive_rewards = true;
         rm.run_state.max_potion_slots = 3;
         rm.callbacks.restock_shop_entry = Some(stub_restock);
         rm.run_state.relics.push(crate::RelicId::TheCourier);
         rm.run_state.gold = 500;
+        rm
+    }
+
+    fn purchases_counted(rm: &RunManager) -> i32 {
+        rm.run_state
+            .relic_counters
+            .get(&crate::RelicId::Anchor)
+            .copied()
+            .unwrap_or(0)
+    }
+
+    fn relic_slot_price(rm: &RunManager) -> i32 {
+        rm.shop_inventory.as_ref().unwrap().relics[0].price
+    }
+
+    /// sts2-agent fork: a bought relic that offers a set finishes its purchase
+    /// (the purchase hook, then The Courier's restock) only once the set is
+    /// done (C# `OnTryPurchaseWrapper` runs both after `OnTryPurchase`, which
+    /// awaits the obtain and its rewards).
+    #[test]
+    #[serial_test::serial(global_registry)]
+    fn a_relic_purchase_completes_only_after_the_set_it_offered() {
+        let mut rm = courier_shop_selling(crate::RelicId::Anchor);
         assert_eq!(
             rm.take_action(RunAction::ShopBuyRelic { idx: 0 }),
             ActionResult::Advanced
         );
         assert_eq!(rm.phase(), Phase::CardReward, "the set is shown");
-        let price = |rm: &RunManager| rm.shop_inventory.as_ref().unwrap().relics[0].price;
         assert!(
-            !crate::shop::is_shop_entry_available(price(&rm)),
+            !crate::shop::is_shop_entry_available(relic_slot_price(&rm)),
             "not restocked yet"
         );
+        assert_eq!(purchases_counted(&rm), 0, "the purchase hook waits too");
         rm.take_action(RunAction::ClaimReward { idx: 0 });
         assert_eq!(rm.phase(), Phase::Shop, "back in the shop");
-        assert_eq!(price(&rm), 42, "restocked once the set is done");
+        assert_eq!(relic_slot_price(&rm), 42, "restocked once the set is done");
+        assert_eq!(purchases_counted(&rm), 1, "the hook fired once");
+    }
+
+    /// sts2-agent fork: a set that rolls nothing shows no screen, and the
+    /// purchase still completes, once.
+    #[test]
+    #[serial_test::serial(global_registry)]
+    fn a_relic_purchase_completes_when_its_set_rolls_nothing() {
+        let mut rm = courier_shop_selling(crate::RelicId::Akabeko);
+        assert_eq!(
+            rm.take_action(RunAction::ShopBuyRelic { idx: 0 }),
+            ActionResult::Advanced
+        );
+        assert!(rm.reward_screen().is_none());
+        assert_eq!(rm.phase(), Phase::Shop);
+        assert_eq!(relic_slot_price(&rm), 42);
+        assert_eq!(purchases_counted(&rm), 1);
+        assert!(rm.purchases_after_reward_sets.is_empty());
     }
 
     /// The screen offers a claim per reward and a proceed; gold applies on

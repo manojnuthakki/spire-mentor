@@ -517,3 +517,24 @@ fn room_screen_with_relic(relic: RelicId, extras: Vec<OfferedReward>) -> RunMana
     }
     panic!("no rewards screen");
 }
+
+#[test]
+fn a_hooks_fixed_gold_reads_nothing_off_the_rewards_stream() {
+    // C# `GenerateWithoutOffering` populates a hook's addition only if it
+    // isn't populated; Amethyst Aubergine's `GoldReward(15)` is. Strawberry
+    // has no reward effect: the control.
+    let with = room_screen_with_relic(RelicId::AmethystAubergine, Vec::new());
+    let without = room_screen_with_relic(RelicId::Strawberry, Vec::new());
+    assert_eq!(
+        with.run_state.rng.rewards.counter(),
+        without.run_state.rng.rewards.counter()
+    );
+    let mut a = with.run_state.rng.rewards.clone();
+    let mut b = without.run_state.rng.rewards.clone();
+    assert_eq!(a.next_int(0, 1_000_000), b.next_int(0, 1_000_000));
+    assert_eq!(
+        with.reward_screen().unwrap().len(),
+        without.reward_screen().unwrap().len() + 1,
+        "the hook's gold is listed"
+    );
+}
