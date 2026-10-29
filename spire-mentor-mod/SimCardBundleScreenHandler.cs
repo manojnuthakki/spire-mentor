@@ -26,7 +26,7 @@ public class SimCardBundleScreenHandler : IScreenHandler, IHandler
 {
     private const string ScreenName = nameof(NChooseABundleSelectionScreen);
     private const int PreviewSettleMs = 500;
-    private static readonly TimeSpan ConfirmCloseWait = TimeSpan.FromSeconds(10);
+    private static TimeSpan ConfirmCloseWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
 
     public Type ScreenType => typeof(NChooseABundleSelectionScreen);
 

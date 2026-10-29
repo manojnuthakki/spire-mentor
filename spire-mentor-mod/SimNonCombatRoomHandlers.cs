@@ -219,7 +219,7 @@ internal static class SimRelicOptions
 /// <summary>Rest site: the agent picks one of the enabled campfire options.</summary>
 public class SimRestSiteRoomHandler : IRoomHandler, IHandler
 {
-    private static readonly TimeSpan ProceedWait = TimeSpan.FromSeconds(10);
+    private static TimeSpan ProceedWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
 
     public RoomType[] HandledTypes => new[] { RoomType.RestSite };
 
@@ -284,7 +284,7 @@ public class SimTreasureRoomHandler : IRoomHandler, IHandler
 {
     private const int ChestOpenSettleMs = 1000;
     private const int RelicPickSettleMs = 500;
-    private static readonly TimeSpan ProceedWait = TimeSpan.FromSeconds(5);
+    private static TimeSpan ProceedWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(5));
 
     public RoomType[] HandledTypes => new[] { RoomType.Treasure };
 
@@ -608,17 +608,17 @@ public class SimEventRoomHandler : IRoomHandler, IHandler
 {
     private const int MaxDecisionIterations = 50;
     private const int PostCombatSettleMs = 500;
-    private static readonly TimeSpan ProceedCloseWait = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan ChoiceResultWait = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan OptionsLoadWait = TimeSpan.FromSeconds(30);
+    private static TimeSpan ProceedCloseWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(5));
+    private static TimeSpan ChoiceResultWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(5));
+    private static TimeSpan OptionsLoadWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(30));
     private const int OptionsWaitReportEveryPolls = 50;
-    private static readonly TimeSpan FakeMerchantProceedWait = TimeSpan.FromSeconds(10);
+    private static TimeSpan FakeMerchantProceedWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
 
     private const string AncientDialogueHitbox = "%DialogueHitbox";
     private const int AncientMaxClicks = 50;
     private const int AncientHitboxPollMs = 100;
     private const int AncientClickSettleMs = 500;
-    private static readonly TimeSpan AncientOptionsWait = TimeSpan.FromSeconds(10);
+    private static TimeSpan AncientOptionsWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
 
     public RoomType[] HandledTypes => new[] { RoomType.Event };
 

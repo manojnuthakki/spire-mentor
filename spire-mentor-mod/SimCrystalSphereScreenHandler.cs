@@ -29,8 +29,8 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
     private const string CellsPath = "%Cells";
     private const int OpeningSettleMs = 1000;
     private const int CellClickSettleMs = 500;
-    private static readonly TimeSpan OutcomeWait = TimeSpan.FromSeconds(15);
-    private static readonly TimeSpan ProceedCloseWait = TimeSpan.FromSeconds(10);
+    private static TimeSpan OutcomeWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(15));
+    private static TimeSpan ProceedCloseWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
     private const int OverlayRemovalSettleMs = 100;
 
     public Type ScreenType => typeof(NCrystalSphereScreen);

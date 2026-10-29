@@ -31,7 +31,7 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
     private const string GoldLabelPrefix = "gold:";
 
     private const int RewardClickSettleMs = 500;
-    private static readonly TimeSpan ProceedCloseWait = TimeSpan.FromSeconds(10);
+    private static TimeSpan ProceedCloseWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
 
     public Type ScreenType => typeof(NRewardsScreen);
 

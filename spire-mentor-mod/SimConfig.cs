@@ -189,6 +189,19 @@ public sealed class SimConfig
 
     public const int DefaultStartupWaitSeconds = 60;
 
+    /// <summary>
+    /// A factor on autopilot's fixed waits once it runs (the run's first
+    /// room, an event's proceed, a rewards screen, a combat phase, ...; see
+    /// <see cref="Scaled"/>): 1 by default, and a value below 1 or not finite
+    /// keeps 1, so a wait is never shortened. An emulated launch (box64)
+    /// raises it: there the run's first room took more than 60 s.
+    /// </summary>
+    public double WaitScale { get; init; } = 1.0;
+
+    /// <summary><paramref name="wait"/> times <see cref="WaitScale"/> (when it is valid).</summary>
+    public TimeSpan Scaled(TimeSpan wait) =>
+        double.IsFinite(WaitScale) && WaitScale > 1 ? wait * WaitScale : wait;
+
     /// <summary>The startup wait as a span, invalid values (below 1) read as the default.</summary>
     public TimeSpan StartupWait =>
         TimeSpan.FromSeconds(StartupWaitSeconds >= 1 ? StartupWaitSeconds : DefaultStartupWaitSeconds);
@@ -299,6 +312,7 @@ public sealed class SimConfig
                     root, "run_timeout_minutes", defaults.RunTimeoutMinutes),
                 StartupWaitSeconds = ReadInt(
                     root, "startup_wait_seconds", defaults.StartupWaitSeconds),
+                WaitScale = ReadDouble(root, "wait_scale", defaults.WaitScale),
             };
         }
         catch (Exception ex)
