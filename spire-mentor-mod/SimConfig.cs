@@ -179,6 +179,21 @@ public sealed class SimConfig
     public int StallTimeoutSeconds { get; init; } = 300;
 
     /// <summary>
+    /// How long autopilot waits at launch for the game node and a visible
+    /// main menu, in seconds, in all (it gives up without retrying). 60 by
+    /// default; a value below 1 keeps the default. Under box64 on a 6-core
+    /// arm64 machine the main menu can take about two minutes, so an
+    /// emulated launch sets it higher.
+    /// </summary>
+    public int StartupWaitSeconds { get; init; } = DefaultStartupWaitSeconds;
+
+    public const int DefaultStartupWaitSeconds = 60;
+
+    /// <summary>The startup wait as a span, invalid values (below 1) read as the default.</summary>
+    public TimeSpan StartupWait =>
+        TimeSpan.FromSeconds(StartupWaitSeconds >= 1 ? StartupWaitSeconds : DefaultStartupWaitSeconds);
+
+    /// <summary>
     /// Frame-rate cap applied WHILE an unattended agent/advisor think is in
     /// flight (see SimThinkFps.cs), released as soon as the answer arrives.
     /// The searches run in another process on this same machine, and
@@ -282,6 +297,8 @@ public sealed class SimConfig
                 ThinkFps = ReadInt(root, "think_fps", defaults.ThinkFps),
                 RunTimeoutMinutes = ReadInt(
                     root, "run_timeout_minutes", defaults.RunTimeoutMinutes),
+                StartupWaitSeconds = ReadInt(
+                    root, "startup_wait_seconds", defaults.StartupWaitSeconds),
             };
         }
         catch (Exception ex)

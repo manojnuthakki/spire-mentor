@@ -147,6 +147,7 @@ settings. Fields (authoritative docs: `SimConfig.cs`):
 | `debug_player_hp` | `0` | Testing cheat: `>0` sets player HP at run start; never use for measurements |
 | `overlay` | `true` | Render autopilot `annotations` (status chip + per-card score labels) in the HUD |
 | `stall_timeout_seconds` | `300` | Mod-side stall limit replacing the game's 30 s AutoSlay watchdog |
+| `startup_wait_seconds` | `60` | Autopilot's wait at launch for the game node and a visible main menu, in all (no retry). Below 1 keeps the default. Raise it for an emulated launch (box64), where the menu can take about two minutes |
 | `run_timeout_minutes` | `360` | Absolute per-run wall-clock cap |
 
 \* the template ships `"normal"` for player installs; the in-code default is

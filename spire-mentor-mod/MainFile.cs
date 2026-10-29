@@ -296,18 +296,19 @@ public static class MainFile
     /// </summary>
     private static async Task LaunchSimAutoSlayAsync(SimConfig config)
     {
-        Logger.Log("Autopilot: waiting for the game and the main menu...");
-        using var startupCts = new CancellationTokenSource(GameStartupWait);
+        TimeSpan wait = config.StartupWait;
+        Logger.Log($"Autopilot: waiting for the game and the main menu (up to {wait.TotalSeconds:0} s)...");
+        using var startupCts = new CancellationTokenSource(wait);
         CancellationToken ct = startupCts.Token;
 
-        await WaitHelper.Until(() => NGame.Instance != null, ct, GameStartupWait,
+        await WaitHelper.Until(() => NGame.Instance != null, ct, wait,
             "NGame.Instance did not appear");
 
         await WaitHelper.Until(() =>
         {
             Window root = ((SceneTree)Engine.GetMainLoop()).Root;
             return root.GetNodeOrNull<Control>(MainMenuNodePath) is Control menu && menu.IsVisibleInTree();
-        }, ct, GameStartupWait, "Main menu did not become visible");
+        }, ct, wait, "Main menu did not become visible");
 
         _autoSlayer = new SimAutoSlayer(config);
         _autoSlayer.Start();
