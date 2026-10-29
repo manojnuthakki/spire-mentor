@@ -646,7 +646,7 @@ public class SimAutoSlayer
         if (NOverlayStack.Instance == null)
         {
             await WaitHelper.Until(() => NOverlayStack.Instance != null, ct,
-                AutoSlayConfig.nodeWaitTimeout, "Overlay stack never appeared");
+                SimConfig.Instance.Scaled(AutoSlayConfig.nodeWaitTimeout), "Overlay stack never appeared");
         }
 
         var handledThisDrain = new HashSet<object>(ReferenceEqualityComparer.Instance);
@@ -956,7 +956,7 @@ public class SimAutoSlayer
         await WaitHelper.Until(
             () => IsShown(mainMenu.GetNodeOrNull<Control>(CharSelectScreenNodePath))
                   || IsShown(mainMenu.GetNodeOrNull<Control>(StandardModeButtonPath)),
-            ct, AutoSlayConfig.nodeWaitTimeout, "Neither character select nor standard run appeared");
+            ct, SimConfig.Instance.Scaled(AutoSlayConfig.nodeWaitTimeout), "Neither character select nor standard run appeared");
 
         // CLEANROOM-Q3: "visible" for menu nodes is read as IsVisibleInTree.
         NClickableControl? standardRun = mainMenu.GetNodeOrNull<NClickableControl>(StandardModeButtonPath);
@@ -966,7 +966,7 @@ public class SimAutoSlayer
             await UiHelper.Click(standardRun!);
             await WaitHelper.Until(
                 () => IsShown(mainMenu.GetNodeOrNull<Control>(CharSelectScreenNodePath)),
-                ct, AutoSlayConfig.nodeWaitTimeout, "Character select did not open");
+                ct, SimConfig.Instance.Scaled(AutoSlayConfig.nodeWaitTimeout), "Character select did not open");
         }
 
         Control charSelect = RequireNode<Control>(mainMenu, CharSelectScreenNodePath);
