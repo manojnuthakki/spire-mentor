@@ -5765,6 +5765,8 @@ public partial class RunSimulator
         InstallShopPatches();
         InstallEventResumePatch();
         InstallFoulPotionPatch();
+        // sts2-agent fork: the first patch has loaded MonoMod's helper; delete its file.
+        ExHelperCleanup.Run();
 
         // v0.107.1: ReflectionHelper.ModTypes now throws if ModManager hasn't been
         // initialized (ModManager.State == None), and the run-start path reads it.

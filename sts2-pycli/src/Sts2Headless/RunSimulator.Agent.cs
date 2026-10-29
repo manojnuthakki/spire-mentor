@@ -510,6 +510,36 @@ internal static class EngineErrors
 }
 
 /// <summary>
+/// sts2-agent fork: MonoMod (inside 0Harmony) writes its native exception helper to
+/// <c>/tmp/mm-exhelper.so.XXXXXX</c> (a fixed path, not TMPDIR), loads it and never deletes
+/// it, so every host process left one in /tmp. Once it is loaded, delete this process's own
+/// copy: the mapping stays valid, and the space is freed when the process exits, even if
+/// it is killed. Elsewhere than Linux (no /proc) this does nothing.
+/// </summary>
+internal static class ExHelperCleanup
+{
+    private const string Prefix = "/tmp/mm-exhelper.";
+
+    public static void Run()
+    {
+        try
+        {
+            if (!File.Exists("/proc/self/maps")) return;
+            var paths = File.ReadLines("/proc/self/maps")
+                .Select(l => l.IndexOf(Prefix, StringComparison.Ordinal) is var at and >= 0 ? l[at..] : null)
+                .Where(p => p != null && !p.EndsWith(" (deleted)"))
+                .Distinct()
+                .ToList();
+            foreach (var path in paths) File.Delete(path!);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[WARN] ExHelperCleanup: {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+}
+
+/// <summary>
 /// sts2-agent fork: test-only fault injection, for scenarios that check how failures
 /// are reported. <c>STS2_TEST_FAULT</c> is <c>hang:TYPE:METHOD</c> or
 /// <c>throw:TYPE:METHOD</c> or <c>noop:TYPE:METHOD</c>, naming a game method that returns a
