@@ -441,7 +441,12 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
             ct.ThrowIfCancellationRequested();
             attempts++;
 
-            ShopChoice choice = await ChooseShopOption(PurchasableSlots(room), ct);
+            ShopChoice choice = await ChooseShopOption(room, ct);
+            if (choice.Potion)
+            {
+                // Drunk or discarded: the belt (and what a potion slot sells) changed.
+                continue;
+            }
             if (choice.Leave)
             {
                 stoppedEarly = true;
@@ -456,11 +461,19 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
             await SimAutoSlayer.AwaitWithScreenDrainAsync(purchase, ct, "shop purchase of " + ShopEntryId(slot));
             await Task.Delay(PurchaseSettleMs, ct);
 
-            if (SimRoomNodes.OverlayUp())
+            // Stay in the shop (the removal's selection, a relic's screen): drain what
+            // the purchase left up, then shop on with the inventory open again.
+            await SimAutoSlayer.DrainOverlaysAsync(ct, "shop purchase of " + ShopEntryId(slot));
+            if (!GodotObject.IsInstanceValid(room) || !room.IsInsideTree())
             {
-                Logger.Log("[SimShop] Overlay up after purchase; the screen drain takes over");
-                stoppedEarly = true;
-                break;
+                Logger.Log("[SimShop] The shop closed after a purchase");
+                return;
+            }
+            if (!room.Inventory.IsOpen)
+            {
+                Logger.Log("[SimShop] Reopening merchant inventory");
+                room.OpenInventory();
+                await Task.Delay(InventoryOpenSettleMs, ct);
             }
         }
 
@@ -484,28 +497,47 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
     }
 
     /// <summary>
-    /// Stocked, affordable slots in inventory order (card removal included);
-    /// potions are left out when the player cannot take them (full belt, Sozu).
+    /// Why the game's purchase would refuse this slot now, or null if it would go
+    /// through (MerchantEntry.OnTryPurchaseWrapper: stock, gold; the removal: unused, a
+    /// removable card; a potion: PotionCmd's ShouldProcurePotion hooks, then a free belt
+    /// slot). The reasons are the Headless host's (RunSimulator.Shop.cs, ShopEntryReason).
     /// </summary>
-    private static List<NMerchantSlot> PurchasableSlots(NMerchantRoom room)
+    internal static string? ShopEntryReason(NMerchantSlot slot, Player? me)
     {
-        Player? me = LocalContext.GetMe(RunManager.Instance.DebugOnlyGetState());
-        return room.Inventory.GetAllSlots()
-            .Where(s => s.Entry != null && s.Entry.IsStocked && s.Entry.EnoughGold)
-            .Where(s => !(me != null && s.Entry is MerchantPotionEntry p && !SimPotionRules.CanProcure(me, p.Model)))
-            .ToList();
+        MerchantEntry? entry = slot.Entry;
+        if (entry == null)
+            return "sold_out";
+        if (entry is MerchantCardRemovalEntry removal)
+        {
+            if (removal.Used) return "removal_used";
+        }
+        else if (!entry.IsStocked) return "sold_out";
+        if (!entry.EnoughGold) return "not_enough_gold";
+        if (me == null) return null;
+        if (entry is MerchantCardRemovalEntry && !me.Deck.Cards.Any(c => c != null && c.IsRemovable))
+            return "no_removable_cards";
+        if (entry is MerchantPotionEntry potion)
+        {
+            if (potion.Model != null && !Hook.ShouldProcurePotion(me.RunState, me.Creature.CombatState, potion.Model, me))
+                return "potion_forbidden";
+            if (!me.HasOpenPotionSlots) return "belt_full";
+        }
+        return null;
     }
 
     /// <summary>
-    /// Option 0 leaves; option i (1..n) buys purchasable[i-1]. With nothing
-    /// purchasable there is no real choice, so it leaves without asking.
+    /// Option 0 leaves; option i (1..n) buys the i-th purchasable slot in inventory order
+    /// (card removal included). The message also carries the whole shopfront
+    /// (`shopfront`: every slot, sold or unaffordable, with why it can't be bought), and
+    /// takes the potion verb outside combat (SimOutOfCombatPotions). Asked even with
+    /// nothing to buy, as the Headless host shows the shop then.
     /// </summary>
-    private static async Task<ShopChoice> ChooseShopOption(List<NMerchantSlot> purchasable, CancellationToken ct)
+    private static async Task<ShopChoice> ChooseShopOption(NMerchantRoom room, CancellationToken ct)
     {
-        if (purchasable.Count == 0)
-        {
-            return ShopChoice.LeaveShop;
-        }
+        Player? me = LocalContext.GetMe(RunManager.Instance.DebugOnlyGetState());
+        List<NMerchantSlot> all = room.Inventory.GetAllSlots().ToList();
+        List<string?> reasons = all.Select(s => ShopEntryReason(s, me)).ToList();
+        List<NMerchantSlot> purchasable = all.Where((_, i) => reasons[i] == null).ToList();
 
         var options = new List<Dictionary<string, object>>
         {
@@ -520,6 +552,16 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
         };
         options.AddRange(purchasable.Select((slot, i) => ShopOption(slot, i + 1)));
         int? purgeCost = SafePurgeCost(purchasable);
+        int next = 1;
+        List<Dictionary<string, object>> shopfront = all.Select((slot, i) =>
+        {
+            Dictionary<string, object> row = ShopStockRow(slot);
+            row["slot"] = i;
+            row["reason"] = reasons[i]!;
+            row["option_index"] = reasons[i] == null ? next++ : null!;
+            row["on_sale"] = slot.Entry is MerchantCardEntry { IsOnSale: true };
+            return row;
+        }).ToList();
 
         int index = await SimAgentChoice.AskAsync(
             (_, player) =>
@@ -529,6 +571,7 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
                     [NonCombatBridgeProtocol.TypeField] = NonCombatBridgeProtocol.ShopState,
                     ["options"] = options,
                     ["player_gold"] = player?.Gold ?? 0,
+                    ["shopfront"] = shopfront,
                 };
                 if (purgeCost.HasValue)
                 {
@@ -536,8 +579,10 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
                 }
                 return body;
             },
-            options.Count, NonCombatBridgeProtocol.ShopState, "SimShop", ct, negativeMeansFirst: true);
+            options.Count, NonCombatBridgeProtocol.ShopState, "SimShop", ct, negativeMeansFirst: true, potions: true);
 
+        if (index == SimAgentChoice.PotionHandled)
+            return ShopChoice.PotionActed;
         return index == 0 ? ShopChoice.LeaveShop : new ShopChoice(false, purchasable[index - 1], index);
     }
 
@@ -639,9 +684,12 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
     };
 
     /// <summary>Outcome of one shop decision: leave, or buy <see cref="Slot"/>.</summary>
-    private readonly record struct ShopChoice(bool Leave, NMerchantSlot? Slot, int OptionIndex)
+    private readonly record struct ShopChoice(bool Leave, NMerchantSlot? Slot, int OptionIndex, bool Potion = false)
     {
         public static ShopChoice LeaveShop => new(true, null, 0);
+
+        /// <summary>A potion was drunk or discarded: ask again.</summary>
+        public static ShopChoice PotionActed => new(false, null, -1, true);
     }
 
 }
