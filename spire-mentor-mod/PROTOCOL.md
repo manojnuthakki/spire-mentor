@@ -312,6 +312,13 @@ and a fresh re-send; the disabled button is never clicked.
 | `options` | array | Index 0 is always `{index:0, id:"leave_shop", action:"leave_shop", ...}`; remaining entries are `{index, id:<action>, action:<action>, label, description, enabled, price, item?}` where `<action>` is `buy_card`\|`buy_relic`\|`buy_potion`\|`remove_card`\|`buy_item`. `item` (new, optional) is the full Card/Relic/Potion object for that slot when resolvable. |
 | `player_gold` | int | **New.** Also available via `run_state.gold`, duplicated here for convenience. |
 | `purge_cost` | int | **New, optional.** Present iff a card-removal slot is stocked; its current price. |
+| `shopfront` | array | *(sts2-agent fork)* Every merchant slot in inventory order (character cards, colorless cards, relics, potions, the card removal), sold or unaffordable included: `{slot, kind, label, price, stocked, affordable, item?, on_sale, reason, option_index}`. `kind` is the option action above; `item` the Card/Relic/Potion object while stocked; `on_sale` a card's sale; `reason` why the game would refuse the purchase now (`sold_out`, `removal_used`, `not_enough_gold`, `no_removable_cards`, `potion_forbidden`, `belt_full`; the Headless host's reasons) or null; `option_index` the slot's index in `options` (null when `reason` isn't). |
+
+`options` lists exactly the slots whose `reason` is null. The shop is asked
+even with nothing to buy (leave, and potions: `potion_verb`, section 4). After
+a purchase the handler drains any screen the purchase left up (the card
+removal's selection is a `card_select`), reopens the inventory if it closed,
+and asks again: the visit ends only on `leave_shop` (or `skip`).
 
 ### `event`
 

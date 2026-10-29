@@ -769,6 +769,22 @@ public class SimAutoSlayer
 
 
     /// <summary>
+    /// Drains every overlay screen stacked now, with the main loop's settle
+    /// first, for a room handler that goes on after a command whose screen
+    /// outlived it (the shop after a purchase). Nothing stacked: returns.
+    /// </summary>
+    internal static async Task DrainOverlaysAsync(CancellationToken ct, string context)
+    {
+        SimAutoSlayer? slayer = _active;
+        if (slayer == null || (NOverlayStack.Instance?.ScreenCount ?? 0) == 0)
+            return;
+        Logger.Log($"[SimAutoSlayer] {context}: overlay screen still up, draining it inline");
+        await Task.Delay(RoomSettleMs, ct);
+        await slayer.ClearOverlaysAsync(ct);
+        CurrentWatchdog?.Reset($"Drained screen left by {context}");
+    }
+
+    /// <summary>
     /// Leaves an event room cleanly after the main drain: clicks a final
     /// proceed option, drains screens the event keeps opening, and hands any
     /// new decision page back to the (agent-driven) event handler.
