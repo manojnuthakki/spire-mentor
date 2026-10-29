@@ -59,7 +59,7 @@ public class SimCombatHandler : IRoomHandler, IHandler
     {
         Logger.Log("[SimCombat] Waiting for combat to start");
         await WaitHelper.Until(() => CombatManager.Instance.IsInProgress, ct,
-            AutoSlayConfig.nodeWaitTimeout, "Combat never started");
+            SimConfig.Instance.Scaled(AutoSlayConfig.nodeWaitTimeout), "Combat never started");
         Logger.Log("[SimCombat] Combat started");
 
         Player player = LocalContext.GetMe(RunManager.Instance.DebugOnlyGetState())

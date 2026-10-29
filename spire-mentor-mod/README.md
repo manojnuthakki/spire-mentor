@@ -148,7 +148,7 @@ settings. Fields (authoritative docs: `SimConfig.cs`):
 | `overlay` | `true` | Render autopilot `annotations` (status chip + per-card score labels) in the HUD |
 | `stall_timeout_seconds` | `300` | Mod-side stall limit replacing the game's 30 s AutoSlay watchdog |
 | `startup_wait_seconds` | `60` | Autopilot's wait at launch for the game node and a visible main menu, in all (no retry). Below 1 keeps the default. Raise it for an emulated launch (box64), where the menu can take about two minutes |
-| `wait_scale` | `1.0` | Factor on autopilot's fixed waits once it runs (first room, event proceed, rewards, combat phases, ...); below 1 or not finite keeps 1, so no wait is shortened. Raise it for an emulated launch (box64) |
+| `wait_scale` | `1.0` | Factor on autopilot's fixed waits once it runs (first room, event proceed, rewards, combat phases, the game's `nodeWaitTimeout` and `mapScreenTimeout`, ...); below 1 or not finite keeps 1, so no wait is shortened. Raise it for an emulated launch (box64) |
 | `run_timeout_minutes` | `360` | Absolute per-run wall-clock cap |
 
 \* the template ships `"normal"` for player installs; the in-code default is

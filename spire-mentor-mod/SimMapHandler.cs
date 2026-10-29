@@ -42,7 +42,7 @@ public class SimMapHandler : IScreenHandler, IHandler
         Logger.Log("[SimMap] Waiting for the map screen");
         NRun runNode = SimRoomNodes.SceneRoot.GetNode<NRun>(RunNodePath);
         await WaitHelper.Until(() => runNode.GlobalUi.MapScreen.IsVisibleInTree(), ct,
-            AutoSlayConfig.mapScreenTimeout, "Map screen never became visible");
+            SimConfig.Instance.Scaled(AutoSlayConfig.mapScreenTimeout), "Map screen never became visible");
         NMapScreen map = runNode.GlobalUi.MapScreen;
 
         RunState? runState = RunManager.Instance.DebugOnlyGetState();
@@ -81,7 +81,7 @@ public class SimMapHandler : IScreenHandler, IHandler
         try
         {
             await UiHelper.Click(point);
-            await WaitHelper.ForTask(entered.Task, ct, AutoSlayConfig.mapScreenTimeout,
+            await WaitHelper.ForTask(entered.Task, ct, SimConfig.Instance.Scaled(AutoSlayConfig.mapScreenTimeout),
                 "Next room was not entered after clicking the map point");
         }
         finally

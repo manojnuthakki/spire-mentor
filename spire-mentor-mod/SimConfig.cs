@@ -191,7 +191,8 @@ public sealed class SimConfig
 
     /// <summary>
     /// A factor on autopilot's fixed waits once it runs (the run's first
-    /// room, an event's proceed, a rewards screen, a combat phase, ...; see
+    /// room, an event's proceed, a rewards screen, a combat phase, the
+    /// game's own AutoSlayConfig.nodeWaitTimeout and mapScreenTimeout, ...; see
     /// <see cref="Scaled"/>): 1 by default, and a value below 1 or not finite
     /// keeps 1, so a wait is never shortened. An emulated launch (box64)
     /// raises it: there the run's first room took more than 60 s.
