@@ -128,9 +128,17 @@ public class SimMapHandler : IScreenHandler, IHandler
         while (true)
         {
             SimStateExtractor.ApplyEnvelope(message, runState, player);
+            message.Remove(SimOutOfCombatPotions.PotionVerbField);
+            SimOutOfCombatPotions.Offer(message, player);
             long stateId = SimAgentChoice.ReadStateId(message);
             string json = JsonSerializer.Serialize(message);
             string reply = await SimAgentGate.RequestActionAsync(json, ct, "map_select");
+            if (message.ContainsKey(SimOutOfCombatPotions.PotionVerbField) && SimOutOfCombatPotions.IsPotionVerb(reply))
+            {
+                // Drunk or discarded on the map: ask again with the belt as it is now.
+                await SimOutOfCombatPotions.HandleAsync(reply, stateId, runState, player, ct);
+                continue;
+            }
             try
             {
                 if (!SimProtocolHelpers.TryParse(reply, runState, player, out JsonElement root) ||

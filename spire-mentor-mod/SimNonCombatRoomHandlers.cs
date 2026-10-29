@@ -138,6 +138,13 @@ internal static class SimAgentChoice
     /// <param name="rejectAtReply">Re-checks an in-range index when the reply
     /// arrives; a non-null result is the detail of an invalid_index error and
     /// the agent is asked again (e.g. "proceed" no longer enabled).</param>
+    /// <param name="rejectReply">Like <paramref name="rejectAtReply"/>, with the
+    /// parsed reply (fields beside the index: the Crystal Sphere's tool); a
+    /// non-null result is (error code, detail).</param>
+    /// <param name="potions">The decision takes the <c>potion</c> verb outside a
+    /// fight (SimOutOfCombatPotions): a potion reply is answered and
+    /// <see cref="PotionHandled"/> returned, so the caller re-reads its screen
+    /// and asks again.</param>
     internal static async Task<int> AskAsync(
         Func<RunState?, Player?, Dictionary<string, object>> buildBody,
         int optionCount,
@@ -145,7 +152,9 @@ internal static class SimAgentChoice
         string logTag,
         CancellationToken ct,
         bool negativeMeansFirst = false,
-        Func<int, string?>? rejectAtReply = null)
+        Func<int, string?>? rejectAtReply = null,
+        Func<int, JsonElement, (string Code, string Detail)?>? rejectReply = null,
+        bool potions = false)
     {
         while (true)
         {
@@ -155,10 +164,20 @@ internal static class SimAgentChoice
             Player? player = LocalContext.GetMe(runState);
             Dictionary<string, object> message = buildBody(runState, player);
             SimStateExtractor.ApplyEnvelope(message, runState, player);
+            if (potions)
+            {
+                SimOutOfCombatPotions.Offer(message, player);
+            }
             long stateId = ReadStateId(message);
             string json = JsonSerializer.Serialize(message);
 
             string reply = await SimAgentGate.RequestActionAsync(json, ct, context);
+            if (potions && message.ContainsKey(SimOutOfCombatPotions.PotionVerbField)
+                && SimOutOfCombatPotions.IsPotionVerb(reply))
+            {
+                await SimOutOfCombatPotions.HandleAsync(reply, stateId, runState, player, ct);
+                return PotionHandled;
+            }
             int? parsed = SimProtocolHelpers.ReadChoiceIndex(reply, stateId, runState, player, negativeMeansFirst);
             if (parsed == null)
             {
@@ -174,6 +193,16 @@ internal static class SimAgentChoice
             if (index >= 0 && index < optionCount)
             {
                 string? rejection = rejectAtReply?.Invoke(index);
+                if (rejection == null && rejectReply != null)
+                {
+                    using JsonDocument doc = JsonDocument.Parse(reply);  // parsed once already
+                    if (rejectReply(index, doc.RootElement) is { } refused)
+                    {
+                        SimProtocolHelpers.SendError(refused.Code, refused.Detail, runState, player);
+                        AutoSlayLog.Warn($"[{logTag}] Choice {index} rejected ({refused.Detail}); asking again");
+                        continue;
+                    }
+                }
                 if (rejection == null)
                 {
                     return index;
@@ -188,6 +217,9 @@ internal static class SimAgentChoice
             AutoSlayLog.Warn($"[{logTag}] Invalid choice index {index} for {optionCount} options; asking again");
         }
     }
+
+    /// <summary>What <see cref="AskAsync"/> returns after answering a potion reply.</summary>
+    internal const int PotionHandled = int.MinValue;
 
     /// <summary>The state_id ApplyEnvelope stored (a boxed long), or -1.</summary>
     internal static long ReadStateId(Dictionary<string, object> message) =>
@@ -231,35 +263,41 @@ public class SimRestSiteRoomHandler : IRoomHandler, IHandler
         NRestSiteRoom room = await WaitHelper.ForNode<NRestSiteRoom>(
             SimRoomNodes.SceneRoot, SimRoomNodes.RestSiteRoomPath, ct);
 
-        // Legality is the option's own IsEnabled: the button stays enabled for
-        // an illegal option and just ignores the click. Same filter as the
-        // advisor lane (SimScreenAdvice.DescribeRestSite).
-        List<NRestSiteButton> buttons = UiHelper.FindAll<NRestSiteButton>(room)
-            .Where(b => b.Option.IsEnabled && room.Options.Contains(b.Option))
-            .ToList();
-        if (buttons.Count == 0)
+        List<NRestSiteButton> buttons;
+        int choice;
+        do
         {
-            AutoSlayLog.Warn("[SimRestSite] No enabled rest site options");
-            return;
-        }
-
-        List<Dictionary<string, object>> options = buttons.Select((b, i) => new Dictionary<string, object>
-        {
-            ["index"] = i,
-            ["id"] = b.Option.OptionId,
-            ["action"] = NonCombatBridgeProtocol.RestOptionAction,
-            ["label"] = b.Option.Title.GetFormattedText(),
-            ["description"] = b.Option.Description.GetFormattedText(),
-            ["enabled"] = b.Option.IsEnabled,
-        }).ToList();
-
-        int choice = await SimAgentChoice.AskAsync(
-            (_, _) => new Dictionary<string, object>
+            // Legality is the option's own IsEnabled: the button stays enabled for
+            // an illegal option and just ignores the click. Same filter as the
+            // advisor lane (SimScreenAdvice.DescribeRestSite). Read again after a
+            // potion (a heal can change what the options say).
+            buttons = UiHelper.FindAll<NRestSiteButton>(room)
+                .Where(b => b.Option.IsEnabled && room.Options.Contains(b.Option))
+                .ToList();
+            if (buttons.Count == 0)
             {
-                [NonCombatBridgeProtocol.TypeField] = NonCombatBridgeProtocol.RestSiteState,
-                ["options"] = options,
-            },
-            options.Count, NonCombatBridgeProtocol.RestSiteState, "SimRestSite", ct);
+                AutoSlayLog.Warn("[SimRestSite] No enabled rest site options");
+                return;
+            }
+
+            List<Dictionary<string, object>> options = buttons.Select((b, i) => new Dictionary<string, object>
+            {
+                ["index"] = i,
+                ["id"] = b.Option.OptionId,
+                ["action"] = NonCombatBridgeProtocol.RestOptionAction,
+                ["label"] = b.Option.Title.GetFormattedText(),
+                ["description"] = b.Option.Description.GetFormattedText(),
+                ["enabled"] = b.Option.IsEnabled,
+            }).ToList();
+
+            choice = await SimAgentChoice.AskAsync(
+                (_, _) => new Dictionary<string, object>
+                {
+                    [NonCombatBridgeProtocol.TypeField] = NonCombatBridgeProtocol.RestSiteState,
+                    ["options"] = options,
+                },
+                options.Count, NonCombatBridgeProtocol.RestSiteState, "SimRestSite", ct, potions: true);
+        } while (choice == SimAgentChoice.PotionHandled);
 
         NRestSiteButton chosen = buttons[choice];
         Logger.Log($"[SimRestSite] Agent chose {chosen.Option.OptionId}");
@@ -310,13 +348,17 @@ public class SimTreasureRoomHandler : IRoomHandler, IHandler
                 .Select((h, i) => SimRelicOptions.Option(i, NonCombatBridgeProtocol.CollectTreasureAction, h.Relic.Model))
                 .ToList();
 
-            int choice = await SimAgentChoice.AskAsync(
-                (_, _) => new Dictionary<string, object>
-                {
-                    [NonCombatBridgeProtocol.TypeField] = NonCombatBridgeProtocol.TreasureState,
-                    ["options"] = options,
-                },
-                options.Count, NonCombatBridgeProtocol.TreasureState, "SimTreasure", ct);
+            int choice;
+            do
+            {
+                choice = await SimAgentChoice.AskAsync(
+                    (_, _) => new Dictionary<string, object>
+                    {
+                        [NonCombatBridgeProtocol.TypeField] = NonCombatBridgeProtocol.TreasureState,
+                        ["options"] = options,
+                    },
+                    options.Count, NonCombatBridgeProtocol.TreasureState, "SimTreasure", ct, potions: true);
+            } while (choice == SimAgentChoice.PotionHandled);
 
             NTreasureRoomRelicHolder chosen = holders[choice];
             Logger.Log($"[SimTreasure] Agent chose relic {chosen.Relic.Model.Id.Entry}");
@@ -683,7 +725,13 @@ public class SimEventRoomHandler : IRoomHandler, IHandler
                 break;
             }
 
-            NEventOptionButton chosen = await ChooseEventOption(options, ct);
+            NEventOptionButton? picked = await ChooseEventOption(options, ct);
+            if (picked == null)
+            {
+                // A potion was drunk or discarded: read the page again (not an iteration).
+                continue;
+            }
+            NEventOptionButton chosen = picked;
             string textKey = chosen.Option.TextKey ?? "";
             bool isProceed = chosen.Option.IsProceed;
             Logger.Log($"[SimEvent] Agent chose option {textKey}");
@@ -874,9 +922,9 @@ public class SimEventRoomHandler : IRoomHandler, IHandler
     /// <summary>
     /// Asks the agent to pick an event option. An out-of-range index, or an
     /// option that is locked by the time the reply arrives, gets invalid_index
-    /// and a re-ask.
+    /// and a re-ask. Null after a potion reply (the page is read again).
     /// </summary>
-    private static async Task<NEventOptionButton> ChooseEventOption(List<NEventOptionButton> options, CancellationToken ct)
+    private static async Task<NEventOptionButton?> ChooseEventOption(List<NEventOptionButton> options, CancellationToken ct)
     {
         List<Dictionary<string, object?>> payload = EventOptions(options);
         int index = await SimAgentChoice.AskAsync(
@@ -888,8 +936,9 @@ public class SimEventRoomHandler : IRoomHandler, IHandler
             options.Count, NonCombatBridgeProtocol.EventState, "SimEvent", ct,
             rejectAtReply: i => GodotObject.IsInstanceValid(options[i]) && options[i].Option.IsLocked
                 ? $"index {i} is not enabled (option locked)"
-                : null);
-        return options[index];
+                : null,
+            potions: true);
+        return index == SimAgentChoice.PotionHandled ? null : options[index];
     }
 
     /// <summary>

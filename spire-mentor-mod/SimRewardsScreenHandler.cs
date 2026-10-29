@@ -49,9 +49,17 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
 
             List<NRewardButton> claimable = ClaimableRewards(screen, claimed);
             NProceedButton? proceed = UiHelper.FindFirst<NProceedButton>(screen);
+            // Potions with no room on the belt: shown unavailable while a potion can be drunk
+            // or discarded to make room (SimOutOfCombatPotions).
+            List<NRewardButton> waiting = PotionsWithoutRoom(screen, claimed);
+            Player? me = LocalContext.GetMe(RunManager.Instance.DebugOnlyGetState());
+            if (!SimOutOfCombatPotions.AnyActionNow(me))
+            {
+                waiting.Clear();
+            }
 
             // Nothing left to take: leaving is the only move, so it is not asked.
-            if (claimable.Count == 0)
+            if (claimable.Count == 0 && waiting.Count == 0)
             {
                 if (proceed != null)
                     await ProceedAndCloseAsync(screen, proceed, ct);
@@ -59,7 +67,15 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
                 return;
             }
 
-            RewardScreenChoice choice = await ChooseRewardScreenOption(claimable, proceed, ct);
+            var shown = new HashSet<NRewardButton>(claimable.Concat(waiting), ReferenceEqualityComparer.Instance);
+            List<NRewardButton> buttons = UiHelper.FindAll<NRewardButton>(screen).Where(shown.Contains).ToList();
+            RewardScreenChoice choice = await ChooseRewardScreenOption(
+                buttons, new HashSet<NRewardButton>(claimable, ReferenceEqualityComparer.Instance), proceed, ct);
+
+            if (choice.PotionActed)
+            {
+                continue;
+            }
 
             if (choice.ShouldProceed)
             {
@@ -98,6 +114,16 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
             .ToList();
     }
 
+    /// <summary>Enabled potion rewards not yet clicked that the player can't take now.</summary>
+    private static List<NRewardButton> PotionsWithoutRoom(NRewardsScreen screen, HashSet<NRewardButton> claimed)
+    {
+        Player? me = LocalContext.GetMe(RunManager.Instance.DebugOnlyGetState());
+        return UiHelper.FindAll<NRewardButton>(screen)
+            .Where(b => b.IsEnabled && !claimed.Contains(b))
+            .Where(b => b.Reward is PotionReward pr && me != null && !SimPotionRules.CanProcure(me, pr.Potion))
+            .ToList();
+    }
+
     private static bool IsTopScreen(NRewardsScreen screen)
     {
         NOverlayStack? stack = NOverlayStack.Instance;
@@ -123,7 +149,7 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
     /// every ask and again when the reply arrives.
     /// </summary>
     private static async Task<RewardScreenChoice> ChooseRewardScreenOption(
-        List<NRewardButton> buttons, NProceedButton? proceed, CancellationToken ct)
+        List<NRewardButton> buttons, HashSet<NRewardButton> claimable, NProceedButton? proceed, CancellationToken ct)
     {
         bool proceedOffered = false;
 
@@ -131,6 +157,10 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
             (_, _) =>
             {
                 List<Dictionary<string, object>> options = buttons.Select((b, i) => RewardOption(b, i)).ToList();
+                foreach ((Dictionary<string, object> option, NRewardButton b) in options.Zip(buttons))
+                {
+                    option["enabled"] = claimable.Contains(b);
+                }
                 proceedOffered = ProceedEnabled(proceed);
                 if (proceedOffered)
                 {
@@ -153,8 +183,13 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
             NonCombatBridgeProtocol.RewardScreenState, "SimRewards", ct,
             rejectAtReply: i => i == buttons.Count && !(proceedOffered && ProceedEnabled(proceed))
                 ? $"index {i} (proceed) is not enabled"
-                : null);
+                : i < buttons.Count && !claimable.Contains(buttons[i])
+                    ? $"index {i} is not enabled (no room for the potion)"
+                    : null,
+            potions: true);
 
+        if (index == SimAgentChoice.PotionHandled)
+            return RewardScreenChoice.Potion;
         return index < buttons.Count ? RewardScreenChoice.Pick(buttons[index]) : RewardScreenChoice.Proceed;
     }
 
@@ -227,10 +262,13 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
     }
 
     /// <summary>Either "click proceed" or "claim this reward button".</summary>
-    private readonly record struct RewardScreenChoice(bool ShouldProceed, NRewardButton? Button)
+    private readonly record struct RewardScreenChoice(bool ShouldProceed, NRewardButton? Button, bool PotionActed = false)
     {
         public static RewardScreenChoice Proceed => new(true, null);
 
         public static RewardScreenChoice Pick(NRewardButton button) => new(false, button);
+
+        /// <summary>A potion was drunk or discarded: read the screen again.</summary>
+        public static RewardScreenChoice Potion => new(false, null, true);
     }
 }
