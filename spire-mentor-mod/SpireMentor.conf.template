@@ -16,5 +16,6 @@
   "overlay": true,
   "stall_timeout_seconds": 300,
   "think_fps": 10,
-  "run_timeout_minutes": 360
+  "run_timeout_minutes": 360,
+  "startup_wait_seconds": 60
 }
