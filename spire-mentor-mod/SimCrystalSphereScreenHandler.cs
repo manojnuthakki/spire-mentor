@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +13,9 @@ using MegaCrit.Sts2.Core.AutoSlay;
 using MegaCrit.Sts2.Core.AutoSlay.Handlers;
 using MegaCrit.Sts2.Core.AutoSlay.Helpers;
 using MegaCrit.Sts2.Core.Context;
+using MegaCrit.Sts2.Core.Events.Custom.CrystalSphereEvent;
+using MegaCrit.Sts2.Core.Events.Custom.CrystalSphereEvent.CrystalSphereItems;
+using MegaCrit.Sts2.Core.Nodes.Events;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Events.Custom.CrystalSphere;
 using MegaCrit.Sts2.Core.Nodes.GodotExtensions;
@@ -56,8 +60,21 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
             }
 
             NProceedButton? proceed = screen.GetNodeOrNull<NProceedButton>(ProceedButtonPath);
+            CrystalSphereMinigame? game = Minigame(screen);
             List<NCrystalSphereCell> cells = HiddenCells(screen);
             bool proceedEnabled = proceed != null && proceed.IsEnabled;
+            if (game != null && game.IsFinished)
+            {
+                // No divination left: nothing to decide (the Headless host's minigame ends
+                // here too). Its rewards came and went on top; leave once proceed is up.
+                cells.Clear();
+                if (proceedEnabled)
+                {
+                    await ProceedAndCloseAsync(screen, proceed!, ct);
+                    AutoSlayLog.ExitScreen(ScreenName);
+                    return;
+                }
+            }
 
             if (cells.Count == 0 && !proceedEnabled)
             {
@@ -66,7 +83,7 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
                 continue;
             }
 
-            CrystalSphereChoice choice = await ChooseCrystalSphereOption(screen, cells, proceedEnabled, ct);
+            CrystalSphereChoice choice = await ChooseCrystalSphereOption(screen, game, cells, proceedEnabled, ct);
             switch (choice.Kind)
             {
                 case CrystalSphereChoiceKind.Proceed:
@@ -83,6 +100,16 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
 
                 case CrystalSphereChoiceKind.Cell:
                     NCrystalSphereCell cell = choice.Cell!;
+                    if (choice.Tool is { } tool && game != null && game.CrystalSphereTool != tool)
+                    {
+                        // The screen's own tool button (SetBigDivination / SetSmallDivination).
+                        NButton? button = ToolButton(screen, tool);
+                        AutoSlayLog.Info($"[SimCrystalSphere] Selecting the {tool} tool");
+                        if (button != null)
+                            button.EmitSignal(NClickableControl.SignalName.Released, button);
+                        else
+                            game.SetTool(tool);
+                    }
                     AutoSlayLog.Info($"[SimCrystalSphere] Divining cell ({cell.Entity.X}, {cell.Entity.Y})");
                     cell.EmitSignal(NClickableControl.SignalName.Released, cell);
                     await Task.Delay(CellClickSettleMs, ct);
@@ -92,6 +119,96 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
 
         AutoSlayLog.ExitScreen(ScreenName);
     }
+
+    private static readonly FieldInfo? EntityField =
+        typeof(NCrystalSphereScreen).GetField("_entity", BindingFlags.Instance | BindingFlags.NonPublic);
+    private static readonly FieldInfo? BigButtonField =
+        typeof(NCrystalSphereScreen).GetField("_bigDivinationButton", BindingFlags.Instance | BindingFlags.NonPublic);
+    private static readonly FieldInfo? SmallButtonField =
+        typeof(NCrystalSphereScreen).GetField("_smallDivinationButton", BindingFlags.Instance | BindingFlags.NonPublic);
+    private static readonly FieldInfo? CardRewardRarityField =
+        typeof(CrystalSphereCardReward).GetField("_rarity", BindingFlags.Instance | BindingFlags.NonPublic);
+
+    /// <summary>The screen's minigame (its private <c>_entity</c>), or null if it can't be read.</summary>
+    private static CrystalSphereMinigame? Minigame(NCrystalSphereScreen screen)
+    {
+        try { return EntityField?.GetValue(screen) as CrystalSphereMinigame; }
+        catch { return null; }
+    }
+
+    private static NButton? ToolButton(NCrystalSphereScreen screen, CrystalSphereMinigame.CrystalSphereToolType tool)
+    {
+        FieldInfo? field = tool == CrystalSphereMinigame.CrystalSphereToolType.Big ? BigButtonField : SmallButtonField;
+        try { return field?.GetValue(screen) as NButton; }
+        catch { return null; }
+    }
+
+    private static string ToolName(CrystalSphereMinigame.CrystalSphereToolType tool) =>
+        tool == CrystalSphereMinigame.CrystalSphereToolType.Small ? "small" : "big";
+
+    /// <summary>
+    /// What the screen shows of the grid, as the Headless host sends it
+    /// (RunSimulator.CrystalSphere.cs, CrystalSphereState): its size, the cleared cells
+    /// (the corners the game clears first included), the divinations left, the tool
+    /// selected, and each item with a cleared cell (kind, footprint, whether all of it is
+    /// clear; a card reward's rarity once a cell of its top row, where the banner is, is
+    /// clear). Items under the fog are left out.
+    /// </summary>
+    internal static Dictionary<string, object?> Grid(CrystalSphereMinigame game)
+    {
+        Vector2I size = game.GridSize;
+        var cleared = new List<List<int>>();
+        for (int y = 0; y < size.Y; y++)
+            for (int x = 0; x < size.X; x++)
+                if (!game.cells[x, y].IsHidden) cleared.Add(new List<int> { x, y });
+
+        var items = new List<Dictionary<string, object?>>();
+        foreach (CrystalSphereItem item in game.Items)
+        {
+            int seen = 0, total = 0;
+            for (int dx = 0; dx < item.Size.X; dx++)
+                for (int dy = 0; dy < item.Size.Y; dy++)
+                {
+                    total++;
+                    if (!game.cells[item.Position.X + dx, item.Position.Y + dy].IsHidden) seen++;
+                }
+            if (seen == 0) continue;
+            bool bannerSeen = Enumerable.Range(0, item.Size.X)
+                .Any(dx => !game.cells[item.Position.X + dx, item.Position.Y].IsHidden);
+            items.Add(new Dictionary<string, object?>
+            {
+                ["kind"] = ItemKind(item),
+                ["rarity"] = item is CrystalSphereCardReward && bannerSeen
+                    ? CardRewardRarityField?.GetValue(item)?.ToString()?.ToLowerInvariant()
+                    : null,
+                ["x"] = item.Position.X,
+                ["y"] = item.Position.Y,
+                ["width"] = item.Size.X,
+                ["height"] = item.Size.Y,
+                ["revealed"] = seen == total,
+            });
+        }
+        return new Dictionary<string, object?>
+        {
+            ["width"] = size.X,
+            ["height"] = size.Y,
+            ["cleared"] = cleared,
+            ["divinations_left"] = game.DivinationCount,
+            ["tool"] = ToolName(game.CrystalSphereTool),
+            // By position, not in the order the game generated them (which the screen doesn't show).
+            ["items"] = items.OrderBy(i => (int)i["y"]!).ThenBy(i => (int)i["x"]!).ToList(),
+        };
+    }
+
+    private static string ItemKind(CrystalSphereItem item) => item switch
+    {
+        CrystalSphereCardReward => "card_reward",
+        CrystalSphereCurse => "curse",
+        CrystalSphereGold => "gold",
+        CrystalSpherePotion => "potion",
+        CrystalSphereRelic => "relic",
+        _ => item.GetType().Name,
+    };
 
     private static bool IsShowing(NCrystalSphereScreen screen) =>
         GodotObject.IsInstanceValid(screen) && screen.IsVisibleInTree();
@@ -149,7 +266,8 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
     /// every ask and again when the reply arrives.
     /// </summary>
     private static async Task<CrystalSphereChoice> ChooseCrystalSphereOption(
-        NCrystalSphereScreen screen, List<NCrystalSphereCell> cells, bool proceedEnabled, CancellationToken ct)
+        NCrystalSphereScreen screen, CrystalSphereMinigame? game, List<NCrystalSphereCell> cells, bool proceedEnabled,
+        CancellationToken ct)
     {
         if (cells.Count == 0 && !proceedEnabled)
         {
@@ -157,6 +275,7 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
         }
 
         bool proceedOffered = false;
+        string? chosenTool = null;  // the accepted reply's `tool`; none keeps the screen's
 
         int index = await SimAgentChoice.AskAsync(
             (_, _) =>
@@ -172,18 +291,43 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
                         ["enabled"] = true,
                     });
                 }
-                return new Dictionary<string, object>
+                var body = new Dictionary<string, object>
                 {
                     [NonCombatBridgeProtocol.TypeField] = NonCombatBridgeProtocol.CrystalSphereState,
                     ["options"] = options,
                 };
+                if (game != null)
+                {
+                    body["grid"] = Grid(game);
+                }
+                return body;
             },
             cells.Count + 1, NonCombatBridgeProtocol.CrystalSphereState, "SimCrystalSphere", ct,
             rejectAtReply: i => i == cells.Count && !(proceedOffered && ProceedEnabled(screen))
                 ? $"index {i} (proceed) is not enabled"
-                : null);
+                : null,
+            rejectReply: (i, reply) =>
+            {
+                chosenTool = null;
+                if (!reply.TryGetProperty("tool", out JsonElement t))
+                    return null;
+                if (i == cells.Count)
+                    return ("invalid_tool", "proceed takes no tool");
+                if (game == null)
+                    return ("invalid_tool", "the tool can't be set here (the minigame is unreadable)");
+                string? name = t.ValueKind == JsonValueKind.String ? t.GetString() : null;
+                if (name is not ("big" or "small"))
+                    return ("invalid_tool", $"tool must be big or small, got {t}");
+                chosenTool = name;
+                return null;
+            });
 
-        return index < cells.Count ? CrystalSphereChoice.Click(cells[index]) : CrystalSphereChoice.Proceed;
+        if (index == cells.Count)
+            return CrystalSphereChoice.Proceed;
+        CrystalSphereMinigame.CrystalSphereToolType? tool = null;
+        if (chosenTool == "small") tool = CrystalSphereMinigame.CrystalSphereToolType.Small;
+        else if (chosenTool == "big") tool = CrystalSphereMinigame.CrystalSphereToolType.Big;
+        return CrystalSphereChoice.Click(cells[index], tool);
     }
 
     private static bool ProceedEnabled(NCrystalSphereScreen screen)
@@ -210,12 +354,14 @@ public class SimCrystalSphereScreenHandler : IScreenHandler, IHandler
         Wait,
     }
 
-    private readonly record struct CrystalSphereChoice(CrystalSphereChoiceKind Kind, NCrystalSphereCell? Cell)
+    private readonly record struct CrystalSphereChoice(
+        CrystalSphereChoiceKind Kind, NCrystalSphereCell? Cell, CrystalSphereMinigame.CrystalSphereToolType? Tool = null)
     {
         public static CrystalSphereChoice Proceed => new(CrystalSphereChoiceKind.Proceed, null);
 
         public static CrystalSphereChoice Wait => new(CrystalSphereChoiceKind.Wait, null);
 
-        public static CrystalSphereChoice Click(NCrystalSphereCell cell) => new(CrystalSphereChoiceKind.Cell, cell);
+        public static CrystalSphereChoice Click(NCrystalSphereCell cell, CrystalSphereMinigame.CrystalSphereToolType? tool) =>
+            new(CrystalSphereChoiceKind.Cell, cell, tool);
     }
 }

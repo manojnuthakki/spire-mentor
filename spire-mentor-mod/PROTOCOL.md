@@ -291,8 +291,17 @@ same schema:
 | Field | Type | Meaning |
 |---|---|---|
 | `options` | array | `{index, action:"divine_cell", x, y, enabled:true}` per hidden cell, plus a trailing `{index, action:"proceed", enabled:true}` if proceed is available. |
+| `grid` | object | *(sts2-agent fork)* What the screen shows, as the Headless host's `crystal_sphere` decision: `{width, height, cleared:[[x,y],...], divinations_left, tool:"big"\|"small", items:[{kind, rarity, x, y, width, height, revealed}]}`. `cleared` includes the corners the game clears first; `items` only those with a cleared cell, by position (`kind`: `card_reward`, `curse`, `gold`, `potion`, `relic`; `rarity` a card reward's, once a cell of its top row is clear, else null). Absent if the minigame can't be read. |
 
 If there are no hidden cells and no enabled proceed button, no message is sent (the handler waits for game animation instead).
+Once no divination is left (sts2-agent fork) no message is sent either: the
+handler waits for the minigame's rewards to come and go and clicks proceed
+itself, as the Headless host's minigame ends at its last divination.
+
+A `choose` of a cell may carry `tool: "big"|"small"` (sts2-agent fork): the
+screen's tool button is pressed first when it differs; without `tool` the
+selected one is kept. Another value, a `tool` on the proceed index, or one
+where the minigame can't be read gets `error:"invalid_tool"` and a re-send.
 
 Proceed availability is re-evaluated for every (re-)send. A `choose` of the
 proceed index when proceed is not enabled at the time the reply arrives (or
