@@ -149,6 +149,8 @@ Empty slots are represented explicitly now (not omitted):
 | `can_use` | bool | *(non-empty only)* `usage != "Automatic"`. |
 | `target_type` | string | *(non-empty only)* Same `TargetType` enum as cards. |
 | `requires_target` | bool | *(non-empty only)* `target_type == "AnyEnemy"`. Clients should key off THIS field, not `target_type`: `AnyEnemy` is the only target type for which the `potion` verb's `target_index` is consumed; every other type (`Self`, `AllEnemies`, `RandomEnemy`, `AnyPlayer`, `AnyAlly`, ...) auto-targets and `target_index` is ignored. |
+| `use_now` | bool | *(sts2-agent fork; non-empty only, on a decision outside combat marked `potion_verb`)* The `potion` verb can drink it now: the game's popup would enable Use (`AnyTime`, not queued, `PassesCustomUsabilityCheck`, the owner alive and allowed to remove potions) and it needs no aiming (not `AnyEnemy`, not `TargetedNoCreature` -- the Foul Potion thrown at a merchant -- and not throwable at an ally). |
+| `discard_now` | bool | *(sts2-agent fork; same messages)* The `potion` verb can discard it now (not queued, the owner alive and allowed to remove potions). |
 
 ### Power object
 
@@ -342,6 +344,11 @@ proceed index when proceed is not enabled at the time the reply arrives (or
 was not offered in the message being answered) gets `error:"invalid_index"`
 and a fresh re-send; the disabled button is never clicked.
 
+A potion reward the player can't take now (a full belt, Sozu) is listed with
+`enabled:false` while a potion can be drunk or discarded (sts2-agent fork:
+the room is made with the `potion` verb); with no such potion it is left out
+as before, and a screen with nothing else to take proceeds without asking.
+
 `RewardLabel` unchanged: `"gold:{amount}"` for gold, else the reward's C# type name (`CardReward`/`PotionReward`/`RelicReward`).
 
 ### `game_over`
@@ -458,6 +465,22 @@ phase1-target.md section 2.1/2.2), generalized to one field.
 card, missing/invalid target, unknown action, malformed JSON, stale
 `state_id`) now sends a structured `error` message (section 3a) before the
 existing loop re-serializes and re-asks -- never a silent no-op.
+
+### `potion` outside combat (sts2-agent fork)
+
+`map_select`, `event`, `rest_site`, `treasure`, `shop` and `reward_screen`
+sent outside a fight carry `potion_verb: true`, and each held slot of their
+`run_state.potions` says `use_now` and `discard_now` (section 2). There the
+bridge also takes `{action:"potion", slot:int, discard:bool?, state_id:int?}`:
+it drinks the potion (`PotionModel.EnqueueManualUse`, as the belt's popup
+does for a potion that needs no aiming) or discards it (`discard:true`,
+`DiscardPotionGameAction`), waits until it has left the belt, and sends the
+decision again (a fresh `state_id`). Refused with `error:"potion_not_usable"`
+or `"potion_not_discardable"` where `use_now` / `discard_now` is false,
+`"empty_potion_slot"` for an empty slot, `"malformed_action"` without a
+numeric `slot`, `"stale_state"` as any verb. Any other decision (a card
+selection, a card reward, a bundle, the Crystal Sphere, a relic screen) has
+no `potion_verb` and refuses `potion` as an unknown action.
 
 ### Transport-level
 
