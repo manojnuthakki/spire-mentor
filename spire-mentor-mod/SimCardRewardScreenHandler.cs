@@ -24,7 +24,7 @@ namespace SpireMentor;
 public class SimCardRewardScreenHandler : IScreenHandler, IHandler
 {
     private const int InitialSettleMs = 400;
-    private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(10);
+    private static TimeSpan CloseWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
 
     public Type ScreenType => typeof(NCardRewardSelectionScreen);
 

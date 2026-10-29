@@ -41,8 +41,8 @@ public class SimCombatHandler : IRoomHandler, IHandler
     private const int ActionCapPerTurn = 50;
     private const int WatchdogRefreshEveryActions = 10;
     private const int FrameSettleMs = 16;
-    private static readonly TimeSpan PlayPhaseWait = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan CombatEndWait = TimeSpan.FromSeconds(30);
+    private static TimeSpan PlayPhaseWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(30));
+    private static TimeSpan CombatEndWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(30));
 
     private static readonly RoomType[] CombatRoomTypes =
     {

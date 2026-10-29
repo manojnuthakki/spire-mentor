@@ -81,14 +81,14 @@ public class SimAutoSlayer
     private const int MaxScreenDrainsPerCommand = 8;
     private const int MaxSameScreenRepeats = 3;
     private const int MaxEventFinishResumes = 8;
-    private static readonly TimeSpan RunStateWait = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan RoomAssignmentWait = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan PostBossTransitionWait = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan ActTransitionWait = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan EventProceedWait = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan RewardsScreenWait = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan MainMenuWait = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan AbandonPopupWait = TimeSpan.FromSeconds(5);
+    private static TimeSpan RunStateWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(60));
+    private static TimeSpan RoomAssignmentWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(60));
+    private static TimeSpan PostBossTransitionWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
+    private static TimeSpan ActTransitionWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(5));
+    private static TimeSpan EventProceedWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(5));
+    private static TimeSpan RewardsScreenWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
+    private static TimeSpan MainMenuWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(30));
+    private static TimeSpan AbandonPopupWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(5));
 
     /// <summary>Highest ascension the client may request (v0.107.1 cap).</summary>
     private const int MaxAscensionLevel = 10;
@@ -366,7 +366,7 @@ public class SimAutoSlayer
             Logger.Log("[SimAutoSlayer] Recovering after failed run: returning to main menu");
             await game.ReturnToMainMenu();
             await WaitHelper.Until(() => NGame.Instance?.MainMenu != null, ct,
-                TimeSpan.FromSeconds(30), "Main menu did not load during recovery");
+                SimConfig.Instance.Scaled(TimeSpan.FromSeconds(30)), "Main menu did not load during recovery");
             Logger.Log("[SimAutoSlayer] Recovery complete: main menu loaded");
         }
         catch (Exception ex)
@@ -1202,7 +1202,7 @@ public class SimAutoSlayer
         {
             RunManager.Instance.Abandon();
             await WaitHelper.Until(() => RunManager.Instance.IsAbandoned, ct,
-                TimeSpan.FromSeconds(AbandonTimeoutSeconds), "Run did not abandon");
+                SimConfig.Instance.Scaled(TimeSpan.FromSeconds(AbandonTimeoutSeconds)), "Run did not abandon");
         }
         catch (Exception ex)
         {
@@ -1396,9 +1396,9 @@ public class SimAutoSlayer
 /// </summary>
 public class SimGameOverScreenHandler : IScreenHandler, IHandler
 {
-    private static readonly TimeSpan ContinueEnableWait = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan SummaryWait = TimeSpan.FromSeconds(90);
-    private static readonly TimeSpan CloseWait = TimeSpan.FromSeconds(30);
+    private static TimeSpan ContinueEnableWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(30));
+    private static TimeSpan SummaryWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(90));
+    private static TimeSpan CloseWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(30));
     private const int WatchdogRefreshEveryPolls = 20;
 
     /// <summary>A game-over screen was handled during the current run.</summary>
@@ -1409,7 +1409,7 @@ public class SimGameOverScreenHandler : IScreenHandler, IHandler
 
     public Type ScreenType => typeof(NGameOverScreen);
 
-    public TimeSpan Timeout => TimeSpan.FromMinutes(2);
+    public TimeSpan Timeout => SimConfig.Instance.Scaled(TimeSpan.FromMinutes(2));
 
     public async Task HandleAsync(Rng random, CancellationToken ct)
     {

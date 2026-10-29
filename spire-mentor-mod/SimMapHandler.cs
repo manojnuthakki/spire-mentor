@@ -24,7 +24,7 @@ namespace SpireMentor;
 public class SimMapHandler : IScreenHandler, IHandler
 {
     private const string RunNodePath = "/root/Game/RootSceneContainer/Run";
-    private static readonly TimeSpan PointEnableWait = TimeSpan.FromSeconds(10);
+    private static TimeSpan PointEnableWait => SimConfig.Instance.Scaled(TimeSpan.FromSeconds(10));
 
     /// <summary>Completed by <see cref="OnRoomEntered"/> while a map click is in flight.</summary>
     private TaskCompletionSource<bool>? _roomEntered;
