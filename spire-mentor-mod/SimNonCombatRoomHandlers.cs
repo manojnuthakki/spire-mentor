@@ -444,7 +444,9 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
             ShopChoice choice = await ChooseShopOption(room, ct);
             if (choice.Potion)
             {
-                // Drunk or discarded: the belt (and what a potion slot sells) changed.
+                // Drunk or discarded: the belt (and what a potion slot sells) changed. Foul
+                // Potion closed the shopfront to reach the merchant: open it again.
+                await ReopenInventoryAsync(room, ct);
                 continue;
             }
             if (choice.Leave)
@@ -469,12 +471,7 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
                 Logger.Log("[SimShop] The shop closed after a purchase");
                 return;
             }
-            if (!room.Inventory.IsOpen)
-            {
-                Logger.Log("[SimShop] Reopening merchant inventory");
-                room.OpenInventory();
-                await Task.Delay(InventoryOpenSettleMs, ct);
-            }
+            await ReopenInventoryAsync(room, ct);
         }
 
         if (!stoppedEarly)
@@ -494,6 +491,15 @@ public class SimShopRoomHandler : IRoomHandler, IHandler
 
         Logger.Log("[SimShop] Leaving shop");
         await UiHelper.Click(room.ProceedButton);
+    }
+
+    private static async Task ReopenInventoryAsync(NMerchantRoom room, CancellationToken ct)
+    {
+        if (room.Inventory.IsOpen)
+            return;
+        Logger.Log("[SimShop] Reopening merchant inventory");
+        room.OpenInventory();
+        await Task.Delay(InventoryOpenSettleMs, ct);
     }
 
     /// <summary>

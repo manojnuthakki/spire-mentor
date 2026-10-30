@@ -639,9 +639,11 @@ public class SimAutoSlayer
 
     /// <summary>
     /// Services every overlay screen currently stacked, top first, by
-    /// handing each to the handler registered for its exact type.
+    /// handing each to the handler registered for its exact type. With a
+    /// <paramref name="floor"/>, only the screens above the lowest
+    /// <paramref name="floor"/> ones: those belong to a handler still running.
     /// </summary>
-    private async Task ClearOverlaysAsync(CancellationToken ct)
+    private async Task ClearOverlaysAsync(CancellationToken ct, int floor = 0)
     {
         if (NOverlayStack.Instance == null)
         {
@@ -652,7 +654,7 @@ public class SimAutoSlayer
         var handledThisDrain = new HashSet<object>(ReferenceEqualityComparer.Instance);
         int repeatsOfSameScreen = 0;
 
-        while ((NOverlayStack.Instance?.ScreenCount ?? 0) > 0)
+        while ((NOverlayStack.Instance?.ScreenCount ?? 0) > floor)
         {
             ct.ThrowIfCancellationRequested();
 
@@ -719,7 +721,11 @@ public class SimAutoSlayer
     /// re-opening screens is capped by
     /// <see cref="MaxScreenDrainsPerCommand"/>.
     /// </remarks>
-    internal static async Task AwaitWithScreenDrainAsync(Task work, CancellationToken ct, string context)
+    /// <param name="floor">Screens stacked below this many are left alone: a
+    /// command run from inside a screen's handler (a potion drunk on the rewards
+    /// screen) passes the stack's count when it starts, so only screens the
+    /// command opens are drained and the handler's own screen stays its own.</param>
+    internal static async Task AwaitWithScreenDrainAsync(Task work, CancellationToken ct, string context, int floor = 0)
     {
         SimAutoSlayer? slayer = _active;
         if (slayer == null)
@@ -735,7 +741,7 @@ public class SimAutoSlayer
         {
             ct.ThrowIfCancellationRequested();
 
-            if ((NOverlayStack.Instance?.ScreenCount ?? 0) > 0)
+            if ((NOverlayStack.Instance?.ScreenCount ?? 0) > floor)
             {
                 if (++drains > MaxScreenDrainsPerCommand)
                 {
@@ -754,7 +760,7 @@ public class SimAutoSlayer
                 // non-terminal set means SkipLocalRewardsSet
                 // (NRewardsScreen.cs:619), silently throwing the rewards away.
                 await Task.Delay(RoomSettleMs, ct);
-                await slayer.ClearOverlaysAsync(ct);
+                await slayer.ClearOverlaysAsync(ct, floor);
                 CurrentWatchdog?.Reset($"Drained screen opened by {context}");
                 continue;
             }

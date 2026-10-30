@@ -1,4 +1,4 @@
-// SimCardRewardScreenHandler.cs -- defensive NCardRewardSelectionScreen overlay handler (card_reward).
+// SimCardRewardScreenHandler.cs -- the NCardRewardSelectionScreen overlay handler (card_reward).
 // Originally ported from zhiyue/sts2-rl-agent (STS2BridgeMod); rewritten clean-room.
 
 using System;
@@ -31,10 +31,14 @@ public class SimCardRewardScreenHandler : IScreenHandler, IHandler
     public TimeSpan Timeout => TimeSpan.FromHours(24);
 
     /// <summary>
-    /// Defensive fallback: with SimCardSelector installed this overlay
-    /// normally never appears. Same reply contract as the selector's
-    /// card_reward: fresh state_id per ask, the stale-state guard, and a
-    /// structured error plus re-ask for any unusable reply (never throws).
+    /// The card reward outside test mode: the game shows this screen and
+    /// consults SimCardSelector only when it can't (TestMode,
+    /// NCardRewardSelectionScreen.ShowScreen). Same reply contract as the
+    /// selector's card_reward: fresh state_id per ask, the stale-state guard,
+    /// and a structured error plus re-ask for any unusable reply (never
+    /// throws). It takes the potion verb outside combat
+    /// (SimOutOfCombatPotions), as the belt stays clickable over this screen:
+    /// the cards on offer stay as they are.
     /// </summary>
     public async Task HandleAsync(Rng random, CancellationToken ct)
     {
@@ -72,10 +76,19 @@ public class SimCardRewardScreenHandler : IScreenHandler, IHandler
         NCardHolder? chosen = null;
         while (chosen == null)
         {
+            runState = RunManager.Instance.DebugOnlyGetState();
+            player = LocalContext.GetMe(runState);
+            message.Remove(SimOutOfCombatPotions.PotionVerbField);
             SimStateExtractor.ApplyEnvelope(message, runState, player);
+            SimOutOfCombatPotions.Offer(message, player);
             long stateId = SimAgentChoice.ReadStateId(message);
             string reply = await SimAgentGate.RequestActionAsync(
                 JsonSerializer.Serialize(message), ct, "card_reward_screen");
+            if (message.ContainsKey(SimOutOfCombatPotions.PotionVerbField) && SimOutOfCombatPotions.IsPotionVerb(reply))
+            {
+                await SimOutOfCombatPotions.HandleAsync(reply, stateId, runState, player, ct);
+                continue;
+            }
             if (!SimProtocolHelpers.TryParse(reply, runState, player, out JsonElement root) ||
                 !SimProtocolHelpers.CheckStateId(root, stateId, runState, player))
             {
