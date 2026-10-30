@@ -2618,11 +2618,10 @@ impl RunManager {
                 .current_room
                 .map_or(crate::runstate::RoomType::Boss, |r| r.room_type);
             let roll = self.begin_room_rewards(reward_room_type);
-            // Advance into the next act only AFTER the boss reward chain
-            // (card reward, then the boss-relic / Ancient choice) fully
-            // drains — `advance_after_card_reward` (empty pool) or
-            // `do_boss_relic_pick` (relic picked) consumes this flag and
-            // calls `advance_boss_act`.
+            // Advance into the next act only AFTER the boss's card reward
+            // drains — `advance_after_card_reward` consumes this flag and
+            // calls `advance_boss_act`, before it shows the boss-relic /
+            // Ancient choice (the next act's opening event; sts2-agent fork).
             self.pending_boss_act_advance = true;
             self.enter_card_reward_phase();
             self.open_reward_screen(roll);
@@ -3632,11 +3631,20 @@ impl RunManager {
         // carries no relic; `RewardsSet.cs:181-185`). `boss_relic_options` is
         // only ever non-empty in this window (set in the Boss branch of the
         // win handler, cleared on `do_boss_relic_pick`), so this never fires
-        // for a normal/elite card reward. The act advances only AFTER the
-        // relic is picked (`do_boss_relic_pick` → `advance_boss_act`), so the
-        // `pending_boss_act_advance` flag stays set here. GH #25 + bead
-        // `sts2-rs-jenwp`.
+        // for a normal/elite card reward. GH #25 + bead `sts2-rs-jenwp`.
+        //
+        // sts2-agent fork: the act advances HERE, before the choice is shown.
+        // The choice is the next act's Ancient event, which C# reaches through
+        // `RunManager.EnterNextAct` → `EnterAct`: the old rooms are exited, the
+        // new act and its map are set, `AfterActEntered` runs, and only then is
+        // the Ancient's event room entered, where
+        // `AncientEventModel.BeforeEventStarted` heals before the page's
+        // options are built. So while the player chooses, the act index, the
+        // map and the healed HP are already the new act's.
         if !self.boss_relic_options.is_empty() {
+            if std::mem::take(&mut self.pending_boss_act_advance) {
+                self.advance_boss_act();
+            }
             // Apply the `Rewards`-stream side effect of presenting the
             // next-act Ancient's options (C# `GenerateInitialOptions` runs the
             // per-relic `SetupForPlayer` here). Only `DustyTome.SetupForPlayer`
@@ -3667,29 +3675,14 @@ impl RunManager {
         }
         let relic = self.boss_relic_options[idx];
         self.boss_relic_options.clear();
-        // ADVANCE THE ACT *BEFORE* GRANTING THE BOSS RELIC. C# obtains the
-        // boss relic via the NEW act's opening Ancient event: `EnterNextAct`
-        // → `EnterAct(CurrentActIndex + 1)` → `SetActInternal`
-        // (`RunManager.cs:987/1003/1041`) sets `CurrentActIndex` to the new
-        // act, runs `AfterActEntered` + the Ancient-entry heal, THEN the
-        // Ancient event grants the relic and fires its `AfterObtained`. So a
-        // boss relic is obtained while `CurrentActIndex` already names the new
-        // act. This matters for act-snapshot relics — FurCoat, GoldenCompass,
-        // SpoilsMap — whose `AfterObtained` records `CurrentActIndex` and which
-        // are active only while `CurrentActIndex == snapshot` (e.g.
-        // `FurCoat.after_obtained` latches the obtain act, granting its bonus
-        // only in that act). Dispatching the obtain BEFORE the advance
-        // snapshotted the OLD act, so the relic was dead the instant we landed
-        // in the act where C# considers it obtained (a Regent A5 run-parity
-        // divergence found by the first C#-oracle ascension sweep).
-        // (PumpkinCandle was in this family under v0.103.2 but its v0.107.1
-        // redesign replaced the act gate with a decaying KindleCount.)
-        // The map regen + Ancient heal in `advance_boss_act` likewise precede
-        // the relic obtain in C# (heal-to-full, then boss relic). Consumes the
-        // `pending_boss_act_advance` flag set in the Boss win branch
-        // (bead `sts2-rs-jenwp`).
-        let _ = std::mem::take(&mut self.pending_boss_act_advance);
-        self.advance_boss_act();
+        // The act has already advanced (`advance_after_card_reward` ran
+        // `advance_boss_act` before showing the choice), so the relic is
+        // obtained while `CurrentActIndex` already names the new act, as in
+        // C#: the new act's Ancient event grants it and fires its
+        // `AfterObtained`. This matters for act-snapshot relics — FurCoat,
+        // GoldenCompass, SpoilsMap — whose `AfterObtained` records
+        // `CurrentActIndex` and which are active only while
+        // `CurrentActIndex == snapshot`.
         self.run_state.relics.push(relic);
         self.run_state.last_obtained_relic = Some(relic);
         // Bead `sts2-rs-wt4w1`: fire the on-obtain channel so boss-relic
@@ -3734,11 +3727,12 @@ impl RunManager {
 
     /// Advance from a just-cleared boss room into the next act: bump the
     /// act index, carry run state forward, regenerate the Act-N+1 map, and
-    /// pre-roll that act's boss. Split out of [`Self::do_boss_relic_pick`]
+    /// pre-roll that act's boss. Split out of `do_boss_relic_pick`
     /// (bead `sts2-rs-el3lx`) so the boss's standard combat reward (gold +
     /// card, bead `sts2-rs-jenwp`) can drain BEFORE the act advances —
     /// `advance_after_card_reward` calls this once `pending_boss_act_advance`
-    /// is set and every boss reward is claimed.
+    /// is set and every boss reward is claimed, before it shows the
+    /// boss-relic / next-act Ancient choice (sts2-agent fork).
     ///
     /// Without the act-advance, `current_act_map` stays pinned to Act-1 and
     /// `next_map_children_cols` / `do_map_move` read a stale map whose nodes
@@ -7606,6 +7600,68 @@ mod tests {
         assert!(rm.run_state.relics.contains(&crate::RelicId::CallingBell));
     }
 
+    /// sts2-agent fork: the boss-relic choice is the next act's Ancient
+    /// event, so C# shows it after `EnterNextAct` has entered the new act
+    /// (act index, map) and the Ancient's `BeforeEventStarted` has healed
+    /// (80% of missing HP at A2 WearyTraveler). The pick then grants the relic
+    /// without moving the act again.
+    #[test]
+    fn act1_boss_relic_choice_is_shown_in_the_next_act_after_the_ancient_heal() {
+        fn cards(_rs: &mut RunState) -> Vec<crate::cards::CardId> {
+            vec![crate::cards::CardId::StrikeIronclad]
+        }
+        fn pool_stub(_rs: &mut RunState) -> Vec<crate::RelicId> {
+            vec![crate::RelicId::CallingBell, crate::RelicId::Anchor]
+        }
+        let cb = ContentCallbacks {
+            generate_card_reward_options: Some(cards),
+            generate_boss_relic_pool: Some(pool_stub),
+            ..ContentCallbacks::default()
+        };
+        let mut rm =
+            RunManager::with_ascension(0, CharacterId::Ironclad, 2).with_content_callbacks(cb);
+        rm.run_state.act_index = 1;
+        rm.run_state.max_hp = 80;
+        rm.run_state.current_hp = 30;
+        rm.run_state.current_act_map = None;
+        rm.run_state.current_room =
+            Some(crate::runstate::Room::new(crate::runstate::RoomType::Boss));
+        rm.combat = Some(crate::CombatState {
+            is_over: true,
+            player_won: true,
+            ..crate::CombatState::default()
+        });
+        rm.set_phase(Phase::Combat);
+
+        let _ = rm.exit_combat_and_transition();
+        assert_eq!(rm.phase(), Phase::CardReward);
+        assert_eq!(
+            rm.run_state.act_index, 1,
+            "the card reward is still act 1's"
+        );
+        let _ = rm.take_action(RunAction::PickCardReward { idx: Some(0) });
+        assert_eq!(rm.phase(), Phase::BossRelic);
+        assert_eq!(rm.run_state.act_index, 2, "the Ancient is shown in act 2");
+        assert_eq!(rm.run_state.current_hp, 70, "healed 80% of the missing 50");
+        let act2_map = rm
+            .run_state
+            .current_act_map
+            .clone()
+            .expect("act 2's map is generated before the Ancient");
+        assert_eq!(
+            rm.boss_relic_options(),
+            &[crate::RelicId::CallingBell, crate::RelicId::Anchor]
+        );
+
+        let result = rm.take_action(RunAction::PickBossRelic { idx: 1 });
+        assert_eq!(result, ActionResult::Advanced);
+        assert_eq!(rm.phase(), Phase::MapChoice);
+        assert_eq!(rm.run_state.act_index, 2, "the pick does not move the act");
+        assert_eq!(rm.run_state.current_hp, 70, "the pick does not heal again");
+        assert_eq!(rm.run_state.current_act_map.as_ref(), Some(&act2_map));
+        assert!(rm.run_state.relics.contains(&crate::RelicId::Anchor));
+    }
+
     #[test]
     fn act1_boss_card_reward_can_be_skipped_to_boss_relic() {
         // The boss card reward honors skip (`PickCardReward { idx: None }`)
@@ -9728,6 +9784,11 @@ mod tests {
         rm.run_state.current_room =
             Some(crate::runstate::Room::new(crate::runstate::RoomType::Boss));
         rm.boss_relic_options = vec![RelicId::FurCoat];
+        // The boss win's flag; the drained card reward advances the act and
+        // shows the choice (sts2-agent fork: the advance precedes the choice).
+        rm.pending_boss_act_advance = true;
+        rm.advance_after_card_reward();
+        assert_eq!(rm.phase(), Phase::BossRelic);
 
         let result = rm.do_boss_relic_pick(0);
 
