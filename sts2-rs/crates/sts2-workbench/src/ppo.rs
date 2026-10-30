@@ -128,7 +128,7 @@ impl PpoEval {
 fn prepare(rm: &mut RunManager) {
     if rm.phase() == Phase::Event && rm.run_state.current_event.is_none() {
         if let Some(id) = sts2_content::events::dispatch::pick_event(&mut rm.run_state, None) {
-            rm.run_state.enter_event_room(id);
+            rm.run_state.bind_event(id);
         }
     }
 }

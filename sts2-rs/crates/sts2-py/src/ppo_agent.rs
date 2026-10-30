@@ -49,7 +49,7 @@ pub fn ppo_observe_json(
     if phase == "event" && rm.inner.run_state.current_event.is_none() {
         if let Some(id) = sts2_content::events::dispatch::pick_event(&mut rm.inner.run_state, None)
         {
-            rm.inner.run_state.enter_event_room(id);
+            rm.inner.run_state.bind_event(id);
         }
     }
     let mut obs = build_obs(&rm.inner, phase, surface);

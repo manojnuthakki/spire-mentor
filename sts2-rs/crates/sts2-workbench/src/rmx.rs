@@ -454,7 +454,7 @@ pub fn card_reward_bundles(rm: &RunManager) -> Option<Vec<Vec<String>>> {
 pub fn materialize_event(rm: &mut RunManager) -> Option<String> {
     if rm.run_state.current_event.is_none() {
         let id = sts2_content::events::dispatch::pick_event(&mut rm.run_state, None)?;
-        rm.run_state.enter_event_room(id);
+        rm.run_state.bind_event(id);
     }
     current_event_name(rm)
 }

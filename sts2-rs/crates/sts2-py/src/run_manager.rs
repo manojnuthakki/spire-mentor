@@ -1317,7 +1317,7 @@ impl PyRunManager {
     fn materialize_event(&mut self) -> Option<String> {
         if self.inner.run_state.current_event.is_none() {
             let id = sts2_content::events::dispatch::pick_event(&mut self.inner.run_state, None)?;
-            self.inner.run_state.enter_event_room(id);
+            self.inner.run_state.bind_event(id);
         }
         self.inner
             .run_state

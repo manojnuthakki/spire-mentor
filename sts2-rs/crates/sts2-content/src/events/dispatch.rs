@@ -490,7 +490,7 @@ pub fn resolve_event_at_callback(state: &mut RunState, idx: usize) -> bool {
         let Some(event_id) = pick_event(state, None) else {
             return false;
         };
-        state.enter_event_room(event_id);
+        state.bind_event(event_id);
     }
     resolve_by_index(state, idx).is_some()
 }
@@ -504,7 +504,7 @@ pub fn resolve_event_at_callback(state: &mut RunState, idx: usize) -> bool {
 pub fn bind_event_room_callback(state: &mut RunState) {
     if state.current_event.is_none() {
         if let Some(event_id) = pick_event(state, None) {
-            state.enter_event_room(event_id);
+            state.bind_event(event_id);
         }
     }
 }

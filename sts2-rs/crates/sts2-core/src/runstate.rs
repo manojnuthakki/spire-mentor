@@ -2547,23 +2547,14 @@ impl RunState {
     ///
     /// Bead `sts2-rs-6ynt.4.1` (P7 events framework).
     pub fn enter_event_room(&mut self, event_id: crate::events::EventId) {
-        self.current_event = Some(event_id);
-        // Fresh event → fresh multi-page scratch (page 0, no RNG, no
-        // slots). Single-page events never read it. Bead `sts2-rs-2guyj`.
-        self.event_state = crate::events::MultiPageEventState::default();
         // Preserve the map coord/point-type of the room we're standing in.
         // Entering a coord-less `Room::new` here wiped `current_room.map_coord`
         // to `None`, so the next `MapChoice` tick read coord=None, fell back to
         // the start row's children, and teleported the player back to row 1 on
-        // every event visit (bead `sts2-rs-26qg3` patched this after-the-fact in
-        // `do_event_choice`, but the workbench's `materialize_event` re-enters
-        // the room on *arrival*, before any choice, so the coord was already
-        // gone). When entered from a map node — the normal case — the current
-        // room already carries the destination coord; carry it into the Event
-        // room. `add_visited_coord` is idempotent, so re-entering the same coord
-        // does not double-count the visit or floor. The coord-less branch keeps
-        // the original behaviour for callers with no standing room (Neow at run
-        // start). Bead `sts2-rs-26qg3` follow-up.
+        // every event visit (bead `sts2-rs-26qg3`). When entered from a map
+        // node, the current room already carries the destination coord; carry
+        // it into the Event room. The coord-less branch keeps the original
+        // behaviour for callers with no standing room (Neow at run start).
         let room = match (
             self.current_room.and_then(|r| r.map_coord),
             self.current_room.and_then(|r| r.map_point_type),
@@ -2572,6 +2563,20 @@ impl RunState {
             _ => Room::new(RoomType::Event),
         };
         self.enter_room(room);
+        self.bind_event(event_id);
+    }
+
+    /// Bind `event_id` to the event room the run already stands in, without
+    /// entering the room again (sts2-agent fork). The map move has entered it,
+    /// and C#'s `EventRoom.EnterInternal` runs `Hook.AfterRoomEntered` once per
+    /// room: entering it again here paid Maw Bank twice. The game begins the
+    /// event before that hook; no `after_room_entered` listener reads
+    /// `current_event`, so binding after it is equivalent.
+    pub fn bind_event(&mut self, event_id: crate::events::EventId) {
+        self.current_event = Some(event_id);
+        // Fresh event → fresh multi-page scratch (page 0, no RNG, no
+        // slots). Single-page events never read it. Bead `sts2-rs-2guyj`.
+        self.event_state = crate::events::MultiPageEventState::default();
         // `BeforeEventStarted`: `Owner.CanRemovePotions = false`.
         self.potions_locked = matches!(
             event_id,
