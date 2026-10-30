@@ -3374,9 +3374,10 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
     // the draw pile (length + index) and the enemy roster, so a carried uid
     // would point at a different card or none.
     //
-    // The single-turn Retain grant is read from hand only (the engine's
-    // `retain_this_turn` annotates hand cards); the single-turn Sly from every
-    // pile (C# keeps both on the card until the turn's end). Keyword Sly from MasterPlanner lasts the
+    // The single-turn Retain and Sly grants are read from every pile (C# keeps
+    // both on the card until the turn's end; the engine's `retain_this_turn`
+    // keeps a played card's entry until the end-of-turn clear, and the retain
+    // flush reads only the hand). Keyword Sly from MasterPlanner lasts the
     // combat and stays on the card in every pile (`MasterPlannerPower.cs`):
     // a rebuild that kept it only for hand cards lost it on a Sly card in the
     // draw pile, which then didn't auto-play when discarded after the draw
