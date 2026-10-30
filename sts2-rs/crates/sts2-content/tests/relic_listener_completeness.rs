@@ -38,6 +38,9 @@ const INLINE_HANDLED: &[RelicId] = &[
     RelicId::Bread,
     RelicId::IceCream,
     RelicId::LizardTail,
+    // PaelsFlesh's +1 max energy from turn 3 is a `relic_modify_max_energy`
+    // arm (sts2-agent fork).
+    RelicId::PaelsFlesh,
     RelicId::PaelsWing,
     RelicId::PrismaticGem,
     RelicId::RingingTriangle,

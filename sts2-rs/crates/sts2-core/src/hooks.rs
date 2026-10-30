@@ -5070,6 +5070,9 @@ fn relic_modify_max_energy(state: &CombatState, relic: &crate::Relic) -> i32 {
         // C# `VelvetChoker.ModifyMaxEnergy` → `amount + EnergyVar(1)` (GH #742).
         | crate::RelicKind::VelvetChoker => 1,
         crate::RelicKind::Bread => i32::from(state.round > 1),
+        // C# `PaelsFlesh.ModifyMaxEnergy` → `amount + Energy(1)` once the
+        // owner's turn number is 3 or more (sts2-agent fork).
+        crate::RelicKind::PaelsFlesh => i32::from(state.round >= 3),
         // `PumpkinCandle.ModifyMaxEnergy → energy + 1` while its
         // `KindleCount > 0` (v0.107.1 C#
         // `MegaCrit.Sts2.Core.Models.Relics/PumpkinCandle.cs:58-69`:
@@ -12395,12 +12398,10 @@ fn dispatch_after_energy_spent_body(state: &mut CombatState, amount: i32) {
 /// scan of `state.relics`, which made the walk quadratic in the relic count.
 /// The arm acts for WhisperingEarring, SpikedGauntlets, BlessedAntler, Sozu,
 /// BloodSoakedRose, PhilosophersStone, Ectoplasm, PrismaticGem, VelvetChoker,
-/// Bread and PumpkinCandle, and adds `0` for every other kind. It is one
-/// `match`, so a kind pre-filter over those eleven (as `relics_of_kinds` does
-/// for the smaller sets) would cost about what it saves; every relic still
-/// goes through the arm. (C# also overrides `ModifyMaxEnergy` in `PaelsFlesh`,
-/// whose energy the Rust port grants from an `after_side_turn_start`
-/// listener.)
+/// Bread, PaelsFlesh and PumpkinCandle, and adds `0` for every other kind. It
+/// is one `match`, so a kind pre-filter over those twelve (as
+/// `relics_of_kinds` does for the smaller sets) would cost about what it
+/// saves; every relic still goes through the arm.
 ///
 /// Same sum as walking every listener: the power gate drops only
 /// `saturating_add(0)`s, and the relic walk adds the same deltas in the same

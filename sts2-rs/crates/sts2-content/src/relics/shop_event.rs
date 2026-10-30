@@ -582,15 +582,6 @@ pub fn install_pool() {
     // divergence — matches the ArcaneScroll/DustyTome pattern of
     // `random_card_from_rarity` + fresh `Card::pod_defaults()`.
     register_after_obtained(RelicId::Astrolabe, listener_astrolabe as AfterObtainedRunFn);
-    // Bead `sts2-rs-p6dj`: real `after_side_turn_start` listener for
-    // `PaelsFlesh::ENERGY = 1` (Python `shop_event.py::PaelsFlesh`).
-    // From player round 3 onward, +1 energy each player turn.
-    // Combat-side `on_trigger_paels_flesh` stays a `resolved_marker`;
-    // this is the side-turn-start listener that fires the energy gain.
-    register_after_side_turn_start(
-        RelicId::PaelsFlesh,
-        listener_paels_flesh as AfterSideTurnStartFn,
-    );
     // Bead `sts2-rs-83sa`: real `modify_rewards` listener for BlackStar.
     // Python `shop_event.py::BlackStar.modify_rewards` appends a
     // `RelicReward` when `room.room_type == ELITE`. Same shape as
@@ -1681,26 +1672,6 @@ fn listener_very_hot_cocoa(state: &mut CombatState, side: Side) -> EffectResult 
         return EffectResult::NotImplemented;
     }
     state.gain_energy(VERY_HOT_COCOA_ENERGY);
-    EffectResult::Resolved
-}
-
-/// `PaelsFlesh::after_side_turn_start` — `if side == PLAYER and
-/// combat.round_number >= 3: combat.gain_energy(owner, 1)` (Python
-/// `sts2-rl-agent@01c094d:sts2_env/relics/shop_event.py::PaelsFlesh`,
-/// `ENERGY = 1`). Single-channel, no per-instance latch (the
-/// `round_no` gate alone is sufficient — fires every player turn
-/// from round 3 to combat end). Bead `sts2-rs-p6dj`.
-fn listener_paels_flesh(state: &mut CombatState, side: Side) -> EffectResult {
-    if side != Side::Player {
-        return EffectResult::NotImplemented;
-    }
-    if !state.relics.owns(RelicKind::PaelsFlesh) {
-        return EffectResult::NotImplemented;
-    }
-    if state.round_no() < PAELS_FLESH_ROUND_MIN {
-        return EffectResult::NotImplemented;
-    }
-    state.gain_energy(PAELS_FLESH_ENERGY);
     EffectResult::Resolved
 }
 
@@ -4859,15 +4830,6 @@ fn listener_black_star(
 /// `VeryHotCocoa::ENERGY` — energy gained on player round 1
 /// (`shop_event.py::VeryHotCocoa.ENERGY`). Bead `sts2-rs-70anj.1`.
 pub const VERY_HOT_COCOA_ENERGY: i32 = 4;
-
-/// `PaelsFlesh::ENERGY` — energy gained each player turn from round
-/// 3 onward (`shop_event.py::PaelsFlesh.ENERGY`). Bead `sts2-rs-p6dj`.
-pub const PAELS_FLESH_ENERGY: i32 = 1;
-/// `PaelsFlesh` — first player round in which the energy gain fires
-/// (`if combat.round_number >= 3`,
-/// `sts2-rl-agent@01c094d:sts2_env/relics/shop_event.py::PaelsFlesh`).
-/// `u16` matches the engine's `round_no()` type.
-pub const PAELS_FLESH_ROUND_MIN: u16 = 3;
 
 /// `BeltBuckle::DEXTERITY` — +2 / -2 Dex on potion-procurement state
 /// (`shop_event.py::BeltBuckle.DEXTERITY`).
@@ -9487,93 +9449,6 @@ mod tests {
         let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
         assert_eq!(rs.max_hp, before_max);
         assert_eq!(rs.current_hp, before_hp);
-    }
-
-    // -----------------------------------------------------------------
-    // PaelsFlesh listener tests — bead `sts2-rs-p6dj`
-    // -----------------------------------------------------------------
-    //
-    // Single-channel `after_side_turn_start` listener: from player
-    // round 3 onward, the player gains +1 energy each player turn.
-    // Tests stand up a minimal CombatState with a player creature and
-    // exercise the listener end-to-end via the dispatch bus.
-
-    #[cfg(test)]
-    fn paels_flesh_setup(state: &mut CombatState, round: u16, equip: bool) {
-        use std::num::NonZeroU32;
-        use sts2_core::Relic;
-        state.player.current_hp = 80;
-        state.player.max_hp = 80;
-        state.player.energy = 3;
-        state.round = round;
-        let _ = state.init_player_creature();
-        state.sync_player_creature();
-        if equip {
-            state.relics.push(Relic {
-                id: NonZeroU32::new(1).expect("non-zero"),
-                kind: RelicKind::PaelsFlesh,
-                counter: 0,
-                is_wax: false,
-                is_melted: false,
-            });
-        }
-    }
-
-    /// **PaelsFlesh #1** — round 3 player turn-start grants +1 energy.
-    #[test]
-    fn listener_paels_flesh_grants_energy_on_round_three_player_turn() {
-        use sts2_core::relic_effects::dispatch_after_side_turn_start;
-        crate::relics::dispatch::ensure_installed();
-        let mut state = CombatState::default();
-        paels_flesh_setup(&mut state, 3, true);
-        let before = state.player.energy;
-        let _ = dispatch_after_side_turn_start(&mut state, Side::Player);
-        assert_eq!(
-            state.player.energy,
-            before + i8::try_from(PAELS_FLESH_ENERGY).unwrap()
-        );
-    }
-
-    /// **PaelsFlesh #2** — no-op on player rounds 1 / 2 (below the
-    /// `round_min` gate).
-    #[test]
-    fn listener_paels_flesh_is_noop_before_round_three() {
-        use sts2_core::relic_effects::dispatch_after_side_turn_start;
-        crate::relics::dispatch::ensure_installed();
-        for round in [1u16, 2] {
-            let mut state = CombatState::default();
-            paels_flesh_setup(&mut state, round, true);
-            let before = state.player.energy;
-            let _ = dispatch_after_side_turn_start(&mut state, Side::Player);
-            assert_eq!(state.player.energy, before, "round {round} must not fire");
-        }
-    }
-
-    /// **PaelsFlesh #3** — enemy-side turn-start is a no-op even on
-    /// round 3+. The listener gates on `side == Player`.
-    #[test]
-    fn listener_paels_flesh_is_noop_on_enemy_side() {
-        use sts2_core::relic_effects::dispatch_after_side_turn_start;
-        crate::relics::dispatch::ensure_installed();
-        let mut state = CombatState::default();
-        paels_flesh_setup(&mut state, 5, true);
-        let before = state.player.energy;
-        let _ = dispatch_after_side_turn_start(&mut state, Side::Enemy);
-        assert_eq!(state.player.energy, before);
-    }
-
-    /// **PaelsFlesh #4** — no-op when the relic is not owned, even
-    /// on round 3+. Required because the dispatch bus iterates every
-    /// registered listener regardless of ownership.
-    #[test]
-    fn listener_paels_flesh_is_noop_without_ownership() {
-        use sts2_core::relic_effects::dispatch_after_side_turn_start;
-        crate::relics::dispatch::ensure_installed();
-        let mut state = CombatState::default();
-        paels_flesh_setup(&mut state, 7, false);
-        let before = state.player.energy;
-        let _ = dispatch_after_side_turn_start(&mut state, Side::Player);
-        assert_eq!(state.player.energy, before);
     }
 
     /// SealOfGold #1 — each player turn, while combat gold ≥ 5, spend 5 for +1
