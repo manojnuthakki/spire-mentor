@@ -1744,7 +1744,7 @@ mod tests {
         let resolve = cb.resolve_event_at.expect("event resolver wired");
         let mut rs = RunState::new();
         let before = rs.visited_event_ids.len();
-        assert!(resolve(&mut rs, 0));
+        assert!(resolve(&mut rs, 1));
         assert!(rs.current_event.is_none());
         assert_eq!(rs.visited_event_ids.len(), before + 1);
     }

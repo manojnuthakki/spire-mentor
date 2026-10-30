@@ -762,11 +762,11 @@ mod tests {
         assert!(rs.current_event.is_none());
         let before_visited = rs.visited_event_ids.len();
 
-        assert!(resolve_event_at_callback(&mut rs, 0));
+        assert!(resolve_event_at_callback(&mut rs, 1));
 
         assert!(
             rs.current_event.is_none(),
-            "first-option handler should be a finished outcome that exits the event room"
+            "the second option (Abyssal Baths' Abstain) finishes and exits the event room"
         );
         assert_eq!(
             rs.visited_event_ids.len(),
@@ -794,11 +794,11 @@ mod tests {
         // events — `pick_event` filters out already-visited ids, so
         // the second call lands on the next slot in the act pool.
         let mut rs = RunState::new();
-        assert!(resolve_event_at_callback(&mut rs, 0));
+        assert!(resolve_event_at_callback(&mut rs, 1));
         let first_visited: Vec<EventId> = rs.visited_event_ids.iter().copied().collect();
         assert_eq!(first_visited.len(), 1, "{first_visited:?}");
 
-        assert!(resolve_event_at_callback(&mut rs, 0));
+        assert!(resolve_event_at_callback(&mut rs, 1));
         assert_eq!(
             rs.visited_event_ids.len(),
             2,

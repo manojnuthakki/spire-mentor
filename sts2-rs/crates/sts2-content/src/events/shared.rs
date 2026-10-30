@@ -13,7 +13,8 @@ use sts2_core::{
 
 use super::{
     always_allowed, amalgamator_allowed, any_enchantable_deck_card, byrdonis_nest_allowed,
-    default_option_info_from_spec, punch_off_allowed, EventOptionSpec, EventSpec,
+    default_option_info_from_spec, option_title_vars, option_vars, punch_off_allowed,
+    EventOptionSpec, EventSpec,
 };
 
 // ── LostWisp ─────────────────────────────────────────────────────────
@@ -234,20 +235,65 @@ pub const ABYSSAL_BATHS_MAX_HP_GAIN: i32 = 2;
 pub const ABYSSAL_BATHS_INITIAL_DAMAGE: i32 = 3;
 pub const ABYSSAL_BATHS_ABSTAIN_HEAL: i32 = 10;
 
-fn abyssal_baths_immerse(state: &mut RunState) -> EventOutcome {
+/// C# `Damage` var: 3, raised by 1 after each soak (`OnImmerse`).
+/// `event_state.page` counts the soaks (0 on the initial page).
+fn abyssal_baths_damage(state: &RunState) -> i32 {
+    ABYSSAL_BATHS_INITIAL_DAMAGE + i32::from(state.event_state.page)
+}
+
+/// C# `OnImmerse`: gain 2 max HP, take the Damage var, raise it by 1; then
+/// `SetEventState` with Linger and Exit Baths (sts2-agent fork: the engine
+/// finished the event here).
+fn abyssal_baths_soak(state: &mut RunState) -> EventOutcome {
     state.gain_max_hp(ABYSSAL_BATHS_MAX_HP_GAIN);
-    let dmg = state.lose_hp(ABYSSAL_BATHS_INITIAL_DAMAGE);
-    // Python returns finished=False with linger/exit_baths next_options;
-    // single-page framework collapses to finished. Linger loop lands
-    // in `6ynt.4.multi-page`.
-    EventOutcome::finished(format!(
-        "+{ABYSSAL_BATHS_MAX_HP_GAIN} Max HP, took {dmg} damage."
-    ))
+    let dmg = state.lose_hp(abyssal_baths_damage(state));
+    state.event_state.page = state.event_state.page.saturating_add(1);
+    EventOutcome {
+        finished: false,
+        description: format!("+{ABYSSAL_BATHS_MAX_HP_GAIN} Max HP, took {dmg} damage."),
+        effects: Vec::new(),
+    }
+}
+
+fn abyssal_baths_immerse(state: &mut RunState) -> EventOutcome {
+    abyssal_baths_soak(state)
+}
+
+fn abyssal_baths_linger(state: &mut RunState) -> EventOutcome {
+    abyssal_baths_soak(state)
+}
+
+fn abyssal_baths_exit(_state: &mut RunState) -> EventOutcome {
+    EventOutcome::finished("Left the baths.")
 }
 
 fn abyssal_baths_abstain(state: &mut RunState) -> EventOutcome {
     let healed = state.heal(ABYSSAL_BATHS_ABSTAIN_HEAL);
     EventOutcome::finished(format!("Healed {healed} HP."))
+}
+
+fn abyssal_baths_vars(state: &RunState) -> Vec<(&'static str, sts2_core::EventVar)> {
+    vec![("Damage", abyssal_baths_damage(state).into())]
+}
+
+/// Page 0: Immerse and Abstain; after a soak: Linger and Exit Baths.
+fn abyssal_baths_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let page = if state.event_state.page == 0 {
+        &spec.options[..2]
+    } else {
+        &spec.options[2..]
+    };
+    page.iter()
+        .map(|opt| EventOptionInfo {
+            option_id: opt.option_id,
+            label: opt.default_label.to_string(),
+            description: opt.default_description.to_string(),
+            enabled: true,
+            loc_key: opt.loc_key,
+            vars: option_vars(state, opt),
+            title_vars: option_title_vars(state, opt),
+        })
+        .collect()
 }
 
 const ABYSSAL_BATHS_OPTIONS: &[EventOptionSpec] = &[
@@ -277,6 +323,26 @@ const ABYSSAL_BATHS_OPTIONS: &[EventOptionSpec] = &[
         title_vars_fn: None,
         handler: abyssal_baths_abstain,
     },
+    EventOptionSpec {
+        option_id: "linger",
+        loc_key: "ABYSSAL_BATHS.pages.ALL.options.LINGER",
+        default_label: "Linger",
+        default_description: "+2 Max HP, take more damage",
+        default_vars: &[("MaxHp", EventVarSpec::Int(ABYSSAL_BATHS_MAX_HP_GAIN as i64))],
+        vars_fn: Some(abyssal_baths_vars),
+        title_vars_fn: None,
+        handler: abyssal_baths_linger,
+    },
+    EventOptionSpec {
+        option_id: "exit_baths",
+        loc_key: "ABYSSAL_BATHS.pages.ALL.options.EXIT_BATHS",
+        default_label: "Exit Baths",
+        default_description: "Leave.",
+        default_vars: &[],
+        vars_fn: None,
+        title_vars_fn: None,
+        handler: abyssal_baths_exit,
+    },
 ];
 
 /// `AbyssalBaths` spec. Pin: `shared.py:298`.
@@ -284,7 +350,7 @@ pub const ABYSSAL_BATHS: EventSpec = EventSpec {
     id: EventId::AbyssalBaths,
     python_name: "AbyssalBaths",
     is_allowed: always_allowed,
-    generate_options: default_option_info_from_spec,
+    generate_options: abyssal_baths_generate_options,
     options: ABYSSAL_BATHS_OPTIONS,
 };
 
@@ -2248,7 +2314,7 @@ mod tests {
                 &ABYSSAL_BATHS,
                 EventId::AbyssalBaths,
                 "AbyssalBaths",
-                &["immerse", "abstain"],
+                &["immerse", "abstain", "linger", "exit_baths"],
             ),
             (
                 &AMALGAMATOR,
@@ -2385,6 +2451,16 @@ mod tests {
                         "{name}/{}: must stage event_combat",
                         opt.option_id
                     );
+                } else if *id == EventId::AbyssalBaths
+                    && matches!(opt.option_id, "immerse" | "linger")
+                {
+                    // Each soak opens the Linger / Exit Baths page
+                    // (C# `AbyssalBaths.Immerse`, `Linger`).
+                    assert!(
+                        !outcome.finished,
+                        "{name}/{}: presents the next page",
+                        opt.option_id
+                    );
                 } else if *id == EventId::ColossalFlower && opt.option_id == "reach_deeper" {
                     // Multi-page dig chain (C# `ColossalFlower.ReachDeeper`):
                     // the first call presents page 2, not a finished event.
@@ -2414,7 +2490,9 @@ mod tests {
         let mut rs = RunState::new();
         let (max_hp_before, hp_before) = (rs.max_hp, rs.current_hp);
         let outcome = (ABYSSAL_BATHS.options[0].handler)(&mut rs);
-        assert!(outcome.finished);
+        // The game opens the Linger / Exit Baths page (sts2-agent fork).
+        assert!(!outcome.finished);
+        assert_eq!(rs.event_state.page, 1);
         assert_eq!(rs.max_hp, max_hp_before + ABYSSAL_BATHS_MAX_HP_GAIN);
         // gain_max_hp bumps current_hp too (+2), then lose_hp removes 3:
         // net current_hp delta = +2 - 3 = -1.
@@ -2691,7 +2769,11 @@ mod tests {
             // BattlewornDummy's first option STAGES an event→combat fight
             // (bead `sts2-rs-ck9z6`, GH #166): a NOT-finished outcome that
             // leaves the event open across the nested combat.
-            if id == EventId::BattlewornDummy {
+            if id == EventId::AbyssalBaths {
+                // Immerse opens the Linger / Exit Baths page (sts2-agent fork).
+                assert!(!outcome.finished, "{id:?}: opens its next page");
+                assert_eq!(rs.current_event, Some(id), "{id:?}: event stays open");
+            } else if id == EventId::BattlewornDummy {
                 assert!(!outcome.finished, "{id:?}: stages a fight");
                 assert!(rs.event_combat.is_some(), "{id:?}: staged event_combat");
                 assert_eq!(rs.current_event, Some(id), "{id:?}: event stays open");
