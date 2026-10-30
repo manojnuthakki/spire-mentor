@@ -17,6 +17,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="../../SimActionOutcome.cs" />
     <Compile Include="../../SimCombatSettle.cs" />
+    <Compile Include="../../SimCombatTurn.cs" />
     <Reference Include="sts2"><HintPath>$(Sts2Dll)</HintPath><Private>true</Private></Reference>
     <Reference Include="GodotSharp"><HintPath>$(GodotDll)</HintPath><Private>true</Private></Reference>
   </ItemGroup>

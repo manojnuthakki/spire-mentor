@@ -81,6 +81,44 @@ faulted.OnEnqueued(_ => { }, 4);
 try { await faulted.Execute(); } catch (InvalidOperationException) { }
 Expect($"faulted ({faultWatch.Result})", SimCombatSettle.Settled(faultWatch, false, false), true);
 
+// SimCombatTurn (the combat handler's ask loop): a fight that ends, or a player who dies, before or while the last play
+// settles is never asked about again, the phase still Play (a death mid-play: LoseCombat leaves the phase alone).
+void Turn(string name, bool got, bool expected)
+{
+    bool ok = got == expected;
+    Console.WriteLine($"{(ok ? "ok  " : "FAIL")} turn {name}: {got}");
+    if (!ok) failures++;
+}
+Turn("may ask in play, the fight going on", SimCombatTurn.MayAsk(true, true, false, false), true);
+Turn("not asked out of the play phase", SimCombatTurn.MayAsk(false, true, false, false), false);
+Turn("not asked, the player dead, the phase still Play", SimCombatTurn.MayAsk(true, true, false, true), false);
+Turn("not asked, a loss pending (ending)", SimCombatTurn.MayAsk(true, true, true, false), false);
+Turn("not asked, the fight over, the phase still Play", SimCombatTurn.MayAsk(true, false, false, false), false);
+Turn("over when the player is dead", SimCombatTurn.Over(true, false, true), true);
+Turn("not over while it goes on", SimCombatTurn.Over(true, false, false), false);
+
+// The loop itself, its probes scripted: `dead` and `over` flip where the game would flip them.
+async Task<(bool ended, int asked, int settled)> Loop(Func<int, bool> diesAtSettle, Func<int, bool> endsTurnAt, int cap = 50,
+    bool deadBefore = false)
+{
+    bool dead = deadBefore;
+    int asked = 0, settled = 0;
+    bool ended = await SimCombatTurn.RunAsync(
+        () => SimCombatTurn.MayAsk(true, true, false, dead),
+        () => { if (diesAtSettle(settled++)) dead = true; return Task.CompletedTask; },
+        () => Task.FromResult(endsTurnAt(asked++)),
+        _ => { }, cap, CancellationToken.None);
+    return (ended, asked, settled);
+}
+var r = await Loop(_ => false, n => n == 2);
+Turn("the agent ends the turn on its third answer", r.ended && r.asked == 3, true);
+r = await Loop(n => n == 1, _ => false);  // the second play settles into a death (Breakthrough at 1 HP)
+Turn($"a death as a play settles: no ask after it (asked {r.asked}, settled {r.settled})", !r.ended && r.asked == 1 && r.settled == 2, true);
+r = await Loop(_ => false, _ => false, deadBefore: true);
+Turn($"dead before the turn's first ask: nothing asked or settled ({r.asked}, {r.settled})", r.asked == 0 && r.settled == 0, true);
+r = await Loop(_ => false, _ => false, cap: 4);
+Turn($"the cap ends the turn unended ({r.asked})", !r.ended && r.asked == 4, true);
+
 Console.WriteLine(failures == 0 ? "all passed" : $"{failures} failed");
 return failures == 0 ? 0 : 1;
 
