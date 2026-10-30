@@ -5765,6 +5765,7 @@ public partial class RunSimulator
         InstallShopPatches();
         InstallEventResumePatch();
         InstallFoulPotionPatch();
+        InstallTestModeRewardPatches();
         // sts2-agent fork: the first patch has loaded MonoMod's helper; delete its file.
         ExHelperCleanup.Run();
 
