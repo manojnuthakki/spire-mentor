@@ -405,6 +405,16 @@ impl PyRunManager {
         for name in &pending {
             rs.pending_potion_swaps.push(parse(name)?);
         }
+        // sts2-agent fork: a live fight keeps its own belt and writes it back
+        // when it ends or is left, so the new belt goes there too (the
+        // headless `set_player`'s potions, at once in the fight).
+        if self.inner.phase() == sts2_core::run_manager::Phase::Combat {
+            if let Some(combat) = self.inner.combat.as_mut() {
+                let belt = &self.inner.run_state.potions;
+                combat.player.potions = belt.iter().copied().collect();
+                combat.player.potion_slot_indices = (0..belt.len() as u8).collect();
+            }
+        }
         Ok(())
     }
 

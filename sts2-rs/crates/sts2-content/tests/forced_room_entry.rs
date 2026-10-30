@@ -243,3 +243,19 @@ fn a_forced_entry_after_an_on_path_move_leaves_winged_boots() {
     );
     assert_eq!(rm.run_state.winged_boots_off_path_used, 0);
 }
+
+#[test]
+fn gold_the_harness_sets_in_a_fight_stays_when_it_is_left() {
+    let mut rm = neow_run(7);
+    assert_eq!(
+        rm.force_enter_room(ForcedRoom::Combat("NIBBITS_WEAK")),
+        ActionResult::Advanced
+    );
+    rm.debug_set_player(Some(50), None, Some(999));
+    assert_eq!(
+        rm.force_enter_room(ForcedRoom::Shop),
+        ActionResult::Advanced
+    );
+    assert_eq!(rm.run_state.gold, 999);
+    assert_eq!(rm.run_state.current_hp, 50);
+}

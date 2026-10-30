@@ -4940,6 +4940,12 @@ impl RunManager {
             if let Some(v) = hp {
                 combat.player.current_hp = v;
             }
+            // The fight's gold is written back to the run when it ends or is
+            // left (`exit_combat`, `abandon_combat`): set it too, or the
+            // run's new value is overwritten (sts2-agent fork).
+            if let Some(v) = gold {
+                combat.gold = v;
+            }
         }
     }
 
