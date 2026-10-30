@@ -5071,6 +5071,33 @@ impl RunManager {
         }
     }
 
+    /// Remove one held `relic` by the harness, as C# `RelicCmd.Remove`
+    /// (`Commands/RelicCmd.cs:61`): `Player.RemoveRelicInternal` (the relic
+    /// leaves the list and stops listening) then `relic.AfterRemoved()`,
+    /// which no relic overrides (the base is a no-op), so there is no
+    /// removal hook to fire. The engine side of the headless `set_player`'s
+    /// relic list (sts2-agent fork). Its counter, wax and melted marks go
+    /// with the last copy ([`RunState::lose_relic`]). The map-point
+    /// history's `RelicsRemoved` isn't kept (the engine's entries carry no
+    /// relic lists).
+    ///
+    /// Returns `false`, changing nothing, when the relic isn't held or a
+    /// combat is live (the fight's relic store is built from the run's at
+    /// combat start; removing one mid-fight isn't modelled).
+    pub fn force_remove_relic(&mut self, relic: crate::RelicId) -> bool {
+        if self.combat.is_some() {
+            return false;
+        }
+        if !self.run_state.lose_relic(relic) {
+            return false;
+        }
+        if !self.run_state.relics.contains(&relic) {
+            self.run_state.wax_relics.remove(&relic);
+            self.run_state.melted_relics.remove(&relic);
+        }
+        true
+    }
+
     /// Cross-act state-carry: clear per-act and combat-only fields
     /// while leaving every run-persistent surface untouched. Called
     /// by [`Self::advance_act_on_boss_kill`] before the map regen +

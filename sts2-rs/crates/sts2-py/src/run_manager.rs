@@ -1245,6 +1245,19 @@ impl PyRunManager {
         Ok(true)
     }
 
+    /// Remove one held relic by id (`"RELIC.BURNING_BLOOD"` or
+    /// `"BURNING_BLOOD"`) as the game does (`RunManager::force_remove_relic`,
+    /// C# `RelicCmd.Remove`): the engine side of the headless `set_player`'s
+    /// relic list. Returns `True` if removed, `False` if the relic isn't held
+    /// or a fight is live; raises `ValueError` for an unknown id. sts2-agent
+    /// fork.
+    fn force_remove_relic(&mut self, relic_id: &str) -> PyResult<bool> {
+        let stripped = relic_id.strip_prefix("RELIC.").unwrap_or(relic_id);
+        let rid = sts2_content::names::relic_id_from_str(stripped)
+            .ok_or_else(|| PyValueError::new_err(format!("unknown relic id {relic_id:?}")))?;
+        Ok(self.inner.force_remove_relic(rid))
+    }
+
     /// Active-event option list as `[(option_id, label), …]`, or `None`
     /// when no event is currently materialized (i.e.
     /// `RunState::current_event` is `None`). Mirrors
