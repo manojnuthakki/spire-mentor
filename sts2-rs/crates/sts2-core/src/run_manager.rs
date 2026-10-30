@@ -4405,6 +4405,21 @@ impl RunManager {
         };
         self.run_state.master_deck[deck_idx].upgrade();
         self.run_state.pending_deck_upgrades -= 1;
+        // Apply any HP damage an "upgrade-then-damage" event deferred
+        // (SpiritGrafter.Rejection → Damage(10)) once the pick resolves, as
+        // C# does after `FromDeckForUpgrade` returns. Out-of-combat death
+        // ends the run on the spot (as in `do_transform_deck_card_at`).
+        if self.run_state.pending_deck_upgrades == 0 {
+            let hp_loss = std::mem::take(&mut self.run_state.pending_post_upgrade_hp_loss);
+            if hp_loss > 0 {
+                let _ = self.run_state.lose_hp(hp_loss);
+                if self.run_state.current_hp <= 0 {
+                    self.run_state.is_over = true;
+                    self.run_state.player_won = false;
+                    self.phase = Phase::RunOver;
+                }
+            }
+        }
         self.settle_after_deck_pick();
         ActionResult::Advanced
     }

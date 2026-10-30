@@ -1530,6 +1530,16 @@ pub struct RunState {
     /// `> 0`. Bead `sts2-rs-1hiht`.
     pub pending_deck_upgrades: u32,
 
+    /// Unblockable HP loss to apply once [`Self::pending_deck_upgrades`]
+    /// fully drains. Models C# events that do "upgrade a card, THEN take
+    /// damage" in sequence — `SpiritGrafter.Rejection`
+    /// (`CardSelectCmd.FromDeckForUpgrade` → `CardCmd.Upgrade` →
+    /// `CreatureCmd.Damage(10)`): the game suspends on the pick, so the HP
+    /// drop lands after it, not when the option is chosen. Only ever non-zero
+    /// when [`Self::interactive_card_upgrade`] is set. Drained by
+    /// `RunManager::do_upgrade_deck_card_at`.
+    pub pending_post_upgrade_hp_loss: i32,
+
     /// When `true`, on-obtain card-transform effects (NewLeaf, …) defer to
     /// an *interactive* deck pick instead of opening the legacy
     /// run-level `pending_choice` (which only the rest-site Smith surface
@@ -2009,6 +2019,7 @@ impl Default for RunState {
             pending_post_pick_relic_grants: Vec::new(),
             interactive_card_upgrade: false,
             pending_deck_upgrades: 0,
+            pending_post_upgrade_hp_loss: 0,
             interactive_card_transform: false,
             pending_deck_transforms: Vec::new(),
             pending_deck_enchants: Vec::new(),

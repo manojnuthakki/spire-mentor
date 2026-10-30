@@ -598,15 +598,17 @@ fn spirit_grafter_rejection(state: &mut RunState) -> EventOutcome {
     // THEN 10 unblockable damage. `upgrade_random_cards(1)` queues the pick via
     // `pending_deck_upgrades` in interactive mode (matching C#'s player choice,
     // no RNG) and falls back to an auto rewards-stream upgrade headless — same
-    // shape as `sapphire_seed_eat`.
-    //
-    // C# applies the 10 damage AFTER the upgrade card-select completes; we apply
-    // it here so the FINAL state is correct, but the `pending_deck_upgrades`
-    // counter carries no post-effect (only `PendingDeckTransform` has
-    // `post_hp_loss`), so an intermediate event-effect-parity snapshot taken
-    // mid-select sees the damage one step early. Final-state-faithful; the
-    // post-select deferral is a separate run-loop surface.
+    // shape as `sapphire_seed_eat`. When the pick is queued the damage waits
+    // in `pending_post_upgrade_hp_loss` until it resolves (C# suspends on the
+    // select), so the card_select shows the HP before the damage; with
+    // nothing to pick the damage lands now.
     let _ = state.upgrade_random_cards(1);
+    if state.pending_deck_upgrades > 0 {
+        state.pending_post_upgrade_hp_loss += SPIRIT_GRAFTER_DAMAGE;
+        return EventOutcome::finished(format!(
+            "Upgraded a card, took {SPIRIT_GRAFTER_DAMAGE} damage."
+        ));
+    }
     let lost = state.lose_hp(SPIRIT_GRAFTER_DAMAGE);
     EventOutcome::finished(format!("Upgraded a card, took {lost} damage."))
 }
