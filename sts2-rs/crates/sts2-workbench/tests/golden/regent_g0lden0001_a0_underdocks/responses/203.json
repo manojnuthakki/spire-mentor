@@ -1,76 +1,48 @@
 {
- "assumptions": {
-  "energy": 3,
-  "hand": 5,
-  "samples": 200
+ "config": {
+  "c_puct": 2.5,
+  "depth": 200,
+  "draw_widening_c": 2.0,
+  "hidden_info": "beliefdraw",
+  "rollout_policy": "heuristic",
+  "seed": 1,
+  "sims": 48,
+  "threads": 1
  },
- "block": {
-  "per_turn": 11.3,
-  "scaling_cards": []
- },
- "composition": {
-  "by_rarity": {
-   "Basic": 9,
-   "Common": 6,
-   "Uncommon": 1
-  },
-  "by_type": {
-   "Attack": 8,
-   "Skill": 8
-  },
-  "dead_cards": 0,
-  "energy_curve": {
-   "0": 2,
-   "1": 14
-  },
-  "unupgraded_basics": 8
- },
- "damage": {
-  "aoe_attacks": [
-   "Crush Under"
-  ],
-  "attack_count": 8,
-  "per_turn": 25.1,
-  "scaling_cards": [
-   "Crush Under"
-  ],
-  "single_target": 23.1,
-  "vs_group": 27.0
- },
- "deck_size": 16,
- "lenses": {
-  "boss": 43.0,
-  "hallway": 44.4,
-  "scaling": 42.2
- },
- "scores": {
-  "block": 43.2,
-  "damage": 46.6,
-  "velocity": 39.1,
-  "volume": 42.9
- },
- "velocity": {
-  "bottleneck": "energy",
-  "cards_per_turn": 3.8,
-  "dilution": 0.94,
-  "draw_limited_turns": 0.0,
-  "energy_limited_turns": 6.7,
-  "engine_cards": 3,
-  "extra_per_turn": 0.2,
-  "tags": {
-   "draw": 1,
-   "energy": 1,
-   "tutor": 1
-  }
- },
- "warnings": [
+ "pv": null,
+ "scores": [
   {
-   "severity": "info",
-   "text": "Energy-limited — cards stranded in hand; more energy helps, more draw won't."
+   "action": "DEFEND_REGENT.title",
+   "is_best": true,
+   "low_confidence": false,
+   "q": 1.2278,
+   "q_saturated": false,
+   "stable_idx": 0,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
   },
   {
-   "severity": "warn",
-   "text": "Deck clogged with basics/curses — prioritise removals."
+   "action": "VENERATE.title",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.2267,
+   "q_saturated": false,
+   "stable_idx": 2,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
+  },
+  {
+   "action": "end turn",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.1987,
+   "q_saturated": false,
+   "stable_idx": -1,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
   }
  ]
 }

@@ -1,12 +1,12 @@
 {
  "details": [],
  "error": null,
- "label": "Map → (2,8)",
+ "label": "remove_card",
  "step": {
   "action_label": "",
   "assets_base": "https://assets.test",
   "chosen_action": null,
-  "decision": "shop",
+  "decision": "card_select",
   "idx": 0,
   "meta": {
    "act": 1,
@@ -29,240 +29,360 @@
    "bg_col": 2,
    "bg_row": 8,
    "bg_seed": 1772253313,
+   "can_skip": true,
    "card_removal_cost": 75,
    "cards": [
     {
-     "card_cost": 1,
      "color": "orange",
-     "cost": 52,
-     "description": "Deal 12 damage.\nDraw 2 cards.",
-     "description_rich": "Deal 12 damage.\nDraw 2 cards.",
-     "id": "GUIDING_STAR",
-     "image": "https://assets.test/card_atlas/regent/guiding_star.png",
+     "cost": 1,
+     "description": "Deal 9 damage.",
+     "description_rich": "Deal 9 damage.",
+     "id": "STRIKE_REGENT",
+     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
      "index": 0,
-     "is_available": true,
-     "is_stocked": true,
-     "name": "Guiding Star",
-     "on_sale": false,
-     "rarity": "Common",
-     "star_cost": 2,
-     "type": "Attack"
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": true
     },
     {
-     "card_cost": 0,
      "color": "orange",
-     "cost": 25,
-     "description": "Deal 11 damage.\nAdd a Debris into your Hand.",
-     "description_rich": "Deal 11 damage.\nAdd a Debris into your Hand.",
-     "id": "COLLISION_COURSE",
-     "image": "https://assets.test/card_atlas/regent/collision_course.png",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_REGENT",
+     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
      "index": 1,
-     "is_available": true,
-     "is_stocked": true,
-     "name": "Collision Course",
-     "on_sale": true,
-     "rarity": "Common",
-     "type": "Attack"
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
     },
     {
-     "card_cost": 1,
      "color": "orange",
-     "cost": 51,
-     "description": "Forge 5.\nDraw 2 cards.",
-     "description_rich": "Forge 5.\nDraw 2 cards.",
-     "id": "SPOILS_OF_BATTLE",
-     "image": "https://assets.test/card_atlas/regent/spoils_of_battle.png",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_REGENT",
+     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
      "index": 2,
-     "is_available": true,
-     "is_stocked": true,
-     "name": "Spoils of Battle",
-     "on_sale": false,
-     "rarity": "Common",
-     "type": "Skill"
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
     },
     {
-     "card_cost": 1,
      "color": "orange",
-     "cost": 51,
-     "description": "Gain Stars.\nNext turn, gain Stars.",
-     "description_rich": "Gain Stars.\nNext turn, gain Stars.",
-     "id": "HIDDEN_CACHE",
-     "image": "https://assets.test/card_atlas/regent/hidden_cache.png",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_REGENT",
+     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
      "index": 3,
-     "is_available": true,
-     "is_stocked": true,
-     "name": "Hidden Cache",
-     "on_sale": false,
-     "rarity": "Common",
-     "type": "Skill"
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
     },
     {
-     "card_cost": 1,
      "color": "orange",
-     "cost": 75,
-     "description": "Whenever you spend ★, gain 2 Block for each ★ spent.",
-     "description_rich": "Whenever you spend ★, gain 2 Block for each ★ spent.",
-     "id": "CHILD_OF_THE_STARS",
-     "image": "https://assets.test/card_atlas/regent/child_of_the_stars.png",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_REGENT",
+     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
      "index": 4,
-     "is_available": true,
-     "is_stocked": true,
-     "name": "Child of the Stars",
-     "on_sale": false,
-     "rarity": "Uncommon",
-     "type": "Power"
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
     },
     {
-     "card_cost": 1,
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_REGENT",
+     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+     "index": 5,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_REGENT",
+     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+     "index": 6,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_REGENT",
+     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+     "index": 7,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 0,
+     "description": "Deal 8 damage.\nApply 1 Weak.\nApply 1 Vulnerable.",
+     "description_rich": "Deal 8 damage.\nApply 1 Weak.\nApply 1 Vulnerable.",
+     "id": "FALLING_STAR",
+     "image": "https://assets.test/card_atlas/regent/falling_star.png",
+     "index": 8,
+     "name": "Falling Star",
+     "rarity": "Basic",
+     "star_cost": 2,
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain Stars.",
+     "description_rich": "Gain Stars.",
+     "id": "VENERATE",
+     "image": "https://assets.test/card_atlas/regent/venerate.png",
+     "index": 9,
+     "name": "Venerate",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
      "color": "colorless",
-     "cost": 88,
+     "cost": 1,
      "description": "Deal 14 damage.",
      "description_rich": "Deal 14 damage.",
      "id": "ULTIMATE_STRIKE",
      "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-     "index": 5,
-     "is_available": true,
-     "is_stocked": true,
+     "index": 10,
      "name": "Ultimate Strike",
-     "on_sale": false,
      "rarity": "Uncommon",
-     "type": "Attack"
+     "type": "Attack",
+     "upgraded": false
     },
     {
-     "card_cost": 3,
-     "color": "colorless",
-     "cost": 175,
-     "description": "Whenever you play an Attack, add a random Attack into your Hand.",
-     "description_rich": "Whenever you play an Attack, add a random Attack into your [gold]Hand[/gold].",
-     "id": "CALAMITY",
-     "image": "https://assets.test/card_atlas/colorless/calamity.png",
-     "index": 6,
-     "is_available": true,
-     "is_stocked": true,
-     "name": "Calamity",
-     "on_sale": false,
-     "rarity": "Rare",
-     "type": "Power"
+     "color": "orange",
+     "cost": 0,
+     "description": "Gain 7 Block.",
+     "description_rich": "Gain 7 Block.",
+     "id": "CLOAK_OF_STARS",
+     "image": "https://assets.test/card_atlas/regent/cloak_of_stars.png",
+     "index": 11,
+     "name": "Cloak of Stars",
+     "rarity": "Common",
+     "star_cost": 1,
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Forge 5.\nDraw 2 cards.",
+     "description_rich": "Forge 5.\nDraw 2 cards.",
+     "id": "SPOILS_OF_BATTLE",
+     "image": "https://assets.test/card_atlas/regent/spoils_of_battle.png",
+     "index": 12,
+     "name": "Spoils of Battle",
+     "rarity": "Common",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Deal 9 damage.\nGain 1 Stars.",
+     "description_rich": "Deal 9 damage.\nGain 1 Stars.",
+     "id": "SOLAR_STRIKE",
+     "image": "https://assets.test/card_atlas/regent/solar_strike.png",
+     "index": 13,
+     "name": "Solar Strike",
+     "rarity": "Common",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain 1 Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+     "description_rich": "Gain 1 Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+     "id": "GLOW",
+     "image": "https://assets.test/card_atlas/regent/glow.png",
+     "index": 14,
+     "name": "Glow",
+     "rarity": "Common",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Deal 12 damage.\nDraw 2 cards.",
+     "description_rich": "Deal 12 damage.\nDraw 2 cards.",
+     "id": "GUIDING_STAR",
+     "image": "https://assets.test/card_atlas/regent/guiding_star.png",
+     "index": 15,
+     "name": "Guiding Star",
+     "rarity": "Common",
+     "star_cost": 2,
+     "type": "Attack",
+     "upgraded": false
     }
    ],
-   "decision": "shop",
+   "context": "remove",
+   "decision": "card_select",
    "floor": 8,
+   "max_select": 1,
+   "min_select": 0,
    "options": [
     {
-     "action": "buy_card",
+     "action": "select_cards",
      "args": {
-      "card_index": 0
+      "indices": "0"
      },
      "enabled": true,
-     "label": "Buy GUIDING_STAR.title (52g)"
+     "label": "STRIKE_REGENT.title"
     },
     {
-     "action": "buy_card",
+     "action": "select_cards",
      "args": {
-      "card_index": 1
+      "indices": "1"
      },
      "enabled": true,
-     "label": "Buy COLLISION_COURSE.title (25g)"
+     "label": "STRIKE_REGENT.title"
     },
     {
-     "action": "buy_card",
+     "action": "select_cards",
      "args": {
-      "card_index": 2
+      "indices": "2"
      },
      "enabled": true,
-     "label": "Buy SPOILS_OF_BATTLE.title (51g)"
+     "label": "STRIKE_REGENT.title"
     },
     {
-     "action": "buy_card",
+     "action": "select_cards",
      "args": {
-      "card_index": 3
+      "indices": "3"
      },
      "enabled": true,
-     "label": "Buy HIDDEN_CACHE.title (51g)"
+     "label": "STRIKE_REGENT.title"
     },
     {
-     "action": "buy_card",
+     "action": "select_cards",
      "args": {
-      "card_index": 4
+      "indices": "4"
      },
      "enabled": true,
-     "label": "Buy CHILD_OF_THE_STARS.title (75g)"
+     "label": "DEFEND_REGENT.title"
     },
     {
-     "action": "buy_card",
+     "action": "select_cards",
      "args": {
-      "card_index": 5
+      "indices": "5"
      },
      "enabled": true,
-     "label": "Buy ULTIMATE_STRIKE.title (88g)"
+     "label": "DEFEND_REGENT.title"
     },
     {
-     "action": "buy_card",
+     "action": "select_cards",
      "args": {
-      "card_index": 6
+      "indices": "6"
      },
      "enabled": true,
-     "label": "Buy CALAMITY.title (175g)"
+     "label": "DEFEND_REGENT.title"
     },
     {
-     "action": "buy_relic",
+     "action": "select_cards",
      "args": {
-      "relic_index": 0
+      "indices": "7"
      },
      "enabled": true,
-     "label": "Buy ANCHOR.title (177g)"
+     "label": "DEFEND_REGENT.title"
     },
     {
-     "action": "buy_relic",
+     "action": "select_cards",
      "args": {
-      "relic_index": 1
+      "indices": "8"
      },
      "enabled": true,
-     "label": "Buy BOOK_OF_FIVE_RINGS.title (182g)"
+     "label": "FALLING_STAR.title"
     },
     {
-     "action": "buy_relic",
+     "action": "select_cards",
      "args": {
-      "relic_index": 2
+      "indices": "9"
      },
      "enabled": true,
-     "label": "Buy LEES_WAFFLE.title (179g)"
+     "label": "VENERATE.title"
     },
     {
-     "action": "buy_potion",
+     "action": "select_cards",
      "args": {
-      "potion_index": 0
+      "indices": "10"
      },
      "enabled": true,
-     "label": "Buy ENERGY_POTION.title (50g)"
+     "label": "ULTIMATE_STRIKE.title"
     },
     {
-     "action": "buy_potion",
+     "action": "select_cards",
      "args": {
-      "potion_index": 1
+      "indices": "11"
      },
      "enabled": true,
-     "label": "Buy STAR_POTION.title (50g)"
+     "label": "CLOAK_OF_STARS.title"
     },
     {
-     "action": "buy_potion",
+     "action": "select_cards",
      "args": {
-      "potion_index": 2
+      "indices": "12"
      },
      "enabled": true,
-     "label": "Buy EXPLOSIVE_AMPOULE.title (50g)"
+     "label": "SPOILS_OF_BATTLE.title"
     },
     {
-     "action": "remove_card",
+     "action": "select_cards",
+     "args": {
+      "indices": "13"
+     },
+     "enabled": true,
+     "label": "SOLAR_STRIKE.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "14"
+     },
+     "enabled": true,
+     "label": "GLOW.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "15"
+     },
+     "enabled": true,
+     "label": "GUIDING_STAR.title"
+    },
+    {
+     "action": "skip_select",
      "args": {},
      "enabled": true,
-     "label": "Remove a card (75g)"
-    },
-    {
-     "action": "leave_room",
-     "args": {},
-     "enabled": true,
-     "label": "Leave shop"
+     "label": "Skip"
     }
    ],
    "player": {
@@ -455,12 +575,12 @@
      {
       "color": "orange",
       "cost": 1,
-      "description": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-      "description_rich": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-      "id": "COSMIC_INDIFFERENCE",
-      "image": "https://assets.test/card_atlas/regent/cosmic_indifference.png",
+      "description": "Gain 1 Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+      "description_rich": "Gain 1 Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+      "id": "GLOW",
+      "image": "https://assets.test/card_atlas/regent/glow.png",
       "index": 14,
-      "name": "Cosmic Indifference",
+      "name": "Glow",
       "rarity": "Common",
       "type": "Skill",
       "upgraded": false
@@ -468,28 +588,29 @@
      {
       "color": "orange",
       "cost": 1,
-      "description": "Deal 7 damage to ALL enemies. All enemies lose 1 Strength this turn.",
-      "description_rich": "Deal 7 damage to ALL enemies. All enemies lose 1 Strength this turn.",
-      "id": "CRUSH_UNDER",
-      "image": "https://assets.test/card_atlas/regent/crush_under.png",
+      "description": "Deal 12 damage.\nDraw 2 cards.",
+      "description_rich": "Deal 12 damage.\nDraw 2 cards.",
+      "id": "GUIDING_STAR",
+      "image": "https://assets.test/card_atlas/regent/guiding_star.png",
       "index": 15,
-      "name": "Crush Under",
+      "name": "Guiding Star",
       "rarity": "Common",
+      "star_cost": 2,
       "type": "Attack",
       "upgraded": false
      }
     ],
-    "gold": 198,
-    "hp": 32,
+    "gold": 92,
+    "hp": 41,
     "max_hp": 75,
     "name": "Regent",
     "potion_slots": 3,
     "potions": [
      {
-      "description": "Gain 12 Block.",
-      "id": "BLOCK_POTION",
-      "image": "https://assets.test/potion_atlas/block_potion.png",
-      "name": "Block Potion"
+      "description": "Gain 2 Energy.",
+      "id": "ENERGY_POTION",
+      "image": "https://assets.test/potion_atlas/energy_potion.png",
+      "name": "Energy Potion"
      }
     ],
     "relics": [
@@ -509,66 +630,54 @@
    },
    "potions": [
     {
-     "cost": 50,
-     "description": "Gain 2 Energy.",
+     "cost": 999999,
      "id": "ENERGY_POTION",
-     "image": "https://assets.test/potion_atlas/energy_potion.png",
      "index": 0,
-     "is_available": true,
-     "is_stocked": true,
-     "name": "Energy Potion"
+     "is_available": false,
+     "is_stocked": false,
+     "name": "ENERGY_POTION.title"
     },
     {
      "cost": 50,
-     "description": "Gain 3 Stars.",
      "id": "STAR_POTION",
-     "image": "https://assets.test/potion_atlas/star_potion.png",
      "index": 1,
      "is_available": true,
      "is_stocked": true,
-     "name": "Star Potion"
+     "name": "STAR_POTION.title"
     },
     {
      "cost": 50,
-     "description": "Deal 10 damage to ALL enemies.",
      "id": "EXPLOSIVE_AMPOULE",
-     "image": "https://assets.test/potion_atlas/explosive_ampoule.png",
      "index": 2,
      "is_available": true,
      "is_stocked": true,
-     "name": "Explosive Ampoule"
+     "name": "EXPLOSIVE_AMPOULE.title"
     }
    ],
    "relics": [
     {
      "cost": 177,
-     "description": "Start each combat with 10 Block.",
      "id": "ANCHOR",
-     "image": "https://assets.test/relic_atlas/anchor.png",
      "index": 0,
      "is_available": true,
-     "is_stocked": true,
-     "name": "Anchor"
+     "is_stocked": false,
+     "name": "ANCHOR.title"
     },
     {
-     "cost": 182,
-     "description": "Every 5 cards you add to your Deck, heal 20 HP.",
-     "id": "BOOK_OF_FIVE_RINGS",
-     "image": "https://assets.test/relic_atlas/book_of_five_rings.png",
+     "cost": 234,
+     "id": "PETRIFIED_TOAD",
      "index": 1,
      "is_available": true,
-     "is_stocked": true,
-     "name": "Book of Five Rings"
+     "is_stocked": false,
+     "name": "PETRIFIED_TOAD.title"
     },
     {
      "cost": 179,
-     "description": "Upon pickup, raise your Max HP by 7 and heal all of your HP.",
      "id": "LEES_WAFFLE",
-     "image": "https://assets.test/relic_atlas/lees_waffle.png",
      "index": 2,
      "is_available": true,
-     "is_stocked": true,
-     "name": "Lee's Waffle"
+     "is_stocked": false,
+     "name": "LEES_WAFFLE.title"
     }
    ]
   }

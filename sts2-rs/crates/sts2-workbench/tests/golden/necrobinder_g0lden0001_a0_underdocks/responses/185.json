@@ -1,19 +1,12 @@
 {
- "final_turn_histogram": {},
- "n_losses": 1,
- "n_runs": 1,
- "pattern_tags": {},
- "representative_losses": [
-  {
-   "enemy_min_pct": 6.3492,
-   "final_turn": null,
-   "stem": "20260101_000000_Necrobinder_G0LDEN0001",
-   "turn1_q": null
-  }
+ "available": false,
+ "caveats": [
+  "The outlook score is the AI's shaped-return estimate of the run — a relative signal, not a win percentage.",
+  "A swing mixes your choice with the luck revealed after it (what the shop stocked, what the reward offered, how the fight rolled) — use “verify” to check whether the choice itself mattered.",
+  "Judgments are relative to the AI's own play style; a line that is weak for the AI may still be fine for a human plan."
  ],
- "turn1_q": {
-  "max": null,
-  "mean": null,
-  "min": null
- }
+ "points": [],
+ "reason": "this run log has no recorded value data — play it in the workbench (rust backend + PPO checkpoint) to record a value curve",
+ "summary": {},
+ "turning_points": []
 }

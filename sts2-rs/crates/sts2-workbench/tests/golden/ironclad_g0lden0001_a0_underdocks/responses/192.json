@@ -1,0 +1,124 @@
+{
+ "points": [
+  {
+   "act": 1,
+   "deck_size": 10,
+   "floor": 0,
+   "idx": 0,
+   "scores": {
+    "block": 38.9,
+    "damage": 31.4,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 11,
+   "floor": 0,
+   "idx": 2,
+   "scores": {
+    "block": 36.3,
+    "damage": 36.8,
+    "velocity": 3.3,
+    "volume": 16.4
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 12,
+   "floor": 1,
+   "idx": 17,
+   "scores": {
+    "block": 34.1,
+    "damage": 37.7,
+    "velocity": 42.0,
+    "volume": 37.8
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 13,
+   "floor": 2,
+   "idx": 31,
+   "scores": {
+    "block": 39.7,
+    "damage": 35.3,
+    "velocity": 38.3,
+    "volume": 37.7
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 14,
+   "floor": 4,
+   "idx": 52,
+   "scores": {
+    "block": 39.1,
+    "damage": 35.0,
+    "velocity": 33.1,
+    "volume": 35.6
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 6,
+   "idx": 82,
+   "scores": {
+    "block": 38.5,
+    "damage": 36.3,
+    "velocity": 37.7,
+    "volume": 37.5
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 7,
+   "idx": 85,
+   "scores": {
+    "block": 38.5,
+    "damage": 37.8,
+    "velocity": 37.7,
+    "volume": 38.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 16,
+   "floor": 8,
+   "idx": 87,
+   "scores": {
+    "block": 37.5,
+    "damage": 40.7,
+    "velocity": 41.3,
+    "volume": 39.8
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 8,
+   "idx": 90,
+   "scores": {
+    "block": 39.9,
+    "damage": 38.7,
+    "velocity": 47.2,
+    "volume": 41.8
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 10,
+   "idx": 95,
+   "scores": {
+    "block": 39.9,
+    "damage": 40.2,
+    "velocity": 47.2,
+    "volume": 42.3
+   }
+  }
+ ]
+}

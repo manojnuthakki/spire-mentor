@@ -1,12 +1,19 @@
 {
  "coverage": [
+  "card_select:enchant",
   "card_select:none",
+  "card_select:remove|upgrade",
+  "card_select:upgrade",
   "decision:card_reward",
   "decision:card_select",
   "decision:combat_play",
   "decision:event_choice",
   "decision:game_over",
   "decision:map_select",
+  "decision:rest_site",
+  "decision:shop",
+  "potion_used",
+  "room_reveal",
   "route:/api/deck/reward-preview",
   "route:/api/deck/trend",
   "route:/api/live/action",
@@ -19,6 +26,7 @@
   "route:/api/live/map",
   "route:/api/live/ppo-policy",
   "route:/api/live/quit",
+  "route:/api/live/regret-review",
   "route:/api/live/save",
   "route:/api/live/search_tree",
   "route:/api/live/seek",
@@ -41,25 +49,26 @@
   "route:/api/timeline",
   "route:/api/wpa-review",
   "seek_fork",
+  "smith",
   "status:404",
   "status:409"
  ],
  "engine": {
-  "src_hash": "e15dff2067dc4736",
+  "src_hash": "65ab4a31a706226e",
   "version": "0.0.1"
  },
  "final_act": 1,
- "final_floor": 6,
- "full_responses": 47,
+ "final_floor": 11,
+ "full_responses": 58,
  "full_steps": 0,
  "patches": {
   "assets_base_url": "https://assets.test",
   "ppo_disabled": true,
   "saved_at": "2026-01-01T00:00:00Z"
  },
- "python": "3.13",
+ "python": "3.14",
  "reached_game_over": true,
- "requests": 135,
+ "requests": 165,
  "scenario": {
   "act1": "underdocks",
   "ascension": 10,
@@ -242,5 +251,5 @@
   ],
   "seed": "G0LDEN0001"
  },
- "steps_played": 82
+ "steps_played": 105
 }

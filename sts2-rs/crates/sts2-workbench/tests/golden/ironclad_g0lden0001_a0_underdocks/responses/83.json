@@ -1216,19 +1216,6 @@
      "rarity": "Common",
      "type": "Skill",
      "upgraded": false
-    },
-    {
-     "color": "red",
-     "cost": 1,
-     "description": "Lose 1 HP.\nDeal 9 damage to ALL enemies.",
-     "description_rich": "Lose 1 HP.\nDeal 9 damage to ALL enemies.",
-     "id": "BREAKTHROUGH",
-     "image": "https://assets.test/card_atlas/ironclad/breakthrough.png",
-     "index": 14,
-     "name": "Breakthrough",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgraded": false
     }
    ],
    "gold": 182,

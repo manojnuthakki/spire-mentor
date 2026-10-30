@@ -12,60 +12,18 @@
  "pv": null,
  "scores": [
   {
-   "action": "Sweeping Beam",
+   "action": "end turn",
    "is_best": true,
    "losses": 0,
    "low_confidence": false,
-   "q": 1.0426,
-   "q_saturated": false,
-   "stable_idx": 0,
-   "target_index": null,
-   "ties": 0,
-   "visits": 22,
-   "win_prob": 1.0,
-   "wins": 22
-  },
-  {
-   "action": "drink Energy Potion",
-   "is_best": false,
-   "losses": 2,
-   "low_confidence": false,
-   "q": 0.6475,
-   "q_saturated": false,
-   "stable_idx": -100,
-   "target_index": null,
-   "ties": 0,
-   "visits": 12,
-   "win_prob": 0.8333,
-   "wins": 10
-  },
-  {
-   "action": "TURBO",
-   "is_best": false,
-   "losses": 3,
-   "low_confidence": false,
-   "q": 0.4298,
-   "q_saturated": false,
-   "stable_idx": 1,
-   "target_index": null,
-   "ties": 0,
-   "visits": 11,
-   "win_prob": 0.7273,
-   "wins": 8
-  },
-  {
-   "action": "end turn",
-   "is_best": false,
-   "losses": 3,
-   "low_confidence": false,
-   "q": -1.1851,
+   "q": 1.0885,
    "q_saturated": false,
    "stable_idx": -1,
    "target_index": null,
    "ties": 0,
-   "visits": 3,
-   "win_prob": 0.0,
-   "wins": 0
+   "visits": 48,
+   "win_prob": 1.0,
+   "wins": 48
   }
  ]
 }

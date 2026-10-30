@@ -1,0 +1,48 @@
+{
+ "config": {
+  "c_puct": 2.5,
+  "depth": 200,
+  "draw_widening_c": 2.0,
+  "hidden_info": "beliefdraw",
+  "rollout_policy": "heuristic",
+  "seed": 1,
+  "sims": 48,
+  "threads": 1
+ },
+ "pv": null,
+ "scores": [
+  {
+   "action": "DEFEND_REGENT.title",
+   "is_best": true,
+   "low_confidence": false,
+   "q": 1.1619,
+   "q_saturated": false,
+   "stable_idx": 0,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
+  },
+  {
+   "action": "STRIKE_REGENT.title",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.1554,
+   "q_saturated": false,
+   "stable_idx": 4,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
+  },
+  {
+   "action": "end turn",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.1358,
+   "q_saturated": false,
+   "stable_idx": -1,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
+  }
+ ]
+}

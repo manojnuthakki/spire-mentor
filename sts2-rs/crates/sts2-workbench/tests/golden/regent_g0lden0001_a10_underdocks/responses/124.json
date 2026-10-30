@@ -1,0 +1,12 @@
+{
+ "available": false,
+ "caveats": [
+  "The outlook score is the AI's shaped-return estimate of the run — a relative signal, not a win percentage.",
+  "A swing mixes your choice with the luck revealed after it (what the shop stocked, what the reward offered, how the fight rolled) — use “verify” to check whether the choice itself mattered.",
+  "Judgments are relative to the AI's own play style; a line that is weak for the AI may still be fine for a human plan."
+ ],
+ "points": [],
+ "reason": "this run log has no recorded value data — play it in the workbench (rust backend + PPO checkpoint) to record a value curve",
+ "summary": {},
+ "turning_points": []
+}

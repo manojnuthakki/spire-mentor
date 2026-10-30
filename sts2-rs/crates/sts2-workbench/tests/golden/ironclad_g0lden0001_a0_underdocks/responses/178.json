@@ -1,0 +1,269 @@
+{
+ "details": [
+  "You HP 21→0 (−21)",
+  "You Block 5→0",
+  "Terror Eel HP 9→0  ☠ defeated",
+  "You −Vulnerable"
+ ],
+ "error": null,
+ "label": "End turn",
+ "step": {
+  "action_label": "",
+  "assets_base": "https://assets.test",
+  "chosen_action": null,
+  "decision": "game_over",
+  "idx": 0,
+  "meta": {
+   "act": 1,
+   "act_name": "Underdocks",
+   "bg_col": 0,
+   "bg_row": 11,
+   "bg_seed": 1772253313,
+   "floor": 11,
+   "step_no": 0,
+   "turn": null
+  },
+  "pv": null,
+  "scores": [],
+  "source": "live",
+  "state": {
+   "act": 1,
+   "act1": "underdocks",
+   "act_name": "Underdocks",
+   "ascension": 0,
+   "bg_col": 0,
+   "bg_row": 11,
+   "bg_seed": 1772253313,
+   "decision": "game_over",
+   "floor": 11,
+   "options": [],
+   "player": {
+    "block": 0,
+    "deck": [
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Deal 9 damage.",
+      "description_rich": "Deal 9 damage.",
+      "id": "STRIKE_IRONCLAD",
+      "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
+      "index": 0,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": true
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_IRONCLAD",
+      "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
+      "index": 1,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_IRONCLAD",
+      "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
+      "index": 2,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_IRONCLAD",
+      "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
+      "index": 3,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_IRONCLAD",
+      "image": "https://assets.test/card_atlas/ironclad/defend_ironclad.png",
+      "index": 4,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_IRONCLAD",
+      "image": "https://assets.test/card_atlas/ironclad/defend_ironclad.png",
+      "index": 5,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_IRONCLAD",
+      "image": "https://assets.test/card_atlas/ironclad/defend_ironclad.png",
+      "index": 6,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_IRONCLAD",
+      "image": "https://assets.test/card_atlas/ironclad/defend_ironclad.png",
+      "index": 7,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 2,
+      "description": "Deal 8 damage.\nApply 2 Vulnerable.",
+      "description_rich": "Deal 8 damage.\nApply 2 Vulnerable.",
+      "id": "BASH",
+      "image": "https://assets.test/card_atlas/ironclad/bash.png",
+      "index": 8,
+      "name": "Bash",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "colorless",
+      "cost": 1,
+      "description": "Deal 14 damage.",
+      "description_rich": "Deal 14 damage.",
+      "id": "ULTIMATE_STRIKE",
+      "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+      "index": 9,
+      "name": "Ultimate Strike",
+      "rarity": "Uncommon",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 0,
+      "description": "Lose 3 HP.\nGain 2 Energy.",
+      "description_rich": "Lose 3 HP.\nGain 2 Energy.",
+      "id": "BLOODLETTING",
+      "image": "https://assets.test/card_atlas/ironclad/bloodletting.png",
+      "index": 10,
+      "name": "Bloodletting",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Gain 7 Block.\nExhaust 1 card at random.",
+      "description_rich": "Gain 7 Block.\nExhaust 1 card at random.",
+      "id": "TRUE_GRIT",
+      "image": "https://assets.test/card_atlas/ironclad/true_grit.png",
+      "index": 11,
+      "name": "True Grit",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Apply 3 Vulnerable.\nExhaust.",
+      "description_rich": "Apply 3 Vulnerable.\n[gold]Exhaust[/gold].",
+      "id": "TREMBLE",
+      "image": "https://assets.test/card_atlas/ironclad/tremble.png",
+      "index": 12,
+      "name": "Tremble",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Deal 10 damage.\nDouble the enemy's Vulnerable.\nExhaust.",
+      "description_rich": "Deal 10 damage.\nDouble the enemy's Vulnerable.\n[gold]Exhaust[/gold].",
+      "id": "MOLTEN_FIST",
+      "image": "https://assets.test/card_atlas/ironclad/molten_fist.png",
+      "index": 13,
+      "name": "Molten Fist",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "red",
+      "cost": 1,
+      "description": "Deal 9 damage.\nDraw 1 card.",
+      "description_rich": "Deal 9 damage.\nDraw 1 card.",
+      "id": "POMMEL_STRIKE",
+      "image": "https://assets.test/card_atlas/ironclad/pommel_strike.png",
+      "index": 14,
+      "name": "Pommel Strike",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": false
+     }
+    ],
+    "gold": 65,
+    "hp": 0,
+    "max_hp": 80,
+    "name": "Ironclad",
+    "potion_slots": 3,
+    "potions": [],
+    "relics": [
+     {
+      "description": "At the end of combat, heal 6 HP.",
+      "id": "BURNING_BLOOD",
+      "image": "https://assets.test/relic_atlas/burning_blood.png",
+      "name": "Burning Blood"
+     },
+     {
+      "description": "Upon pickup, choose 1 of 2 Colorless cards to add to your Deck.",
+      "id": "LEAD_PAPERWEIGHT",
+      "image": "https://assets.test/relic_atlas/lead_paperweight.png",
+      "name": "Lead Paperweight"
+     },
+     {
+      "description": "The first time you lose HP each combat, draw 3 cards.",
+      "id": "CENTENNIAL_PUZZLE",
+      "image": "https://assets.test/relic_atlas/centennial_puzzle.png",
+      "name": "Centennial Puzzle"
+     }
+    ]
+   },
+   "victory": false
+  }
+ }
+}

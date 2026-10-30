@@ -1,81 +1,48 @@
 {
- "assumptions": {
-  "energy": 3,
-  "hand": 5,
-  "samples": 200
+ "config": {
+  "c_puct": 2.5,
+  "depth": 200,
+  "draw_widening_c": 2.0,
+  "hidden_info": "beliefdraw",
+  "rollout_policy": "heuristic",
+  "seed": 1,
+  "sims": 48,
+  "threads": 1
  },
- "block": {
-  "per_turn": 8.1,
-  "scaling_cards": [
-   "Bodyguard"
-  ]
- },
- "composition": {
-  "by_rarity": {
-   "Basic": 10,
-   "Common": 4,
-   "Curse": 1,
-   "Uncommon": 1
-  },
-  "by_type": {
-   "Attack": 9,
-   "Curse": 1,
-   "Skill": 6
-  },
-  "dead_cards": 1,
-  "energy_curve": {
-   "1": 15
-  },
-  "unupgraded_basics": 10
- },
- "damage": {
-  "aoe_attacks": [
-   "Sow"
-  ],
-  "attack_count": 9,
-  "per_turn": 18.3,
-  "scaling_cards": [
-   "Unleash",
-   "Snap",
-   "Fear"
-  ],
-  "single_target": 16.1,
-  "vs_group": 20.6
- },
- "deck_size": 16,
- "lenses": {
-  "boss": 23.5,
-  "hallway": 28.7,
-  "scaling": 20.6
- },
- "scores": {
-  "block": 33.2,
-  "damage": 36.8,
-  "velocity": 0.0,
-  "volume": 0.0
- },
- "velocity": {
-  "bottleneck": "energy",
-  "cards_per_turn": 3.0,
-  "dilution": 0.94,
-  "draw_limited_turns": 0.0,
-  "energy_limited_turns": 7.0,
-  "engine_cards": 0,
-  "extra_per_turn": 0.0,
-  "tags": {}
- },
- "warnings": [
+ "pv": null,
+ "scores": [
   {
-   "severity": "info",
-   "text": "Low velocity — few draw/energy cards; you'll often draw the wrong hand."
+   "action": "DEFEND_NECROBINDER.title",
+   "is_best": true,
+   "low_confidence": false,
+   "q": 1.155,
+   "q_saturated": false,
+   "stable_idx": 0,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
   },
   {
-   "severity": "info",
-   "text": "Energy-limited — cards stranded in hand; more energy helps, more draw won't."
+   "action": "STRIKE_NECROBINDER.title",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.1418,
+   "q_saturated": false,
+   "stable_idx": 4,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
   },
   {
-   "severity": "warn",
-   "text": "Deck clogged with basics/curses — prioritise removals."
+   "action": "end turn",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.1318,
+   "q_saturated": false,
+   "stable_idx": -1,
+   "target_index": null,
+   "visits": 16,
+   "win_prob": 1.0
   }
  ]
 }

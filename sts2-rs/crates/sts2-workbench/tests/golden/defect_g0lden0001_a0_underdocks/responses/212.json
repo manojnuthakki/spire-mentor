@@ -1,16 +1,14 @@
 {
  "final_turn_histogram": {
-  "3": 1
+  "6": 1
  },
  "n_losses": 1,
  "n_runs": 1,
- "pattern_tags": {
-  "fast_death": 1
- },
+ "pattern_tags": {},
  "representative_losses": [
   {
-   "enemy_min_pct": 4.2857,
-   "final_turn": 3,
+   "enemy_min_pct": 1.5873,
+   "final_turn": 6,
    "stem": "20260101_000000_Defect_G0LDEN0001",
    "turn1_q": null
   }

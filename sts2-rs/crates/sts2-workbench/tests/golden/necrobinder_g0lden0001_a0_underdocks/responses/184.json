@@ -1,12 +1,124 @@
 {
- "runs": [
+ "points": [
   {
-   "enemy_min_pct": 6.3492,
-   "final_floor": 11,
-   "final_turn": null,
-   "stem": "20260101_000000_Necrobinder_G0LDEN0001",
-   "turn1_q": null,
-   "won": false
+   "act": 1,
+   "deck_size": 10,
+   "floor": 0,
+   "idx": 0,
+   "scores": {
+    "block": 38.7,
+    "damage": 25.6,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 11,
+   "floor": 0,
+   "idx": 2,
+   "scores": {
+    "block": 36.6,
+    "damage": 34.2,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 12,
+   "floor": 1,
+   "idx": 15,
+   "scores": {
+    "block": 41.0,
+    "damage": 32.2,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 13,
+   "floor": 2,
+   "idx": 39,
+   "scores": {
+    "block": 38.4,
+    "damage": 38.9,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 14,
+   "floor": 4,
+   "idx": 56,
+   "scores": {
+    "block": 36.8,
+    "damage": 37.6,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 6,
+   "idx": 79,
+   "scores": {
+    "block": 39.9,
+    "damage": 35.5,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 7,
+   "idx": 82,
+   "scores": {
+    "block": 39.9,
+    "damage": 37.0,
+    "velocity": 0.0,
+    "volume": 0.0
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 16,
+   "floor": 8,
+   "idx": 84,
+   "scores": {
+    "block": 37.9,
+    "damage": 38.7,
+    "velocity": 3.5,
+    "volume": 17.3
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 8,
+   "idx": 87,
+   "scores": {
+    "block": 39.8,
+    "damage": 37.5,
+    "velocity": 1.9,
+    "volume": 14.2
+   }
+  },
+  {
+   "act": 1,
+   "deck_size": 15,
+   "floor": 10,
+   "idx": 92,
+   "scores": {
+    "block": 39.8,
+    "damage": 38.9,
+    "velocity": 1.9,
+    "volume": 14.3
+   }
   }
  ]
 }

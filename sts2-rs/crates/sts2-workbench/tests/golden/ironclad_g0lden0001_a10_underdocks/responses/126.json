@@ -5,59 +5,57 @@
   "samples": 200
  },
  "block": {
-  "per_turn": 8.6,
+  "per_turn": 9.2,
   "scaling_cards": []
  },
  "composition": {
   "by_rarity": {
    "Basic": 10,
-   "Common": 4,
+   "Common": 3,
    "Curse": 1,
    "Uncommon": 1
   },
   "by_type": {
-   "Attack": 8,
+   "Attack": 7,
    "Curse": 1,
    "Skill": 7
   },
   "dead_cards": 1,
   "energy_curve": {
    "0": 1,
-   "1": 13,
+   "1": 12,
    "2": 1
   },
   "unupgraded_basics": 10
  },
  "damage": {
-  "aoe_attacks": [
-   "Breakthrough"
-  ],
-  "attack_count": 8,
-  "per_turn": 19.9,
+  "aoe_attacks": [],
+  "attack_count": 7,
+  "per_turn": 16.1,
   "scaling_cards": [
    "Bash"
   ],
-  "single_target": 17.3,
-  "vs_group": 22.6
+  "single_target": 16.1,
+  "vs_group": 16.1
  },
- "deck_size": 16,
+ "deck_size": 15,
  "lenses": {
-  "boss": 33.7,
-  "hallway": 35.9,
+  "boss": 32.7,
+  "hallway": 32.9,
   "scaling": 32.6
  },
  "scores": {
-  "block": 35.0,
-  "damage": 39.2,
-  "velocity": 26.8,
-  "volume": 33.3
+  "block": 37.0,
+  "damage": 33.2,
+  "velocity": 27.8,
+  "volume": 32.4
  },
  "velocity": {
   "bottleneck": "energy",
   "cards_per_turn": 3.4,
-  "dilution": 0.94,
+  "dilution": 1.0,
   "draw_limited_turns": 1.9,
-  "energy_limited_turns": 4.7,
+  "energy_limited_turns": 4.6,
   "engine_cards": 2,
   "extra_per_turn": 0.3,
   "tags": {
@@ -69,6 +67,10 @@
   {
    "severity": "warn",
    "text": "Thin on block and no block engine — big hits will land in Act 2+."
+  },
+  {
+   "severity": "info",
+   "text": "No AOE — multi-enemy fights (Gremlins, hallways) will be slow."
   },
   {
    "severity": "info",

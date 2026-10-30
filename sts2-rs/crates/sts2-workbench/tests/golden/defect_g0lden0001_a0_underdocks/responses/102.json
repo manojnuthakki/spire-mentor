@@ -1,7 +1,7 @@
 {
  "details": [],
  "error": null,
- "label": "Choose: Smith",
+ "label": "remove_card",
  "step": {
   "action_label": "",
   "assets_base": "https://assets.test",
@@ -12,9 +12,9 @@
    "act": 1,
    "act_name": "Underdocks",
    "bg_col": 2,
-   "bg_row": 7,
+   "bg_row": 8,
    "bg_seed": 1772253313,
-   "floor": 7,
+   "floor": 8,
    "step_no": 0,
    "turn": null
   },
@@ -27,35 +27,23 @@
    "act_name": "Underdocks",
    "ascension": 0,
    "bg_col": 2,
-   "bg_row": 7,
+   "bg_row": 8,
    "bg_seed": 1772253313,
-   "can_skip": false,
+   "can_skip": true,
+   "card_removal_cost": 75,
    "cards": [
     {
      "color": "blue",
      "cost": 1,
-     "description": "Deal 6 damage.",
-     "description_rich": "Deal 6 damage.",
+     "description": "Deal 9 damage.",
+     "description_rich": "Deal 9 damage.",
      "id": "STRIKE_DEFECT",
      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
      "index": 0,
      "name": "Strike",
      "rarity": "Basic",
      "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.",
-      "description_rich": "Deal 9 damage.",
-      "id": "STRIKE_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-      "index": 0,
-      "name": "Strike",
-      "rarity": "Basic",
-      "type": "Attack",
-      "upgraded": true
-     },
-     "upgraded": false
+     "upgraded": true
     },
     {
      "color": "blue",
@@ -68,19 +56,6 @@
      "name": "Strike",
      "rarity": "Basic",
      "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.",
-      "description_rich": "Deal 9 damage.",
-      "id": "STRIKE_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-      "index": 1,
-      "name": "Strike",
-      "rarity": "Basic",
-      "type": "Attack",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -94,19 +69,6 @@
      "name": "Strike",
      "rarity": "Basic",
      "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.",
-      "description_rich": "Deal 9 damage.",
-      "id": "STRIKE_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-      "index": 2,
-      "name": "Strike",
-      "rarity": "Basic",
-      "type": "Attack",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -120,19 +82,6 @@
      "name": "Strike",
      "rarity": "Basic",
      "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.",
-      "description_rich": "Deal 9 damage.",
-      "id": "STRIKE_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-      "index": 3,
-      "name": "Strike",
-      "rarity": "Basic",
-      "type": "Attack",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -146,19 +95,6 @@
      "name": "Defend",
      "rarity": "Basic",
      "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Gain 8 Block.",
-      "description_rich": "Gain 8 Block.",
-      "id": "DEFEND_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-      "index": 4,
-      "name": "Defend",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -172,19 +108,6 @@
      "name": "Defend",
      "rarity": "Basic",
      "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Gain 8 Block.",
-      "description_rich": "Gain 8 Block.",
-      "id": "DEFEND_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-      "index": 5,
-      "name": "Defend",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -198,19 +121,6 @@
      "name": "Defend",
      "rarity": "Basic",
      "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Gain 8 Block.",
-      "description_rich": "Gain 8 Block.",
-      "id": "DEFEND_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-      "index": 6,
-      "name": "Defend",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -224,19 +134,6 @@
      "name": "Defend",
      "rarity": "Basic",
      "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Gain 8 Block.",
-      "description_rich": "Gain 8 Block.",
-      "id": "DEFEND_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-      "index": 7,
-      "name": "Defend",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -250,19 +147,6 @@
      "name": "Zap",
      "rarity": "Basic",
      "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Channel 1 Lightning.",
-      "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
-      "id": "ZAP",
-      "image": "https://assets.test/card_atlas/defect/zap.png",
-      "index": 8,
-      "name": "Zap",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -276,19 +160,6 @@
      "name": "Dualcast",
      "rarity": "Basic",
      "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Evoke your rightmost Orb twice.",
-      "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
-      "id": "DUALCAST",
-      "image": "https://assets.test/card_atlas/defect/dualcast.png",
-      "index": 9,
-      "name": "Dualcast",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -302,19 +173,6 @@
      "name": "Ultimate Strike",
      "rarity": "Uncommon",
      "type": "Attack",
-     "upgrade_preview": {
-      "color": "colorless",
-      "cost": 1,
-      "description": "Deal 20 damage.",
-      "description_rich": "Deal 20 damage.",
-      "id": "ULTIMATE_STRIKE",
-      "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-      "index": 10,
-      "name": "Ultimate Strike",
-      "rarity": "Uncommon",
-      "type": "Attack",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -328,19 +186,6 @@
      "name": "Boost Away",
      "rarity": "Common",
      "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Gain 9 Block.\nAdd a Dazed into your Discard Pile.",
-      "description_rich": "Gain 9 Block.\nAdd a Dazed into your Discard Pile.",
-      "id": "BOOST_AWAY",
-      "image": "https://assets.test/card_atlas/defect/boost_away.png",
-      "index": 11,
-      "name": "Boost Away",
-      "rarity": "Common",
-      "type": "Skill",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -354,19 +199,6 @@
      "name": "TURBO",
      "rarity": "Common",
      "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Gain Energy.\nAdd a Void into your Discard Pile.",
-      "description_rich": "Gain Energy.\nAdd a [gold]Void[/gold] into your [gold]Discard Pile[/gold].",
-      "id": "TURBO",
-      "image": "https://assets.test/card_atlas/defect/turbo.png",
-      "index": 12,
-      "name": "TURBO",
-      "rarity": "Common",
-      "type": "Skill",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
@@ -380,79 +212,40 @@
      "name": "Sweeping Beam",
      "rarity": "Common",
      "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage to ALL enemies.\nDraw 1 card.",
-      "description_rich": "Deal 9 damage to ALL enemies.\nDraw 1 card.",
-      "id": "SWEEPING_BEAM",
-      "image": "https://assets.test/card_atlas/defect/sweeping_beam.png",
-      "index": 13,
-      "name": "Sweeping Beam",
-      "rarity": "Common",
-      "type": "Attack",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
      "color": "blue",
      "cost": 0,
-     "description": "Deal 3 damage.\nIncrease the damage of ALL Claw cards by 2 this combat.",
-     "description_rich": "Deal 3 damage.\nIncrease the damage of ALL Claw cards by 2 this combat.",
-     "id": "CLAW",
-     "image": "https://assets.test/card_atlas/defect/claw.png",
+     "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "id": "GO_FOR_THE_EYES",
+     "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
      "index": 14,
-     "name": "Claw",
+     "name": "Go for the Eyes",
      "rarity": "Common",
      "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Deal 4 damage.\nIncrease the damage of ALL Claw cards by 3 this combat.",
-      "description_rich": "Deal 4 damage.\nIncrease the damage of ALL Claw cards by 3 this combat.",
-      "id": "CLAW",
-      "image": "https://assets.test/card_atlas/defect/claw.png",
-      "index": 14,
-      "name": "Claw",
-      "rarity": "Common",
-      "type": "Attack",
-      "upgraded": true
-     },
      "upgraded": false
     },
     {
      "color": "blue",
-     "cost": 1,
-     "description": "Deal 7 damage.\nDraw 1 card for each unique Orb you have.",
-     "description_rich": "Deal 7 damage.\nDraw 1 card for each unique Orb you have.",
-     "id": "COMPILE_DRIVER",
-     "image": "https://assets.test/card_atlas/defect/compile_driver.png",
+     "cost": 0,
+     "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "id": "GO_FOR_THE_EYES",
+     "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
      "index": 15,
-     "name": "Compile Driver",
+     "name": "Go for the Eyes",
      "rarity": "Common",
      "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 10 damage.\nDraw 1 card for each unique Orb you have.",
-      "description_rich": "Deal 10 damage.\nDraw 1 card for each unique Orb you have.",
-      "id": "COMPILE_DRIVER",
-      "image": "https://assets.test/card_atlas/defect/compile_driver.png",
-      "index": 15,
-      "name": "Compile Driver",
-      "rarity": "Common",
-      "type": "Attack",
-      "upgraded": true
-     },
      "upgraded": false
     }
    ],
-   "context": "upgrade",
+   "context": "remove",
    "decision": "card_select",
-   "floor": 7,
+   "floor": 8,
    "max_select": 1,
-   "min_select": 1,
+   "min_select": 0,
    "options": [
     {
      "action": "select_cards",
@@ -572,7 +365,7 @@
       "indices": "14"
      },
      "enabled": true,
-     "label": "CLAW.title"
+     "label": "GO_FOR_THE_EYES.title"
     },
     {
      "action": "select_cards",
@@ -580,7 +373,13 @@
       "indices": "15"
      },
      "enabled": true,
-     "label": "COMPILE_DRIVER.title"
+     "label": "GO_FOR_THE_EYES.title"
+    },
+    {
+     "action": "skip_select",
+     "args": {},
+     "enabled": true,
+     "label": "Skip"
     }
    ],
    "player": {
@@ -589,15 +388,15 @@
      {
       "color": "blue",
       "cost": 1,
-      "description": "Deal 6 damage.",
-      "description_rich": "Deal 6 damage.",
+      "description": "Deal 9 damage.",
+      "description_rich": "Deal 9 damage.",
       "id": "STRIKE_DEFECT",
       "image": "https://assets.test/card_atlas/defect/strike_defect.png",
       "index": 0,
       "name": "Strike",
       "rarity": "Basic",
       "type": "Attack",
-      "upgraded": false
+      "upgraded": true
      },
      {
       "color": "blue",
@@ -771,41 +570,41 @@
      {
       "color": "blue",
       "cost": 0,
-      "description": "Deal 3 damage.\nIncrease the damage of ALL Claw cards by 2 this combat.",
-      "description_rich": "Deal 3 damage.\nIncrease the damage of ALL Claw cards by 2 this combat.",
-      "id": "CLAW",
-      "image": "https://assets.test/card_atlas/defect/claw.png",
+      "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+      "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+      "id": "GO_FOR_THE_EYES",
+      "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
       "index": 14,
-      "name": "Claw",
+      "name": "Go for the Eyes",
       "rarity": "Common",
       "type": "Attack",
       "upgraded": false
      },
      {
       "color": "blue",
-      "cost": 1,
-      "description": "Deal 7 damage.\nDraw 1 card for each unique Orb you have.",
-      "description_rich": "Deal 7 damage.\nDraw 1 card for each unique Orb you have.",
-      "id": "COMPILE_DRIVER",
-      "image": "https://assets.test/card_atlas/defect/compile_driver.png",
+      "cost": 0,
+      "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+      "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+      "id": "GO_FOR_THE_EYES",
+      "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
       "index": 15,
-      "name": "Compile Driver",
+      "name": "Go for the Eyes",
       "rarity": "Common",
       "type": "Attack",
       "upgraded": false
      }
     ],
-    "gold": 198,
-    "hp": 41,
+    "gold": 92,
+    "hp": 55,
     "max_hp": 75,
     "name": "Defect",
     "potion_slots": 3,
     "potions": [
      {
-      "description": "Gain 12 Block.",
-      "id": "BLOCK_POTION",
-      "image": "https://assets.test/potion_atlas/block_potion.png",
-      "name": "Block Potion"
+      "description": "Gain 2 Energy.",
+      "id": "ENERGY_POTION",
+      "image": "https://assets.test/potion_atlas/energy_potion.png",
+      "name": "Energy Potion"
      }
     ],
     "relics": [
@@ -822,7 +621,59 @@
       "name": "Lead Paperweight"
      }
     ]
-   }
+   },
+   "potions": [
+    {
+     "cost": 999999,
+     "id": "ENERGY_POTION",
+     "index": 0,
+     "is_available": false,
+     "is_stocked": false,
+     "name": "ENERGY_POTION.title"
+    },
+    {
+     "cost": 50,
+     "id": "FOCUS_POTION",
+     "index": 1,
+     "is_available": true,
+     "is_stocked": true,
+     "name": "FOCUS_POTION.title"
+    },
+    {
+     "cost": 50,
+     "id": "EXPLOSIVE_AMPOULE",
+     "index": 2,
+     "is_available": true,
+     "is_stocked": true,
+     "name": "EXPLOSIVE_AMPOULE.title"
+    }
+   ],
+   "relics": [
+    {
+     "cost": 177,
+     "id": "ANCHOR",
+     "index": 0,
+     "is_available": true,
+     "is_stocked": false,
+     "name": "ANCHOR.title"
+    },
+    {
+     "cost": 234,
+     "id": "PETRIFIED_TOAD",
+     "index": 1,
+     "is_available": true,
+     "is_stocked": false,
+     "name": "PETRIFIED_TOAD.title"
+    },
+    {
+     "cost": 179,
+     "id": "LEES_WAFFLE",
+     "index": 2,
+     "is_available": true,
+     "is_stocked": false,
+     "name": "LEES_WAFFLE.title"
+    }
+   ]
   }
  }
 }

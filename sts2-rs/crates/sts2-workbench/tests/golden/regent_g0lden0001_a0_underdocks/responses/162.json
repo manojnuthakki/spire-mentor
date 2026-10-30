@@ -12,7 +12,7 @@
   "bg_seed": 1772253313,
   "floor": 11,
   "step_no": 0,
-  "turn": 2
+  "turn": 3
  },
  "pv": null,
  "scores": [],
@@ -32,18 +32,35 @@
     "can_play": false,
     "color": "orange",
     "cost": 1,
-    "description": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-    "description_rich": "Gain 6 [gold]Block[/gold].\nPut a card from your [gold]Discard Pile[/gold] on top of your [gold]Draw Pile[/gold].",
-    "id": "COSMIC_INDIFFERENCE",
-    "image": "https://assets.test/card_atlas/regent/cosmic_indifference.png",
+    "description": "Gain Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+    "description_rich": "Gain Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+    "id": "GLOW",
+    "image": "https://assets.test/card_atlas/regent/glow.png",
     "index": -1,
-    "name": "Cosmic Indifference",
+    "name": "Glow",
     "rarity": "Common",
-    "stats": {
-     "block": 6
-    },
+    "stats": {},
     "target_type": "None",
     "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "colorless",
+    "cost": 1,
+    "description": "Deal 14 damage.",
+    "description_rich": "Deal 14 damage.",
+    "id": "ULTIMATE_STRIKE",
+    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+    "index": -1,
+    "name": "Ultimate Strike",
+    "rarity": "Uncommon",
+    "stats": {
+     "damage": 14
+    },
+    "target_type": "None",
+    "type": "Attack",
     "upgraded": false
    },
    {
@@ -63,25 +80,6 @@
     },
     "target_type": "None",
     "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_REGENT",
-    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
     "upgraded": false
    },
    {
@@ -125,54 +123,14 @@
     "can_play": false,
     "color": "orange",
     "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_REGENT",
-    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+    "description": "Forge 5.\nDraw 2 cards.",
+    "description_rich": "[gold]Forge[/gold] 5.\nDraw 2 cards.",
+    "id": "SPOILS_OF_BATTLE",
+    "image": "https://assets.test/card_atlas/regent/spoils_of_battle.png",
     "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_REGENT",
-    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_REGENT",
-    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
+    "name": "Spoils of Battle",
+    "rarity": "Common",
+    "stats": {},
     "target_type": "None",
     "type": "Skill",
     "upgraded": false
@@ -198,7 +156,7 @@
     "upgraded": false
    }
   ],
-  "discard_pile_count": 9,
+  "discard_pile_count": 7,
   "draw_pile": [
    {
     "base_cost": 0,
@@ -225,30 +183,110 @@
     "can_play": false,
     "color": "orange",
     "cost": 1,
-    "description": "Deal 7 damage to ALL enemies. All enemies lose 1 Strength this turn.",
-    "description_rich": "Deal 7 damage to ALL enemies. All enemies lose 1 [gold]Strength[/gold] this turn.",
-    "id": "CRUSH_UNDER",
-    "image": "https://assets.test/card_atlas/regent/crush_under.png",
+    "description": "Deal 9 damage.",
+    "description_rich": "Deal 9 damage.",
+    "id": "STRIKE_REGENT",
+    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
     "index": -1,
-    "name": "Crush Under",
-    "rarity": "Common",
+    "name": "Strike",
+    "rarity": "Basic",
     "stats": {
-     "damage": 7
+     "damage": 9
     },
     "target_type": "None",
     "type": "Attack",
-    "upgraded": false
-   },
+    "upgraded": true
+   }
+  ],
+  "draw_pile_count": 2,
+  "enemies": [
+   {
+    "block": 0,
+    "hp": 93,
+    "image": "https://assets.test/monsters/terror_eel.png",
+    "index": 0,
+    "intents": [
+     {
+      "base_damage": 16,
+      "damage": 22,
+      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_4.png",
+      "modifiers": [
+       {
+        "add": 6,
+        "image": "https://assets.test/power_atlas/vigor_power.png",
+        "kind": "power",
+        "name": "VIGOR",
+        "side": "enemy",
+        "title": "Vigor"
+       }
+      ],
+      "type": "Attack"
+     }
+    ],
+    "kind": "TerrorEel",
+    "max_hp": 140,
+    "move_state": "CRASH_MOVE",
+    "name": "Terror Eel",
+    "powers": [
+     {
+      "amount": 70,
+      "display_amount": 70,
+      "id": "SHRIEK",
+      "image": "https://assets.test/power_atlas/shriek_power.png",
+      "image_big": "https://assets.test/power_big/shriek_power.png",
+      "name": "Shriek"
+     },
+     {
+      "amount": 6,
+      "display_amount": 6,
+      "id": "VIGOR",
+      "image": "https://assets.test/power_atlas/vigor_power.png",
+      "image_big": "https://assets.test/power_big/vigor_power.png",
+      "name": "Vigor"
+     }
+    ],
+    "rig": "https://assets.test/monster_rigs/terror_eel/terror_eel",
+    "rig_bounds_h": 357.0,
+    "rig_bounds_w": 712.0,
+    "rig_scale": 0.2,
+    "uid": 2
+   }
+  ],
+  "energy": 3,
+  "energy_image": "https://assets.test/sprite_fonts/regent_energy_icon.png",
+  "exhaust_pile": [],
+  "exhaust_pile_count": 0,
+  "floor": 11,
+  "hand": [
    {
     "base_cost": 1,
-    "can_play": false,
+    "can_play": true,
     "color": "orange",
     "cost": 1,
     "description": "Gain 5 Block.",
     "description_rich": "Gain 5 [gold]Block[/gold].",
     "id": "DEFEND_REGENT",
     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
-    "index": -1,
+    "index": 0,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": true,
+    "color": "orange",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_REGENT",
+    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+    "index": 1,
     "name": "Defend",
     "rarity": "Basic",
     "stats": {
@@ -263,11 +301,14 @@
     "can_play": false,
     "color": "orange",
     "cost": 1,
+    "damage_preview": {
+     "0": 12
+    },
     "description": "Deal 12 damage.\nDraw 2 cards.",
     "description_rich": "Deal 12 damage.\nDraw 2 cards.",
     "id": "GUIDING_STAR",
     "image": "https://assets.test/card_atlas/regent/guiding_star.png",
-    "index": -1,
+    "index": 2,
     "name": "Guiding Star",
     "rarity": "Common",
     "star_cost": 2,
@@ -276,150 +317,77 @@
     },
     "target_type": "None",
     "type": "Attack",
+    "unplayable_reason": "blocked",
     "upgraded": false
    },
    {
     "base_cost": 1,
-    "can_play": false,
+    "can_play": true,
     "color": "orange",
     "cost": 1,
-    "description": "Forge 5.\nDraw 2 cards.",
-    "description_rich": "[gold]Forge[/gold] 5.\nDraw 2 cards.",
-    "id": "SPOILS_OF_BATTLE",
-    "image": "https://assets.test/card_atlas/regent/spoils_of_battle.png",
-    "index": -1,
-    "name": "Spoils of Battle",
-    "rarity": "Common",
-    "stats": {},
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_REGENT",
+    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+    "index": 3,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
     "target_type": "None",
     "type": "Skill",
     "upgraded": false
    },
    {
     "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Deal 14 damage.",
-    "description_rich": "Deal 14 damage.",
-    "id": "ULTIMATE_STRIKE",
-    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-    "index": -1,
-    "name": "Ultimate Strike",
-    "rarity": "Uncommon",
-    "stats": {
-     "damage": 14
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   }
-  ],
-  "draw_pile_count": 6,
-  "enemies": [
-   {
-    "block": 0,
-    "hp": 120,
-    "image": "https://assets.test/monsters/terror_eel.png",
-    "index": 0,
-    "intents": [
-     {
-      "base_damage": 3,
-      "damage": 2,
-      "hits": 3,
-      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_2.png",
-      "modifiers": [
-       {
-        "image": "https://assets.test/power_atlas/weak_power.png",
-        "kind": "power",
-        "mul": [
-         3,
-         4
-        ],
-        "name": "WEAK",
-        "side": "enemy",
-        "title": "Weak"
-       }
-      ],
-      "type": "Attack"
-     },
-     {
-      "damage": 6,
-      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
-      "type": "Buff"
-     }
-    ],
-    "kind": "TerrorEel",
-    "max_hp": 140,
-    "move_state": "ThrashMove",
-    "name": "Terror Eel",
-    "powers": [
-     {
-      "amount": 70,
-      "display_amount": 70,
-      "id": "SHRIEK",
-      "image": "https://assets.test/power_atlas/shriek_power.png",
-      "image_big": "https://assets.test/power_big/shriek_power.png",
-      "name": "Shriek"
-     },
-     {
-      "amount": 1,
-      "display_amount": 1,
-      "id": "WEAK",
-      "image": "https://assets.test/power_atlas/weak_power.png",
-      "image_big": "https://assets.test/power_big/weak_power.png",
-      "name": "Weak"
-     },
-     {
-      "amount": 1,
-      "display_amount": 1,
-      "id": "VULNERABLE",
-      "image": "https://assets.test/power_atlas/vulnerable_power.png",
-      "image_big": "https://assets.test/power_big/vulnerable_power.png",
-      "name": "Vulnerable"
-     }
-    ],
-    "rig": "https://assets.test/monster_rigs/terror_eel/terror_eel",
-    "rig_bounds_h": 357.0,
-    "rig_bounds_w": 712.0,
-    "rig_scale": 0.2,
-    "uid": 2
-   }
-  ],
-  "energy": 0,
-  "energy_image": "https://assets.test/sprite_fonts/regent_energy_icon.png",
-  "exhaust_pile": [],
-  "exhaust_pile_count": 0,
-  "floor": 11,
-  "hand": [
-   {
-    "base_cost": 1,
-    "can_play": false,
+    "can_play": true,
     "color": "orange",
     "cost": 1,
     "damage_preview": {
-     "0": 13
+     "0": 6
     },
-    "description": "Deal 9 damage.",
-    "description_rich": "Deal 9 damage.",
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
     "id": "STRIKE_REGENT",
     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
-    "index": 0,
+    "index": 4,
     "name": "Strike",
     "rarity": "Basic",
     "stats": {
-     "damage": 9
+     "damage": 6
     },
-    "target_type": "None",
+    "target_type": "AnyEnemy",
     "type": "Attack",
-    "unplayable_reason": "cost",
-    "upgraded": true
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": true,
+    "color": "orange",
+    "cost": 1,
+    "damage_preview": {
+     "0": 6
+    },
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_REGENT",
+    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+    "index": 5,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "AnyEnemy",
+    "type": "Attack",
+    "upgraded": false
    }
   ],
   "max_energy": 3,
   "options": [],
   "player": {
-   "block": 10,
+   "block": 0,
    "deck": [
     {
      "color": "orange",
@@ -595,27 +563,14 @@
     {
      "color": "orange",
      "cost": 1,
-     "description": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-     "description_rich": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-     "id": "COSMIC_INDIFFERENCE",
-     "image": "https://assets.test/card_atlas/regent/cosmic_indifference.png",
+     "description": "Gain 1 Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+     "description_rich": "Gain 1 Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+     "id": "GLOW",
+     "image": "https://assets.test/card_atlas/regent/glow.png",
      "index": 13,
-     "name": "Cosmic Indifference",
+     "name": "Glow",
      "rarity": "Common",
      "type": "Skill",
-     "upgraded": false
-    },
-    {
-     "color": "orange",
-     "cost": 1,
-     "description": "Deal 7 damage to ALL enemies. All enemies lose 1 Strength this turn.",
-     "description_rich": "Deal 7 damage to ALL enemies. All enemies lose 1 Strength this turn.",
-     "id": "CRUSH_UNDER",
-     "image": "https://assets.test/card_atlas/regent/crush_under.png",
-     "index": 14,
-     "name": "Crush Under",
-     "rarity": "Common",
-     "type": "Attack",
      "upgraded": false
     },
     {
@@ -625,7 +580,7 @@
      "description_rich": "Deal 12 damage.\nDraw 2 cards.",
      "id": "GUIDING_STAR",
      "image": "https://assets.test/card_atlas/regent/guiding_star.png",
-     "index": 15,
+     "index": 14,
      "name": "Guiding Star",
      "rarity": "Common",
      "star_cost": 2,
@@ -633,20 +588,13 @@
      "upgraded": false
     }
    ],
-   "gold": 71,
-   "hp": 32,
+   "gold": 65,
+   "hp": 33,
    "image": "https://assets.test/character_sprites/regent.png",
    "max_hp": 75,
    "name": "Regent",
    "potion_slots": 3,
-   "potions": [
-    {
-     "description": "Gain 2 Energy.",
-     "id": "ENERGY_POTION",
-     "image": "https://assets.test/potion_atlas/energy_potion.png",
-     "name": "Energy Potion"
-    }
-   ],
+   "potions": [],
    "relics": [
     {
      "description": "At the start of each combat, gain 3 Stars.",
@@ -673,6 +621,6 @@
    "rig_scale": 0.29
   },
   "player_powers": [],
-  "round": 2
+  "round": 3
  }
 }

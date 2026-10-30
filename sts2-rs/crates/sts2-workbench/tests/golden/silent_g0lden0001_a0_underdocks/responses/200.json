@@ -1,12 +1,80 @@
 {
- "available": false,
- "caveats": [
-  "The outlook score is the AI's shaped-return estimate of the run — a relative signal, not a win percentage.",
-  "A swing mixes your choice with the luck revealed after it (what the shop stocked, what the reward offered, how the fight rolled) — use “verify” to check whether the choice itself mattered.",
-  "Judgments are relative to the AI's own play style; a line that is weak for the AI may still be fine for a human plan."
- ],
- "points": [],
- "reason": "this run log has no recorded value data — play it in the workbench (rust backend + PPO checkpoint) to record a value curve",
- "summary": {},
- "turning_points": []
+ "assumptions": {
+  "energy": 3,
+  "hand": 5,
+  "samples": 200
+ },
+ "block": {
+  "per_turn": 11.6,
+  "scaling_cards": []
+ },
+ "composition": {
+  "by_rarity": {
+   "Basic": 11,
+   "Common": 5,
+   "Uncommon": 1
+  },
+  "by_type": {
+   "Attack": 9,
+   "Skill": 8
+  },
+  "dead_cards": 0,
+  "energy_curve": {
+   "0": 1,
+   "1": 14,
+   "2": 2
+  },
+  "unupgraded_basics": 10
+ },
+ "damage": {
+  "aoe_attacks": [],
+  "attack_count": 9,
+  "per_turn": 17.7,
+  "scaling_cards": [
+   "Neutralize",
+   "Snakebite",
+   "Predator"
+  ],
+  "single_target": 17.5,
+  "vs_group": 17.9
+ },
+ "deck_size": 17,
+ "lenses": {
+  "boss": 41.5,
+  "hallway": 39.3,
+  "scaling": 42.7
+ },
+ "scores": {
+  "block": 44.0,
+  "damage": 35.8,
+  "velocity": 44.9,
+  "volume": 41.4
+ },
+ "velocity": {
+  "bottleneck": "energy",
+  "cards_per_turn": 3.1,
+  "dilution": 0.88,
+  "draw_limited_turns": 0.0,
+  "energy_limited_turns": 7.0,
+  "engine_cards": 3,
+  "extra_per_turn": 0.1,
+  "tags": {
+   "draw": 1,
+   "tutor": 2
+  }
+ },
+ "warnings": [
+  {
+   "severity": "info",
+   "text": "No AOE — multi-enemy fights (Gremlins, hallways) will be slow."
+  },
+  {
+   "severity": "info",
+   "text": "Energy-limited — cards stranded in hand; more energy helps, more draw won't."
+  },
+  {
+   "severity": "warn",
+   "text": "Deck clogged with basics/curses — prioritise removals."
+  }
+ ]
 }

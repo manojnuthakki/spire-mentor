@@ -1,7 +1,7 @@
 {
- "action": "select_card_reward",
+ "action": "select_cards",
  "args": {
-  "card_index": 1
+  "indices": "6"
  },
  "fallback": true,
  "policy": "ppo"

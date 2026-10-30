@@ -1,19 +1,19 @@
 {
  "act": null,
- "best_label": "drink Energy Potion",
- "best_win_prob": 0.9167,
+ "best_label": "Strike",
+ "best_win_prob": 1.0,
  "drop_pct": 0,
  "floor": null,
  "idx": 98,
  "is_blunder": false,
- "matched_best": false,
- "message": "Turn 3: end turn instead of drink Energy Potion dropped P(win) 92%→92% (−0 pts)",
- "n_actions": 2,
+ "matched_best": true,
+ "message": "Turn 4: Strike matched the MCTS line (P(win) 100%)",
+ "n_actions": 4,
  "node_id": null,
- "played_label": "end turn",
- "played_win_prob": 0.9167,
+ "played_label": "Strike",
+ "played_win_prob": 1.0,
  "player_rank": 0,
  "regret": 0.0,
- "turn": 3,
- "visits": 12
+ "turn": 4,
+ "visits": 6
 }

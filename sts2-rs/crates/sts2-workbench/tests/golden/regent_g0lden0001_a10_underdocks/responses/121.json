@@ -1,0 +1,84 @@
+{
+ "assumptions": {
+  "energy": 3,
+  "hand": 5,
+  "samples": 200
+ },
+ "block": {
+  "per_turn": 10.0,
+  "scaling_cards": []
+ },
+ "composition": {
+  "by_rarity": {
+   "Basic": 10,
+   "Common": 3,
+   "Curse": 1,
+   "Uncommon": 1
+  },
+  "by_type": {
+   "Attack": 7,
+   "Curse": 1,
+   "Skill": 7
+  },
+  "dead_cards": 1,
+  "energy_curve": {
+   "0": 2,
+   "1": 12
+  },
+  "unupgraded_basics": 10
+ },
+ "damage": {
+  "aoe_attacks": [],
+  "attack_count": 7,
+  "per_turn": 18.8,
+  "scaling_cards": [],
+  "single_target": 18.8,
+  "vs_group": 18.8
+ },
+ "deck_size": 15,
+ "lenses": {
+  "boss": 29.3,
+  "hallway": 32.6,
+  "scaling": 27.6
+ },
+ "scores": {
+  "block": 39.4,
+  "damage": 37.5,
+  "velocity": 10.9,
+  "volume": 25.3
+ },
+ "velocity": {
+  "bottleneck": "energy",
+  "cards_per_turn": 3.8,
+  "dilution": 1.0,
+  "draw_limited_turns": 0.1,
+  "energy_limited_turns": 5.8,
+  "engine_cards": 1,
+  "extra_per_turn": 0.1,
+  "tags": {
+   "energy": 1
+  }
+ },
+ "warnings": [
+  {
+   "severity": "warn",
+   "text": "No damage scaling — you may stall out against high-HP bosses."
+  },
+  {
+   "severity": "info",
+   "text": "No AOE — multi-enemy fights (Gremlins, hallways) will be slow."
+  },
+  {
+   "severity": "info",
+   "text": "Low velocity — few draw/energy cards; you'll often draw the wrong hand."
+  },
+  {
+   "severity": "info",
+   "text": "Energy-limited — cards stranded in hand; more energy helps, more draw won't."
+  },
+  {
+   "severity": "warn",
+   "text": "Deck clogged with basics/curses — prioritise removals."
+  }
+ ]
+}

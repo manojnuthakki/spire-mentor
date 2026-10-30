@@ -1,8 +1,7 @@
 {
  "details": [
-  "You HP 7→0 (−7)",
-  "You Block 5→0",
-  "Haunted Ship HP 12→0  ☠ defeated",
+  "You HP 1→0 (−1)",
+  "Haunted Ship HP 11→0  ☠ defeated",
   "You −Weak"
  ],
  "error": null,
@@ -233,19 +232,6 @@
       "name": "Tremble",
       "rarity": "Common",
       "type": "Skill",
-      "upgraded": false
-     },
-     {
-      "color": "red",
-      "cost": 1,
-      "description": "Lose 1 HP.\nDeal 9 damage to ALL enemies.",
-      "description_rich": "Lose 1 HP.\nDeal 9 damage to ALL enemies.",
-      "id": "BREAKTHROUGH",
-      "image": "https://assets.test/card_atlas/ironclad/breakthrough.png",
-      "index": 15,
-      "name": "Breakthrough",
-      "rarity": "Common",
-      "type": "Attack",
       "upgraded": false
      }
     ],

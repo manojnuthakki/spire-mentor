@@ -2,7 +2,7 @@
  "action_label": "",
  "assets_base": "https://assets.test",
  "chosen_action": null,
- "decision": "card_reward",
+ "decision": "card_select",
  "idx": 0,
  "meta": {
   "act": 1,
@@ -25,77 +25,182 @@
   "bg_col": 3,
   "bg_row": 5,
   "bg_seed": 1772253313,
-  "can_skip": true,
+  "can_skip": false,
   "cards": [
    {
     "color": "orange",
     "cost": 1,
-    "description": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-    "description_rich": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-    "id": "COSMIC_INDIFFERENCE",
-    "image": "https://assets.test/card_atlas/regent/cosmic_indifference.png",
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_REGENT",
+    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
     "index": 0,
-    "name": "Cosmic Indifference",
-    "rarity": "Common",
-    "type": "Skill"
+    "name": "Strike",
+    "rarity": "Basic",
+    "type": "Attack",
+    "upgraded": false
    },
    {
     "color": "orange",
     "cost": 1,
-    "description": "Forge 9.\nNext turn, gain 1 Energy.",
-    "description_rich": "Forge 9.\nNext turn, gain 1 Energy.",
-    "id": "REFINE_BLADE",
-    "image": "https://assets.test/card_atlas/regent/refine_blade.png",
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_REGENT",
+    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
     "index": 1,
-    "name": "Refine Blade",
-    "rarity": "Common",
-    "type": "Skill"
+    "name": "Strike",
+    "rarity": "Basic",
+    "type": "Attack",
+    "upgraded": false
    },
    {
     "color": "orange",
     "cost": 1,
-    "description": "Forge 5.\nDraw 2 cards.",
-    "description_rich": "Forge 5.\nDraw 2 cards.",
-    "id": "SPOILS_OF_BATTLE",
-    "image": "https://assets.test/card_atlas/regent/spoils_of_battle.png",
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_REGENT",
+    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
     "index": 2,
-    "name": "Spoils of Battle",
-    "rarity": "Common",
-    "type": "Skill"
+    "name": "Strike",
+    "rarity": "Basic",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "color": "orange",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_REGENT",
+    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+    "index": 3,
+    "name": "Strike",
+    "rarity": "Basic",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "color": "orange",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 Block.",
+    "id": "DEFEND_REGENT",
+    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+    "index": 4,
+    "name": "Defend",
+    "rarity": "Basic",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "color": "orange",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 Block.",
+    "id": "DEFEND_REGENT",
+    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+    "index": 5,
+    "name": "Defend",
+    "rarity": "Basic",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "color": "orange",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 Block.",
+    "id": "DEFEND_REGENT",
+    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+    "index": 6,
+    "name": "Defend",
+    "rarity": "Basic",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "color": "orange",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 Block.",
+    "id": "DEFEND_REGENT",
+    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+    "index": 7,
+    "name": "Defend",
+    "rarity": "Basic",
+    "type": "Skill",
+    "upgraded": false
    }
   ],
-  "decision": "card_reward",
+  "context": "enchant",
+  "decision": "card_select",
   "floor": 5,
+  "max_select": 1,
+  "min_select": 1,
   "options": [
    {
-    "action": "select_card_reward",
+    "action": "select_cards",
     "args": {
-     "card_index": 0
+     "indices": "0"
     },
     "enabled": true,
-    "label": "COSMIC_INDIFFERENCE.title"
+    "label": "STRIKE_REGENT.title"
    },
    {
-    "action": "select_card_reward",
+    "action": "select_cards",
     "args": {
-     "card_index": 1
+     "indices": "1"
     },
     "enabled": true,
-    "label": "REFINE_BLADE.title"
+    "label": "STRIKE_REGENT.title"
    },
    {
-    "action": "select_card_reward",
+    "action": "select_cards",
     "args": {
-     "card_index": 2
+     "indices": "2"
     },
     "enabled": true,
-    "label": "SPOILS_OF_BATTLE.title"
+    "label": "STRIKE_REGENT.title"
    },
    {
-    "action": "skip_card_reward",
-    "args": {},
+    "action": "select_cards",
+    "args": {
+     "indices": "3"
+    },
     "enabled": true,
-    "label": "Skip"
+    "label": "STRIKE_REGENT.title"
+   },
+   {
+    "action": "select_cards",
+    "args": {
+     "indices": "4"
+    },
+    "enabled": true,
+    "label": "DEFEND_REGENT.title"
+   },
+   {
+    "action": "select_cards",
+    "args": {
+     "indices": "5"
+    },
+    "enabled": true,
+    "label": "DEFEND_REGENT.title"
+   },
+   {
+    "action": "select_cards",
+    "args": {
+     "indices": "6"
+    },
+    "enabled": true,
+    "label": "DEFEND_REGENT.title"
+   },
+   {
+    "action": "select_cards",
+    "args": {
+     "indices": "7"
+    },
+    "enabled": true,
+    "label": "DEFEND_REGENT.title"
    }
   ],
   "player": {

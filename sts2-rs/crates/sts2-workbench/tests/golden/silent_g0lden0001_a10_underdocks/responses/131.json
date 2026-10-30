@@ -1,76 +1,8 @@
 {
- "points": [
-  {
-   "act": 1,
-   "deck_size": 13,
-   "floor": 0,
-   "idx": 0,
-   "scores": {
-    "block": 44.8,
-    "damage": 26.7,
-    "velocity": 0.0,
-    "volume": 0.0
-   }
-  },
-  {
-   "act": 1,
-   "deck_size": 14,
-   "floor": 0,
-   "idx": 2,
-   "scores": {
-    "block": 43.3,
-    "damage": 33.4,
-    "velocity": 0.9,
-    "volume": 10.9
-   }
-  },
-  {
-   "act": 1,
-   "deck_size": 15,
-   "floor": 1,
-   "idx": 19,
-   "scores": {
-    "block": 47.3,
-    "damage": 31.8,
-    "velocity": 28.4,
-    "volume": 35.0
-   }
-  },
-  {
-   "act": 1,
-   "deck_size": 16,
-   "floor": 2,
-   "idx": 36,
-   "scores": {
-    "block": 45.8,
-    "damage": 33.6,
-    "velocity": 27.9,
-    "volume": 35.0
-   }
-  },
-  {
-   "act": 1,
-   "deck_size": 17,
-   "floor": 4,
-   "idx": 60,
-   "scores": {
-    "block": 43.8,
-    "damage": 32.3,
-    "velocity": 26.5,
-    "volume": 33.5
-   }
-  },
-  {
-   "act": 1,
-   "deck_size": 18,
-   "floor": 5,
-   "idx": 63,
-   "scores": {
-    "block": 42.0,
-    "damage": 34.7,
-    "velocity": 22.9,
-    "volume": 32.2
-   }
-  }
- ]
+ "action": "buy_potion",
+ "args": {
+  "potion_index": 0
+ },
+ "fallback": true,
+ "policy": "ppo"
 }

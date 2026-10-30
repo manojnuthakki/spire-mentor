@@ -1,0 +1,421 @@
+{
+ "details": [],
+ "error": null,
+ "label": "Choose: Observe",
+ "step": {
+  "action_label": "",
+  "assets_base": "https://assets.test",
+  "chosen_action": null,
+  "decision": "card_select",
+  "idx": 0,
+  "meta": {
+   "act": 1,
+   "act_name": "Underdocks",
+   "bg_col": 3,
+   "bg_row": 5,
+   "bg_seed": 1772253313,
+   "floor": 5,
+   "step_no": 0,
+   "turn": null
+  },
+  "pv": null,
+  "scores": [],
+  "source": "live",
+  "state": {
+   "act": 1,
+   "act1": "underdocks",
+   "act_name": "Underdocks",
+   "ascension": 0,
+   "bg_col": 3,
+   "bg_row": 5,
+   "bg_seed": 1772253313,
+   "can_skip": false,
+   "cards": [
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_REGENT",
+     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+     "index": 0,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_REGENT",
+     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+     "index": 1,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_REGENT",
+     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+     "index": 2,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_REGENT",
+     "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+     "index": 3,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_REGENT",
+     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+     "index": 4,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_REGENT",
+     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+     "index": 5,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_REGENT",
+     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+     "index": 6,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    },
+    {
+     "color": "orange",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_REGENT",
+     "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+     "index": 7,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgraded": false
+    }
+   ],
+   "context": "enchant",
+   "decision": "card_select",
+   "floor": 5,
+   "max_select": 1,
+   "min_select": 1,
+   "options": [
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "0"
+     },
+     "enabled": true,
+     "label": "STRIKE_REGENT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "1"
+     },
+     "enabled": true,
+     "label": "STRIKE_REGENT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "2"
+     },
+     "enabled": true,
+     "label": "STRIKE_REGENT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "3"
+     },
+     "enabled": true,
+     "label": "STRIKE_REGENT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "4"
+     },
+     "enabled": true,
+     "label": "DEFEND_REGENT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "5"
+     },
+     "enabled": true,
+     "label": "DEFEND_REGENT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "6"
+     },
+     "enabled": true,
+     "label": "DEFEND_REGENT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "7"
+     },
+     "enabled": true,
+     "label": "DEFEND_REGENT.title"
+    }
+   ],
+   "player": {
+    "block": 0,
+    "deck": [
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_REGENT",
+      "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+      "index": 0,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_REGENT",
+      "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+      "index": 1,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_REGENT",
+      "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+      "index": 2,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_REGENT",
+      "image": "https://assets.test/card_atlas/regent/strike_regent.png",
+      "index": 3,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_REGENT",
+      "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+      "index": 4,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_REGENT",
+      "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+      "index": 5,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_REGENT",
+      "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+      "index": 6,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_REGENT",
+      "image": "https://assets.test/card_atlas/regent/defend_regent.png",
+      "index": 7,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 0,
+      "description": "Deal 8 damage.\nApply 1 Weak.\nApply 1 Vulnerable.",
+      "description_rich": "Deal 8 damage.\nApply 1 Weak.\nApply 1 Vulnerable.",
+      "id": "FALLING_STAR",
+      "image": "https://assets.test/card_atlas/regent/falling_star.png",
+      "index": 8,
+      "name": "Falling Star",
+      "rarity": "Basic",
+      "star_cost": 2,
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Gain Stars.",
+      "description_rich": "Gain Stars.",
+      "id": "VENERATE",
+      "image": "https://assets.test/card_atlas/regent/venerate.png",
+      "index": 9,
+      "name": "Venerate",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "colorless",
+      "cost": 1,
+      "description": "Deal 14 damage.",
+      "description_rich": "Deal 14 damage.",
+      "id": "ULTIMATE_STRIKE",
+      "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+      "index": 10,
+      "name": "Ultimate Strike",
+      "rarity": "Uncommon",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 0,
+      "description": "Gain 7 Block.",
+      "description_rich": "Gain 7 Block.",
+      "id": "CLOAK_OF_STARS",
+      "image": "https://assets.test/card_atlas/regent/cloak_of_stars.png",
+      "index": 11,
+      "name": "Cloak of Stars",
+      "rarity": "Common",
+      "star_cost": 1,
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Forge 5.\nDraw 2 cards.",
+      "description_rich": "Forge 5.\nDraw 2 cards.",
+      "id": "SPOILS_OF_BATTLE",
+      "image": "https://assets.test/card_atlas/regent/spoils_of_battle.png",
+      "index": 12,
+      "name": "Spoils of Battle",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "orange",
+      "cost": 1,
+      "description": "Deal 9 damage.\nGain 1 Stars.",
+      "description_rich": "Deal 9 damage.\nGain 1 Stars.",
+      "id": "SOLAR_STRIKE",
+      "image": "https://assets.test/card_atlas/regent/solar_strike.png",
+      "index": 13,
+      "name": "Solar Strike",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": false
+     }
+    ],
+    "gold": 182,
+    "hp": 53,
+    "max_hp": 75,
+    "name": "Regent",
+    "potion_slots": 3,
+    "potions": [],
+    "relics": [
+     {
+      "description": "At the start of each combat, gain 3 Stars.",
+      "id": "DIVINE_RIGHT",
+      "image": "https://assets.test/relic_atlas/divine_right.png",
+      "name": "Divine Right"
+     },
+     {
+      "description": "Upon pickup, choose 1 of 2 Colorless cards to add to your Deck.",
+      "id": "LEAD_PAPERWEIGHT",
+      "image": "https://assets.test/relic_atlas/lead_paperweight.png",
+      "name": "Lead Paperweight"
+     }
+    ]
+   }
+  }
+ }
+}

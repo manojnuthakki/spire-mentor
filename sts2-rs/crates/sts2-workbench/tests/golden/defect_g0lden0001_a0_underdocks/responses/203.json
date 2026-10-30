@@ -5,22 +5,22 @@
   "samples": 200
  },
  "block": {
-  "per_turn": 9.8,
+  "per_turn": 11.5,
   "scaling_cards": []
  },
  "composition": {
   "by_rarity": {
    "Basic": 9,
-   "Common": 7,
+   "Common": 6,
    "Uncommon": 1
   },
   "by_type": {
-   "Attack": 8,
+   "Attack": 7,
    "Skill": 9
   },
   "dead_cards": 0,
   "energy_curve": {
-   "0": 5,
+   "0": 4,
    "1": 12
   },
   "unupgraded_basics": 8
@@ -29,46 +29,40 @@
   "aoe_attacks": [
    "Sweeping Beam"
   ],
-  "attack_count": 8,
-  "per_turn": 18.3,
+  "attack_count": 7,
+  "per_turn": 17.3,
   "scaling_cards": [
-   "Zap",
-   "Claw",
-   "Compile Driver"
+   "Zap"
   ],
-  "single_target": 16.6,
-  "vs_group": 20.1
+  "single_target": 15.5,
+  "vs_group": 19.2
  },
- "deck_size": 17,
+ "deck_size": 16,
  "lenses": {
-  "boss": 32.2,
-  "hallway": 34.0,
-  "scaling": 31.2
+  "boss": 34.4,
+  "hallway": 34.7,
+  "scaling": 34.3
  },
  "scores": {
-  "block": 38.8,
-  "damage": 36.8,
-  "velocity": 20.8,
-  "volume": 31.0
+  "block": 43.6,
+  "damage": 35.1,
+  "velocity": 24.6,
+  "volume": 33.5
  },
  "velocity": {
   "bottleneck": "energy",
-  "cards_per_turn": 4.6,
-  "dilution": 0.88,
-  "draw_limited_turns": 2.3,
-  "energy_limited_turns": 3.3,
-  "engine_cards": 3,
+  "cards_per_turn": 4.5,
+  "dilution": 0.94,
+  "draw_limited_turns": 2.2,
+  "energy_limited_turns": 3.7,
+  "engine_cards": 2,
   "extra_per_turn": 0.3,
   "tags": {
-   "draw": 2,
+   "draw": 1,
    "energy": 1
   }
  },
  "warnings": [
-  {
-   "severity": "warn",
-   "text": "Thin on block and no block engine — big hits will land in Act 2+."
-  },
   {
    "severity": "info",
    "text": "Low velocity — few draw/energy cards; you'll often draw the wrong hand."

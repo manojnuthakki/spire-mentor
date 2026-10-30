@@ -3,37 +3,75 @@
  "impl": "rust",
  "options": [
   {
-   "action": "select_card_reward",
+   "action": "select_cards",
    "args": {
-    "card_index": 0
+    "indices": "0"
    },
    "is_best": false,
-   "label": "Take Fear",
+   "label": "Select Strike",
    "prob": null
   },
   {
-   "action": "select_card_reward",
+   "action": "select_cards",
    "args": {
-    "card_index": 1
+    "indices": "1"
    },
    "is_best": false,
-   "label": "Take Sculpting Strike",
+   "label": "Select Strike",
    "prob": null
   },
   {
-   "action": "select_card_reward",
+   "action": "select_cards",
    "args": {
-    "card_index": 2
+    "indices": "2"
    },
    "is_best": false,
-   "label": "Take Sow",
+   "label": "Select Strike",
    "prob": null
   },
   {
-   "action": "skip_card_reward",
-   "args": {},
+   "action": "select_cards",
+   "args": {
+    "indices": "3"
+   },
    "is_best": false,
-   "label": "Skip card reward",
+   "label": "Select Strike",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "4"
+   },
+   "is_best": false,
+   "label": "Select Defend",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "5"
+   },
+   "is_best": false,
+   "label": "Select Defend",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "6"
+   },
+   "is_best": false,
+   "label": "Select Defend",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "7"
+   },
+   "is_best": false,
+   "label": "Select Defend",
    "prob": null
   }
  ],

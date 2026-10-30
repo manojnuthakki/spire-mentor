@@ -1,0 +1,12 @@
+{
+ "runs": [
+  {
+   "enemy_min_pct": 6.3492,
+   "final_floor": 11,
+   "final_turn": null,
+   "stem": "20260101_000000_Necrobinder_G0LDEN0001",
+   "turn1_q": null,
+   "won": false
+  }
+ ]
+}

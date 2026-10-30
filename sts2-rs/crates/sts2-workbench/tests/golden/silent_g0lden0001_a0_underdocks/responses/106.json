@@ -12,74 +12,18 @@
  "pv": null,
  "scores": [
   {
-   "action": "Sucker Punch",
+   "action": "end turn",
    "is_best": true,
    "losses": 0,
    "low_confidence": false,
-   "q": 1.128,
-   "q_saturated": false,
-   "stable_idx": 1,
-   "target_index": 0,
-   "ties": 0,
-   "visits": 10,
-   "win_prob": 1.0,
-   "wins": 10
-  },
-  {
-   "action": "Defend",
-   "is_best": false,
-   "losses": 0,
-   "low_confidence": false,
-   "q": 1.1255,
-   "q_saturated": false,
-   "stable_idx": 4,
-   "target_index": null,
-   "ties": 0,
-   "visits": 10,
-   "win_prob": 1.0,
-   "wins": 10
-  },
-  {
-   "action": "Neutralize",
-   "is_best": false,
-   "losses": 0,
-   "low_confidence": false,
-   "q": 1.1212,
-   "q_saturated": false,
-   "stable_idx": 2,
-   "target_index": 0,
-   "ties": 0,
-   "visits": 10,
-   "win_prob": 1.0,
-   "wins": 10
-  },
-  {
-   "action": "Strike",
-   "is_best": false,
-   "losses": 0,
-   "low_confidence": false,
-   "q": 1.1125,
-   "q_saturated": false,
-   "stable_idx": 0,
-   "target_index": 0,
-   "ties": 0,
-   "visits": 9,
-   "win_prob": 1.0,
-   "wins": 9
-  },
-  {
-   "action": "end turn",
-   "is_best": false,
-   "losses": 0,
-   "low_confidence": false,
-   "q": 1.0795,
+   "q": 1.123,
    "q_saturated": false,
    "stable_idx": -1,
    "target_index": null,
    "ties": 0,
-   "visits": 9,
+   "visits": 48,
    "win_prob": 1.0,
-   "wins": 9
+   "wins": 48
   }
  ]
 }

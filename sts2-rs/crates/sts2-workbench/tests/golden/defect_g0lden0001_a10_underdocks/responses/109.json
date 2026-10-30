@@ -1,19 +1,19 @@
 {
  "act": null,
- "best_label": "Claw",
- "best_win_prob": 0.0,
+ "best_label": "TURBO",
+ "best_win_prob": 0.5789,
  "drop_pct": 0,
  "floor": null,
  "idx": 73,
  "is_blunder": false,
  "matched_best": true,
- "message": "Turn 3: Claw matched the MCTS line (P(win) 0%)",
+ "message": "Turn 3: TURBO matched the MCTS line (P(win) 58%)",
  "n_actions": 2,
  "node_id": null,
- "played_label": "Claw",
- "played_win_prob": 0.0,
+ "played_label": "TURBO",
+ "played_win_prob": 0.5789,
  "player_rank": 0,
  "regret": 0.0,
  "turn": 3,
- "visits": 12
+ "visits": 19
 }

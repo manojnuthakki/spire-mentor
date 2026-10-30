@@ -1,8 +1,8 @@
 {
- "action": "select_map_node",
+ "action": "buy_potion",
  "args": {
-  "col": 2,
-  "row": 7
+  "potion_index": 0
  },
+ "fallback": true,
  "policy": "ppo"
 }

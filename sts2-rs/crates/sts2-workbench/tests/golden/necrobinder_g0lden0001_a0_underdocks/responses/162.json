@@ -29,6 +29,24 @@
   "discard_pile": [
    {
     "base_cost": 1,
+    "calculated_value": 9,
+    "can_play": false,
+    "color": "pink",
+    "cost": 1,
+    "description": "Osty deals 9 damage.\nDeals additional damage equal to Osty's current HP.",
+    "description_rich": "[gold]Osty[/gold] deals 9 damage.\nDeals additional damage equal to [gold]Osty's[/gold] current HP.",
+    "id": "UNLEASH",
+    "image": "https://assets.test/card_atlas/necrobinder/unleash.png",
+    "index": -1,
+    "name": "Unleash",
+    "rarity": "Basic",
+    "stats": {},
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
     "can_play": false,
     "color": "pink",
     "cost": 1,
@@ -51,15 +69,15 @@
     "can_play": false,
     "color": "pink",
     "cost": 1,
-    "description": "Ethereal.\nDeal 7 damage.\nApply 1 Vulnerable.",
-    "description_rich": "[gold]Ethereal[/gold].\nDeal 7 damage.\nApply 1 [gold]Vulnerable[/gold].",
-    "id": "FEAR",
-    "image": "https://assets.test/card_atlas/necrobinder/fear.png",
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_NECROBINDER",
+    "image": "https://assets.test/card_atlas/necrobinder/strike_necrobinder.png",
     "index": -1,
-    "name": "Fear",
-    "rarity": "Common",
+    "name": "Strike",
+    "rarity": "Basic",
     "stats": {
-     "damage": 7
+     "damage": 6
     },
     "target_type": "None",
     "type": "Attack",
@@ -67,47 +85,88 @@
    },
    {
     "base_cost": 1,
-    "calculated_value": 14,
     "can_play": false,
     "color": "pink",
     "cost": 1,
-    "description": "Osty deals 14 damage.\nDeals additional damage equal to Osty's current HP.",
-    "description_rich": "[gold]Osty[/gold] deals 14 damage.\nDeals additional damage equal to [gold]Osty's[/gold] current HP.",
-    "id": "UNLEASH",
-    "image": "https://assets.test/card_atlas/necrobinder/unleash.png",
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_NECROBINDER",
+    "image": "https://assets.test/card_atlas/necrobinder/defend_necrobinder.png",
     "index": -1,
-    "name": "Unleash",
+    "name": "Defend",
     "rarity": "Basic",
-    "stats": {},
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "pink",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_NECROBINDER",
+    "image": "https://assets.test/card_atlas/necrobinder/defend_necrobinder.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "pink",
+    "cost": 1,
+    "description": "Gain 5 Block.\nApply 7 Doom to ALL enemies.",
+    "description_rich": "Gain 5 [gold]Block[/gold].\nApply 7 [gold]Doom[/gold] to ALL enemies.",
+    "id": "NEGATIVE_PULSE",
+    "image": "https://assets.test/card_atlas/necrobinder/negative_pulse.png",
+    "index": -1,
+    "name": "Negative Pulse",
+    "rarity": "Common",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "colorless",
+    "cost": 1,
+    "description": "Deal 14 damage.",
+    "description_rich": "Deal 14 damage.",
+    "id": "ULTIMATE_STRIKE",
+    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+    "index": -1,
+    "name": "Ultimate Strike",
+    "rarity": "Uncommon",
+    "stats": {
+     "damage": 14
+    },
     "target_type": "None",
     "type": "Attack",
     "upgraded": false
    }
   ],
-  "discard_pile_count": 3,
+  "discard_pile_count": 7,
   "draw_pile": [
    {
     "base_cost": 1,
     "can_play": false,
     "color": "pink",
     "cost": 1,
-    "description": "Summon 5.",
-    "description_rich": "[gold]Summon[/gold] 5.",
-    "id": "BODYGUARD",
-    "image": "https://assets.test/card_atlas/necrobinder/bodyguard.png",
-    "index": -1,
-    "name": "Bodyguard",
-    "rarity": "Basic",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "pink",
-    "cost": 1,
     "description": "Gain 5 Block.",
     "description_rich": "Gain 5 [gold]Block[/gold].",
     "id": "DEFEND_NECROBINDER",
@@ -142,38 +201,19 @@
     "upgraded": false
    },
    {
-    "base_cost": 1,
+    "base_cost": 3,
     "can_play": false,
     "color": "pink",
-    "cost": 1,
-    "description": "Gain 8 Block.\nAdd a Soul into your Draw Pile.",
-    "description_rich": "Gain 8 [gold]Block[/gold].\nAdd a [gold]Soul[/gold] into your [gold]Draw Pile[/gold].",
-    "id": "GRAVE_WARDEN",
-    "image": "https://assets.test/card_atlas/necrobinder/grave_warden.png",
+    "cost": 3,
+    "description": "Retain.\nDeal 27 damage.",
+    "description_rich": "[gold]Retain[/gold].\nDeal 27 damage.",
+    "id": "REAP",
+    "image": "https://assets.test/card_atlas/necrobinder/reap.png",
     "index": -1,
-    "name": "Grave Warden",
+    "name": "Reap",
     "rarity": "Common",
     "stats": {
-     "block": 8
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "pink",
-    "cost": 1,
-    "description": "Osty deals 7 damage.\nAdd Retain to a card in your Hand.",
-    "description_rich": "[gold]Osty[/gold] deals 7 damage.\nAdd [gold]Retain[/gold] to a card in your [gold]Hand[/gold].",
-    "id": "SNAP",
-    "image": "https://assets.test/card_atlas/necrobinder/snap.png",
-    "index": -1,
-    "name": "Snap",
-    "rarity": "Common",
-    "stats": {
-     "damage": 7
+     "damage": 27
     },
     "target_type": "None",
     "type": "Attack",
@@ -216,86 +256,42 @@
     "target_type": "None",
     "type": "Attack",
     "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "pink",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_NECROBINDER",
-    "image": "https://assets.test/card_atlas/necrobinder/strike_necrobinder.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Deal 14 damage.",
-    "description_rich": "Deal 14 damage.",
-    "id": "ULTIMATE_STRIKE",
-    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-    "index": -1,
-    "name": "Ultimate Strike",
-    "rarity": "Uncommon",
-    "stats": {
-     "damage": 14
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
    }
   ],
-  "draw_pile_count": 9,
+  "draw_pile_count": 5,
   "enemies": [
    {
     "block": 0,
-    "hp": 12,
+    "hp": 39,
     "image": "https://assets.test/monsters/terror_eel.png",
     "index": 0,
     "intents": [
      {
-      "base_damage": 16,
-      "damage": 24,
-      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_4.png",
-      "modifiers": [
-       {
-        "image": "https://assets.test/power_atlas/vulnerable_power.png",
-        "kind": "power",
-        "mul": [
-         3,
-         2
-        ],
-        "name": "VULNERABLE",
-        "side": "player",
-        "title": "Vulnerable"
-       }
-      ],
-      "type": "Attack"
+      "damage": 99,
+      "intent_image": "https://assets.test/intent_atlas/intent_debuff.png",
+      "type": "Debuff"
      }
     ],
     "kind": "TerrorEel",
     "max_hp": 140,
-    "move_state": "CRASH_MOVE",
+    "move_state": "TERROR_MOVE",
     "name": "Terror Eel",
     "powers": [
      {
-      "amount": 1,
-      "display_amount": 1,
-      "id": "VULNERABLE",
-      "image": "https://assets.test/power_atlas/vulnerable_power.png",
-      "image_big": "https://assets.test/power_big/vulnerable_power.png",
-      "name": "Vulnerable"
+      "amount": 21,
+      "display_amount": 21,
+      "id": "DOOM",
+      "image": "https://assets.test/power_atlas/doom_power.png",
+      "image_big": "https://assets.test/power_big/doom_power.png",
+      "name": "Doom"
+     },
+     {
+      "amount": 6,
+      "display_amount": 6,
+      "id": "VIGOR",
+      "image": "https://assets.test/power_atlas/vigor_power.png",
+      "image_big": "https://assets.test/power_big/vigor_power.png",
+      "name": "Vigor"
      }
     ],
     "rig": "https://assets.test/monster_rigs/terror_eel/terror_eel",
@@ -326,26 +322,9 @@
     "target_type": "None",
     "type": "Skill",
     "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Draw 2 cards.\nExhaust.",
-    "description_rich": "Draw 2 cards.\n[gold]Exhaust[/gold].",
-    "id": "SOUL",
-    "image": "https://assets.test/card_atlas/token/soul.png",
-    "index": -1,
-    "name": "Soul",
-    "rarity": "Token",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
    }
   ],
-  "exhaust_pile_count": 2,
+  "exhaust_pile_count": 1,
   "floor": 11,
   "hand": [
    {
@@ -353,16 +332,14 @@
     "can_play": false,
     "color": "pink",
     "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_NECROBINDER",
-    "image": "https://assets.test/card_atlas/necrobinder/defend_necrobinder.png",
+    "description": "Summon 5.",
+    "description_rich": "[gold]Summon[/gold] 5.",
+    "id": "BODYGUARD",
+    "image": "https://assets.test/card_atlas/necrobinder/bodyguard.png",
     "index": 0,
-    "name": "Defend",
+    "name": "Bodyguard",
     "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
+    "stats": {},
     "target_type": "None",
     "type": "Skill",
     "unplayable_reason": "cost",
@@ -373,38 +350,18 @@
     "can_play": false,
     "color": "pink",
     "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_NECROBINDER",
-    "image": "https://assets.test/card_atlas/necrobinder/defend_necrobinder.png",
-    "index": 1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "unplayable_reason": "cost",
-    "upgraded": false
-   },
-   {
-    "base_cost": 3,
-    "can_play": false,
-    "color": "pink",
-    "cost": 3,
     "damage_preview": {
-     "0": 40
+     "0": 7
     },
-    "description": "Retain.\nDeal 27 damage.",
-    "description_rich": "[gold]Retain[/gold].\nDeal 27 damage.",
-    "id": "REAP",
-    "image": "https://assets.test/card_atlas/necrobinder/reap.png",
-    "index": 2,
-    "name": "Reap",
+    "description": "Osty deals 7 damage.\nAdd Retain to a card in your Hand.",
+    "description_rich": "[gold]Osty[/gold] deals 7 damage.\nAdd [gold]Retain[/gold] to a card in your [gold]Hand[/gold].",
+    "id": "SNAP",
+    "image": "https://assets.test/card_atlas/necrobinder/snap.png",
+    "index": 1,
+    "name": "Snap",
     "rarity": "Common",
     "stats": {
-     "damage": 27
+     "damage": 7
     },
     "target_type": "None",
     "type": "Attack",
@@ -417,17 +374,25 @@
   "osty": {
    "alive": true,
    "block": 0,
-   "hp": 8,
+   "hp": 3,
    "image": "https://assets.test/monsters/osty.png",
-   "max_hp": 8,
+   "max_hp": 3,
    "name": "Osty",
+   "powers": [
+    {
+     "amount": 1,
+     "counter": 0,
+     "display_amount": 1,
+     "name": "DIE_FOR_YOU"
+    }
+   ],
    "rig": "https://assets.test/monster_rigs/osty/osty",
    "rig_bounds_h": 204.0,
    "rig_bounds_w": 232.0,
    "rig_scale": 0.26
   },
   "player": {
-   "block": 0,
+   "block": 10,
    "deck": [
     {
      "color": "pink",
@@ -601,25 +566,12 @@
     {
      "color": "pink",
      "cost": 1,
-     "description": "Ethereal.\nDeal 7 damage.\nApply 1 Vulnerable.",
-     "description_rich": "[gold]Ethereal[/gold].\nDeal 7 damage.\nApply 1 Vulnerable.",
-     "id": "FEAR",
-     "image": "https://assets.test/card_atlas/necrobinder/fear.png",
+     "description": "Gain 5 Block.\nApply 7 Doom to ALL enemies.",
+     "description_rich": "Gain 5 Block.\nApply 7 Doom to ALL enemies.",
+     "id": "NEGATIVE_PULSE",
+     "image": "https://assets.test/card_atlas/necrobinder/negative_pulse.png",
      "index": 13,
-     "name": "Fear",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgraded": false
-    },
-    {
-     "color": "pink",
-     "cost": 1,
-     "description": "Gain 8 Block.\nAdd a Soul into your Draw Pile.",
-     "description_rich": "Gain 8 Block.\nAdd a Soul into your Draw Pile.",
-     "id": "GRAVE_WARDEN",
-     "image": "https://assets.test/card_atlas/necrobinder/grave_warden.png",
-     "index": 14,
-     "name": "Grave Warden",
+     "name": "Negative Pulse",
      "rarity": "Common",
      "type": "Skill",
      "upgraded": false
@@ -631,27 +583,20 @@
      "description_rich": "[gold]Retain[/gold].\nDeal 27 damage.",
      "id": "REAP",
      "image": "https://assets.test/card_atlas/necrobinder/reap.png",
-     "index": 15,
+     "index": 14,
      "name": "Reap",
      "rarity": "Common",
      "type": "Attack",
      "upgraded": false
     }
    ],
-   "gold": 71,
-   "hp": 10,
+   "gold": 65,
+   "hp": 14,
    "image": "https://assets.test/character_sprites/necrobinder.png",
    "max_hp": 66,
    "name": "Necrobinder",
    "potion_slots": 3,
-   "potions": [
-    {
-     "description": "Gain 2 Energy.",
-     "id": "ENERGY_POTION",
-     "image": "https://assets.test/potion_atlas/energy_potion.png",
-     "name": "Energy Potion"
-    }
-   ],
+   "potions": [],
    "relics": [
     {
      "description": "At the start of your turn, Summon 1.",
@@ -677,16 +622,7 @@
    "rig_bounds_w": 210.0,
    "rig_scale": 0.27
   },
-  "player_powers": [
-   {
-    "amount": 99,
-    "display_amount": 99,
-    "id": "VULNERABLE",
-    "image": "https://assets.test/power_atlas/vulnerable_power.png",
-    "image_big": "https://assets.test/power_big/vulnerable_power.png",
-    "name": "Vulnerable"
-   }
-  ],
+  "player_powers": [],
   "round": 6
  }
 }

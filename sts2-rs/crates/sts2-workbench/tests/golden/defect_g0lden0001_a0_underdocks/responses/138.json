@@ -12,32 +12,60 @@
  "pv": null,
  "scores": [
   {
-   "action": "drink Energy Potion",
+   "action": "Strike",
    "is_best": true,
-   "losses": 3,
+   "losses": 0,
    "low_confidence": false,
-   "q": 0.7816,
+   "q": 1.0837,
    "q_saturated": false,
-   "stable_idx": -100,
+   "stable_idx": 0,
+   "target_index": 0,
+   "ties": 0,
+   "visits": 12,
+   "win_prob": 1.0,
+   "wins": 12
+  },
+  {
+   "action": "Go for the Eyes",
+   "is_best": false,
+   "losses": 0,
+   "low_confidence": false,
+   "q": 1.0822,
+   "q_saturated": false,
+   "stable_idx": 1,
+   "target_index": 0,
+   "ties": 0,
+   "visits": 12,
+   "win_prob": 1.0,
+   "wins": 12
+  },
+  {
+   "action": "Defend",
+   "is_best": false,
+   "losses": 0,
+   "low_confidence": false,
+   "q": 1.0778,
+   "q_saturated": false,
+   "stable_idx": 2,
    "target_index": null,
    "ties": 0,
-   "visits": 24,
-   "win_prob": 0.875,
-   "wins": 21
+   "visits": 12,
+   "win_prob": 1.0,
+   "wins": 12
   },
   {
    "action": "end turn",
    "is_best": false,
-   "losses": 3,
+   "losses": 0,
    "low_confidence": false,
-   "q": 0.7735,
+   "q": 1.0751,
    "q_saturated": false,
    "stable_idx": -1,
    "target_index": null,
    "ties": 0,
-   "visits": 24,
-   "win_prob": 0.875,
-   "wins": 21
+   "visits": 12,
+   "win_prob": 1.0,
+   "wins": 12
   }
  ]
 }

@@ -1,0 +1,82 @@
+{
+ "assumptions": {
+  "energy": 3,
+  "hand": 5,
+  "samples": 200
+ },
+ "block": {
+  "per_turn": 10.4,
+  "scaling_cards": []
+ },
+ "composition": {
+  "by_rarity": {
+   "Basic": 12,
+   "Common": 5,
+   "Curse": 1,
+   "Uncommon": 1
+  },
+  "by_type": {
+   "Attack": 10,
+   "Curse": 1,
+   "Skill": 8
+  },
+  "dead_cards": 1,
+  "energy_curve": {
+   "0": 1,
+   "1": 15,
+   "2": 2
+  },
+  "unupgraded_basics": 10
+ },
+ "damage": {
+  "aoe_attacks": [],
+  "attack_count": 10,
+  "per_turn": 17.9,
+  "scaling_cards": [
+   "Neutralize",
+   "Snakebite",
+   "Predator"
+  ],
+  "single_target": 17.8,
+  "vs_group": 17.9
+ },
+ "deck_size": 19,
+ "lenses": {
+  "boss": 39.1,
+  "hallway": 37.9,
+  "scaling": 39.8
+ },
+ "scores": {
+  "block": 40.7,
+  "damage": 36.0,
+  "velocity": 40.8,
+  "volume": 39.1
+ },
+ "velocity": {
+  "bottleneck": "energy",
+  "cards_per_turn": 3.1,
+  "dilution": 0.79,
+  "draw_limited_turns": 0.0,
+  "energy_limited_turns": 6.8,
+  "engine_cards": 3,
+  "extra_per_turn": 0.0,
+  "tags": {
+   "draw": 1,
+   "tutor": 2
+  }
+ },
+ "warnings": [
+  {
+   "severity": "info",
+   "text": "No AOE — multi-enemy fights (Gremlins, hallways) will be slow."
+  },
+  {
+   "severity": "info",
+   "text": "Energy-limited — cards stranded in hand; more energy helps, more draw won't."
+  },
+  {
+   "severity": "warn",
+   "text": "Deck clogged with basics/curses — prioritise removals."
+  }
+ ]
+}

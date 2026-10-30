@@ -1,5 +1,71 @@
 {
- "runs": [
-  "<work>/logs/20260101_000000_Ironclad_G0LDEN0001.jsonl"
+ "config": {
+  "c_puct": 2.5,
+  "depth": 200,
+  "draw_widening_c": 2.0,
+  "hidden_info": "beliefdraw",
+  "rollout_policy": "heuristic",
+  "seed": 1,
+  "sims": 48,
+  "threads": 1
+ },
+ "pv": null,
+ "scores": [
+  {
+   "action": "Defend",
+   "is_best": true,
+   "losses": 11,
+   "low_confidence": false,
+   "q": -1.0321,
+   "q_saturated": false,
+   "stable_idx": 1,
+   "target_index": null,
+   "ties": 0,
+   "visits": 12,
+   "win_prob": 0.0833,
+   "wins": 1
+  },
+  {
+   "action": "Strike",
+   "is_best": false,
+   "losses": 12,
+   "low_confidence": false,
+   "q": -1.0363,
+   "q_saturated": false,
+   "stable_idx": 0,
+   "target_index": 0,
+   "ties": 0,
+   "visits": 13,
+   "win_prob": 0.0769,
+   "wins": 1
+  },
+  {
+   "action": "end turn",
+   "is_best": false,
+   "losses": 12,
+   "low_confidence": false,
+   "q": -1.0439,
+   "q_saturated": false,
+   "stable_idx": -1,
+   "target_index": null,
+   "ties": 0,
+   "visits": 13,
+   "win_prob": 0.0769,
+   "wins": 1
+  },
+  {
+   "action": "True Grit",
+   "is_best": false,
+   "losses": 10,
+   "low_confidence": false,
+   "q": -1.2205,
+   "q_saturated": false,
+   "stable_idx": 2,
+   "target_index": null,
+   "ties": 0,
+   "visits": 10,
+   "win_prob": 0.0,
+   "wins": 0
+  }
  ]
 }

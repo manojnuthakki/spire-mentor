@@ -2,17 +2,17 @@
  "action_label": "",
  "assets_base": "https://assets.test",
  "chosen_action": null,
- "decision": "combat_play",
+ "decision": "rest_site",
  "idx": 0,
  "meta": {
   "act": 1,
   "act_name": "Underdocks",
-  "bg_col": 0,
-  "bg_row": 11,
+  "bg_col": 1,
+  "bg_row": 10,
   "bg_seed": 1772253313,
-  "floor": 11,
+  "floor": 10,
   "step_no": 0,
-  "turn": 2
+  "turn": null
  },
  "pv": null,
  "scores": [],
@@ -22,397 +22,44 @@
   "act1": "underdocks",
   "act_name": "Underdocks",
   "ascension": 0,
-  "bg_col": 0,
-  "bg_row": 11,
+  "bg_col": 1,
+  "bg_row": 10,
   "bg_seed": 1772253313,
-  "decision": "combat_play",
-  "discard_pile": [
+  "decision": "rest_site",
+  "floor": 10,
+  "options": [
    {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_IRONCLAD",
-    "image": "https://assets.test/card_atlas/ironclad/defend_ironclad.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
+    "action": "choose_option",
+    "args": {
+     "option_index": 0
     },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
+    "enabled": true,
+    "label": "HEAL"
    },
    {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Gain 7 Block.\nExhaust 1 card at random.",
-    "description_rich": "Gain 7 [gold]Block[/gold].\n[gold]Exhaust[/gold] 1 card at random.",
-    "id": "TRUE_GRIT",
-    "image": "https://assets.test/card_atlas/ironclad/true_grit.png",
-    "index": -1,
-    "name": "True Grit",
-    "rarity": "Common",
-    "stats": {
-     "block": 7
+    "action": "choose_option",
+    "args": {
+     "option_index": 1
     },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Play the top card of your Draw Pile and Exhaust it.",
-    "description_rich": "Play the top card of your [gold]Draw Pile[/gold] and [gold]Exhaust[/gold] it.",
-    "id": "HAVOC",
-    "image": "https://assets.test/card_atlas/ironclad/havoc.png",
-    "index": -1,
-    "name": "Havoc",
-    "rarity": "Common",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Lose 1 HP.\nDeal 9 damage to ALL enemies.",
-    "description_rich": "Lose 1 HP.\nDeal 9 damage to ALL enemies.",
-    "id": "BREAKTHROUGH",
-    "image": "https://assets.test/card_atlas/ironclad/breakthrough.png",
-    "index": -1,
-    "name": "Breakthrough",
-    "rarity": "Common",
-    "stats": {
-     "damage": 9
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_IRONCLAD",
-    "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
+    "enabled": true,
+    "label": "SMITH"
    }
   ],
-  "discard_pile_count": 5,
-  "draw_pile": [
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_IRONCLAD",
-    "image": "https://assets.test/card_atlas/ironclad/defend_ironclad.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_IRONCLAD",
-    "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_IRONCLAD",
-    "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   }
-  ],
-  "draw_pile_count": 3,
-  "enemies": [
-   {
-    "block": 0,
-    "hp": 118,
-    "image": "https://assets.test/monsters/terror_eel.png",
-    "index": 0,
-    "intents": [
-     {
-      "damage": 3,
-      "hits": 3,
-      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_2.png",
-      "type": "Attack"
-     },
-     {
-      "damage": 6,
-      "intent_image": "https://assets.test/intent_atlas/intent_buff.png",
-      "type": "Buff"
-     }
-    ],
-    "kind": "TerrorEel",
-    "max_hp": 140,
-    "move_state": "ThrashMove",
-    "name": "Terror Eel",
-    "powers": [
-     {
-      "amount": 70,
-      "display_amount": 70,
-      "id": "SHRIEK",
-      "image": "https://assets.test/power_atlas/shriek_power.png",
-      "image_big": "https://assets.test/power_big/shriek_power.png",
-      "name": "Shriek"
-     },
-     {
-      "amount": 2,
-      "display_amount": 2,
-      "id": "VULNERABLE",
-      "image": "https://assets.test/power_atlas/vulnerable_power.png",
-      "image_big": "https://assets.test/power_big/vulnerable_power.png",
-      "name": "Vulnerable"
-     }
-    ],
-    "rig": "https://assets.test/monster_rigs/terror_eel/terror_eel",
-    "rig_bounds_h": 357.0,
-    "rig_bounds_w": 712.0,
-    "rig_scale": 0.2,
-    "uid": 2
-   }
-  ],
-  "energy": 1,
-  "energy_image": "https://assets.test/sprite_fonts/ironclad_energy_icon.png",
-  "exhaust_pile": [
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Deal 9 damage.",
-    "description_rich": "Deal 9 damage.",
-    "id": "STRIKE_IRONCLAD",
-    "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 9
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": true
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "red",
-    "cost": 1,
-    "description": "Apply 3 Vulnerable.\nExhaust.",
-    "description_rich": "Apply 3 [gold]Vulnerable[/gold].\n[gold]Exhaust[/gold].",
-    "id": "TREMBLE",
-    "image": "https://assets.test/card_atlas/ironclad/tremble.png",
-    "index": -1,
-    "name": "Tremble",
-    "rarity": "Common",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   }
-  ],
-  "exhaust_pile_count": 2,
-  "floor": 11,
-  "hand": [
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "colorless",
-    "cost": 1,
-    "damage_preview": {
-     "0": 21
-    },
-    "description": "Deal 14 damage.",
-    "description_rich": "Deal 14 damage.",
-    "id": "ULTIMATE_STRIKE",
-    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-    "index": 0,
-    "name": "Ultimate Strike",
-    "rarity": "Uncommon",
-    "stats": {
-     "damage": 14
-    },
-    "target_type": "AnyEnemy",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "red",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_IRONCLAD",
-    "image": "https://assets.test/card_atlas/ironclad/defend_ironclad.png",
-    "index": 1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": true,
-    "color": "red",
-    "cost": 0,
-    "description": "Lose 3 HP.\nGain Energy.",
-    "description_rich": "Lose 3 HP.\nGain Energy.",
-    "id": "BLOODLETTING",
-    "image": "https://assets.test/card_atlas/ironclad/bloodletting.png",
-    "index": 2,
-    "name": "Bloodletting",
-    "rarity": "Common",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 2,
-    "can_play": false,
-    "color": "red",
-    "cost": 2,
-    "damage_preview": {
-     "0": 12
-    },
-    "description": "Deal 8 damage.\nApply 2 Vulnerable.",
-    "description_rich": "Deal 8 damage.\nApply 2 [gold]Vulnerable[/gold].",
-    "id": "BASH",
-    "image": "https://assets.test/card_atlas/ironclad/bash.png",
-    "index": 3,
-    "name": "Bash",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 8
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "unplayable_reason": "cost",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "red",
-    "cost": 1,
-    "damage_preview": {
-     "0": 13
-    },
-    "description": "Deal 9 damage.\nDraw 1 card.",
-    "description_rich": "Deal 9 damage.\nDraw 1 card.",
-    "id": "POMMEL_STRIKE",
-    "image": "https://assets.test/card_atlas/ironclad/pommel_strike.png",
-    "index": 4,
-    "name": "Pommel Strike",
-    "rarity": "Common",
-    "stats": {
-     "damage": 9
-    },
-    "target_type": "AnyEnemy",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "red",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_IRONCLAD",
-    "image": "https://assets.test/card_atlas/ironclad/defend_ironclad.png",
-    "index": 5,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   }
-  ],
-  "max_energy": 3,
-  "options": [],
   "player": {
    "block": 0,
    "deck": [
     {
      "color": "red",
      "cost": 1,
-     "description": "Deal 9 damage.",
-     "description_rich": "Deal 9 damage.",
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
      "id": "STRIKE_IRONCLAD",
      "image": "https://assets.test/card_atlas/ironclad/strike_ironclad.png",
      "index": 0,
      "name": "Strike",
      "rarity": "Basic",
      "type": "Attack",
-     "upgraded": true
+     "upgraded": false
     },
     {
      "color": "red",
@@ -573,27 +220,14 @@
     {
      "color": "red",
      "cost": 1,
-     "description": "Lose 1 HP.\nDeal 9 damage to ALL enemies.",
-     "description_rich": "Lose 1 HP.\nDeal 9 damage to ALL enemies.",
-     "id": "BREAKTHROUGH",
-     "image": "https://assets.test/card_atlas/ironclad/breakthrough.png",
+     "description": "Deal 10 damage.\nDouble the enemy's Vulnerable.\nExhaust.",
+     "description_rich": "Deal 10 damage.\nDouble the enemy's Vulnerable.\n[gold]Exhaust[/gold].",
+     "id": "MOLTEN_FIST",
+     "image": "https://assets.test/card_atlas/ironclad/molten_fist.png",
      "index": 13,
-     "name": "Breakthrough",
+     "name": "Molten Fist",
      "rarity": "Common",
      "type": "Attack",
-     "upgraded": false
-    },
-    {
-     "color": "red",
-     "cost": 1,
-     "description": "Play the top card of your Draw Pile and Exhaust it.",
-     "description_rich": "Play the top card of your [gold]Draw Pile[/gold] and [gold]Exhaust[/gold] it.",
-     "id": "HAVOC",
-     "image": "https://assets.test/card_atlas/ironclad/havoc.png",
-     "index": 14,
-     "name": "Havoc",
-     "rarity": "Common",
-     "type": "Skill",
      "upgraded": false
     },
     {
@@ -603,16 +237,15 @@
      "description_rich": "Deal 9 damage.\nDraw 1 card.",
      "id": "POMMEL_STRIKE",
      "image": "https://assets.test/card_atlas/ironclad/pommel_strike.png",
-     "index": 15,
+     "index": 14,
      "name": "Pommel Strike",
      "rarity": "Common",
      "type": "Attack",
      "upgraded": false
     }
    ],
-   "gold": 71,
-   "hp": 45,
-   "image": "https://assets.test/character_sprites/ironclad.png",
+   "gold": 65,
+   "hp": 36,
    "max_hp": 80,
    "name": "Ironclad",
    "potion_slots": 3,
@@ -643,13 +276,21 @@
      "image": "https://assets.test/relic_atlas/centennial_puzzle.png",
      "name": "Centennial Puzzle"
     }
-   ],
-   "rig": "https://assets.test/character_rigs/ironclad/ironclad",
-   "rig_bounds_h": 278.0,
-   "rig_bounds_w": 242.0,
-   "rig_scale": 0.28
+   ]
   },
-  "player_powers": [],
-  "round": 2
+  "rest_options": [
+   {
+    "index": 0,
+    "is_enabled": true,
+    "name": "Rest",
+    "option_id": "HEAL"
+   },
+   {
+    "index": 1,
+    "is_enabled": true,
+    "name": "Smith",
+    "option_id": "SMITH"
+   }
+  ]
  }
 }

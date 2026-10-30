@@ -2,17 +2,17 @@
  "action_label": "",
  "assets_base": "https://assets.test",
  "chosen_action": null,
- "decision": "combat_play",
+ "decision": "rest_site",
  "idx": 0,
  "meta": {
   "act": 1,
   "act_name": "Underdocks",
-  "bg_col": 3,
-  "bg_row": 6,
+  "bg_col": 2,
+  "bg_row": 7,
   "bg_seed": 1772253313,
-  "floor": 6,
+  "floor": 7,
   "step_no": 0,
-  "turn": 5
+  "turn": null
  },
  "pv": null,
  "scores": [],
@@ -22,442 +22,29 @@
   "act1": "underdocks",
   "act_name": "Underdocks",
   "ascension": 0,
-  "bg_col": 3,
-  "bg_row": 6,
+  "bg_col": 2,
+  "bg_row": 7,
   "bg_seed": 1772253313,
-  "decision": "combat_play",
-  "discard_pile": [
+  "decision": "rest_site",
+  "floor": 7,
+  "options": [
    {
-    "base_cost": 2,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 2,
-    "description": "Retain.\nDeal 10 damage.",
-    "description_rich": "[gold]Retain[/gold].\nDeal 10 damage.",
-    "id": "SOVEREIGN_BLADE",
-    "image": "https://assets.test/card_atlas/token/sovereign_blade.png",
-    "index": -1,
-    "name": "Sovereign Blade",
-    "rarity": "Token",
-    "stats": {
-     "damage": 15
+    "action": "choose_option",
+    "args": {
+     "option_index": 0
     },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
+    "enabled": true,
+    "label": "HEAL"
    },
    {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_REGENT",
-    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
+    "action": "choose_option",
+    "args": {
+     "option_index": 1
     },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "orange",
-    "cost": 0,
-    "description": "Deal 8 damage.\nApply 1 Weak.\nApply 1 Vulnerable.",
-    "description_rich": "Deal 8 damage.\nApply 1 [gold]Weak[/gold].\nApply 1 [gold]Vulnerable[/gold].",
-    "id": "FALLING_STAR",
-    "image": "https://assets.test/card_atlas/regent/falling_star.png",
-    "index": -1,
-    "name": "Falling Star",
-    "rarity": "Basic",
-    "star_cost": 2,
-    "stats": {
-     "damage": 8
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-    "description_rich": "Gain 6 [gold]Block[/gold].\nPut a card from your [gold]Discard Pile[/gold] on top of your [gold]Draw Pile[/gold].",
-    "id": "COSMIC_INDIFFERENCE",
-    "image": "https://assets.test/card_atlas/regent/cosmic_indifference.png",
-    "index": -1,
-    "name": "Cosmic Indifference",
-    "rarity": "Common",
-    "stats": {
-     "block": 6
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_REGENT",
-    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Gain Stars.",
-    "description_rich": "Gain Stars.",
-    "id": "VENERATE",
-    "image": "https://assets.test/card_atlas/regent/venerate.png",
-    "index": -1,
-    "name": "Venerate",
-    "rarity": "Basic",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 1,
-    "description": "Deal 14 damage.",
-    "description_rich": "Deal 14 damage.",
-    "id": "ULTIMATE_STRIKE",
-    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
-    "index": -1,
-    "name": "Ultimate Strike",
-    "rarity": "Uncommon",
-    "stats": {
-     "damage": 14
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Deal 9 damage.\nGain Stars.",
-    "description_rich": "Deal 9 damage.\nGain Stars.",
-    "id": "SOLAR_STRIKE",
-    "image": "https://assets.test/card_atlas/regent/solar_strike.png",
-    "index": -1,
-    "name": "Solar Strike",
-    "rarity": "Common",
-    "stats": {
-     "damage": 9
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "orange",
-    "cost": 0,
-    "description": "Gain 7 Block.",
-    "description_rich": "Gain 7 [gold]Block[/gold].",
-    "id": "CLOAK_OF_STARS",
-    "image": "https://assets.test/card_atlas/regent/cloak_of_stars.png",
-    "index": -1,
-    "name": "Cloak of Stars",
-    "rarity": "Common",
-    "star_cost": 1,
-    "stats": {
-     "block": 7
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_REGENT",
-    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
-    "index": -1,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
+    "enabled": true,
+    "label": "SMITH"
    }
   ],
-  "discard_pile_count": 10,
-  "draw_pile": [
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.\nEthereal.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
-    "id": "DAZED",
-    "image": "https://assets.test/card_atlas/status/dazed.png",
-    "index": -1,
-    "name": "Dazed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.\nEthereal.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
-    "id": "DAZED",
-    "image": "https://assets.test/card_atlas/status/dazed.png",
-    "index": -1,
-    "name": "Dazed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.\nEthereal.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
-    "id": "DAZED",
-    "image": "https://assets.test/card_atlas/status/dazed.png",
-    "index": -1,
-    "name": "Dazed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.\nEthereal.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
-    "id": "DAZED",
-    "image": "https://assets.test/card_atlas/status/dazed.png",
-    "index": -1,
-    "name": "Dazed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": false,
-    "color": "orange",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_REGENT",
-    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
-    "index": -1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   }
-  ],
-  "draw_pile_count": 5,
-  "enemies": [
-   {
-    "block": 0,
-    "hp": 6,
-    "image": "https://assets.test/monsters/haunted_ship.png",
-    "index": 0,
-    "intents": [
-     {
-      "damage": 4,
-      "hits": 3,
-      "intent_image": "https://assets.test/intent_atlas/attack/intent_attack_3.png",
-      "type": "Attack"
-     }
-    ],
-    "kind": "HauntedShip",
-    "max_hp": 63,
-    "move_state": "STOMP_MOVE",
-    "name": "Haunted Ship",
-    "powers": [],
-    "rig": "https://assets.test/monster_rigs/haunted_ship/haunted_ship",
-    "rig_bounds_h": 454.0,
-    "rig_bounds_w": 640.0,
-    "rig_scale": 0.3,
-    "uid": 2
-   }
-  ],
-  "energy": 3,
-  "energy_image": "https://assets.test/sprite_fonts/regent_energy_icon.png",
-  "exhaust_pile": [
-   {
-    "base_cost": -1,
-    "can_play": false,
-    "color": "colorless",
-    "cost": 0,
-    "description": "Unplayable.\nEthereal.",
-    "description_rich": "[gold]Unplayable[/gold].\n[gold]Ethereal[/gold].",
-    "id": "DAZED",
-    "image": "https://assets.test/card_atlas/status/dazed.png",
-    "index": -1,
-    "name": "Dazed",
-    "rarity": "Status",
-    "stats": {},
-    "target_type": "None",
-    "type": "Status",
-    "upgraded": false
-   }
-  ],
-  "exhaust_pile_count": 1,
-  "floor": 6,
-  "hand": [
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "orange",
-    "cost": 1,
-    "damage_preview": {
-     "0": 6
-    },
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_REGENT",
-    "image": "https://assets.test/card_atlas/regent/strike_regent.png",
-    "index": 0,
-    "name": "Strike",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 6
-    },
-    "target_type": "AnyEnemy",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "orange",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_REGENT",
-    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
-    "index": 1,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "orange",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_REGENT",
-    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
-    "index": 2,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "orange",
-    "cost": 1,
-    "description": "Forge 5.\nDraw 2 cards.",
-    "description_rich": "[gold]Forge[/gold] 5.\nDraw 2 cards.",
-    "id": "SPOILS_OF_BATTLE",
-    "image": "https://assets.test/card_atlas/regent/spoils_of_battle.png",
-    "index": 3,
-    "name": "Spoils of Battle",
-    "rarity": "Common",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
-    "base_cost": 1,
-    "can_play": true,
-    "color": "orange",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_REGENT",
-    "image": "https://assets.test/card_atlas/regent/defend_regent.png",
-    "index": 4,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   }
-  ],
-  "max_energy": 3,
-  "options": [],
   "player": {
    "block": 0,
    "deck": [
@@ -648,20 +235,19 @@
     {
      "color": "orange",
      "cost": 1,
-     "description": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-     "description_rich": "Gain 6 Block.\nPut a card from your Discard Pile on top of your Draw Pile.",
-     "id": "COSMIC_INDIFFERENCE",
-     "image": "https://assets.test/card_atlas/regent/cosmic_indifference.png",
+     "description": "Gain 1 Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+     "description_rich": "Gain 1 Stars.\nDraw 1 card.\nNext turn, draw 1 card.",
+     "id": "GLOW",
+     "image": "https://assets.test/card_atlas/regent/glow.png",
      "index": 14,
-     "name": "Cosmic Indifference",
+     "name": "Glow",
      "rarity": "Common",
      "type": "Skill",
      "upgraded": false
     }
    ],
-   "gold": 182,
-   "hp": 32,
-   "image": "https://assets.test/character_sprites/regent.png",
+   "gold": 194,
+   "hp": 41,
    "max_hp": 75,
    "name": "Regent",
    "potion_slots": 3,
@@ -679,13 +265,21 @@
      "image": "https://assets.test/relic_atlas/lead_paperweight.png",
      "name": "Lead Paperweight"
     }
-   ],
-   "rig": "https://assets.test/character_rigs/regent/regent",
-   "rig_bounds_h": 335.0,
-   "rig_bounds_w": 230.0,
-   "rig_scale": 0.29
+   ]
   },
-  "player_powers": [],
-  "round": 5
+  "rest_options": [
+   {
+    "index": 0,
+    "is_enabled": true,
+    "name": "Rest",
+    "option_id": "HEAL"
+   },
+   {
+    "index": 1,
+    "is_enabled": true,
+    "name": "Smith",
+    "option_id": "SMITH"
+   }
+  ]
  }
 }

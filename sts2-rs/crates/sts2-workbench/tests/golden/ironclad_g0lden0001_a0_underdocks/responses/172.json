@@ -1,0 +1,19 @@
+{
+ "act": null,
+ "best_label": "Strike",
+ "best_win_prob": 0.3636,
+ "drop_pct": 0,
+ "floor": null,
+ "idx": 123,
+ "is_blunder": false,
+ "matched_best": true,
+ "message": "Turn 6: Strike matched the MCTS line (P(win) 36%)",
+ "n_actions": 4,
+ "node_id": null,
+ "played_label": "Strike",
+ "played_win_prob": 0.3636,
+ "player_rank": 0,
+ "regret": 0.0,
+ "turn": 6,
+ "visits": 11
+}

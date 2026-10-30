@@ -347,6 +347,14 @@
    "image": "https://assets.test/monsters/osty.png",
    "max_hp": 1,
    "name": "Osty",
+   "powers": [
+    {
+     "amount": 1,
+     "counter": 0,
+     "display_amount": 1,
+     "name": "DIE_FOR_YOU"
+    }
+   ],
    "rig": "https://assets.test/monster_rigs/osty/osty",
    "rig_bounds_h": 204.0,
    "rig_bounds_w": 232.0,

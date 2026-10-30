@@ -1,19 +1,232 @@
 {
- "error": null,
+ "error": "no PPO net loaded for Defect",
  "impl": "rust",
  "options": [
   {
-   "action": "select_map_node",
+   "action": "buy_card",
    "args": {
-    "col": 2,
-    "row": 7
+    "card_index": 1
    },
-   "is_best": true,
-   "label": "Map → (2,7)",
-   "prob": 1.0
+   "is_best": false,
+   "label": "Buy Claw",
+   "prob": null
+  },
+  {
+   "action": "buy_card",
+   "args": {
+    "card_index": 2
+   },
+   "is_best": false,
+   "label": "Buy Tempest",
+   "prob": null
+  },
+  {
+   "action": "buy_card",
+   "args": {
+    "card_index": 3
+   },
+   "is_best": false,
+   "label": "Buy Hotfix",
+   "prob": null
+  },
+  {
+   "action": "buy_card",
+   "args": {
+    "card_index": 4
+   },
+   "is_best": false,
+   "label": "Buy Feral",
+   "prob": null
+  },
+  {
+   "action": "buy_card",
+   "args": {
+    "card_index": 5
+   },
+   "is_best": false,
+   "label": "Buy Ultimate Strike",
+   "prob": null
+  },
+  {
+   "action": "buy_potion",
+   "args": {
+    "potion_index": 0
+   },
+   "is_best": false,
+   "label": "Buy Energy Potion",
+   "prob": null
+  },
+  {
+   "action": "buy_potion",
+   "args": {
+    "potion_index": 1
+   },
+   "is_best": false,
+   "label": "Buy Focus Potion",
+   "prob": null
+  },
+  {
+   "action": "buy_potion",
+   "args": {
+    "potion_index": 2
+   },
+   "is_best": false,
+   "label": "Buy Explosive Ampoule",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "0"
+   },
+   "is_best": false,
+   "label": "Remove Strike Defect+ (deck #0)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "1"
+   },
+   "is_best": false,
+   "label": "Remove Strike Defect (deck #1)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "2"
+   },
+   "is_best": false,
+   "label": "Remove Strike Defect (deck #2)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "3"
+   },
+   "is_best": false,
+   "label": "Remove Strike Defect (deck #3)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "4"
+   },
+   "is_best": false,
+   "label": "Remove Defend Defect (deck #4)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "5"
+   },
+   "is_best": false,
+   "label": "Remove Defend Defect (deck #5)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "6"
+   },
+   "is_best": false,
+   "label": "Remove Defend Defect (deck #6)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "7"
+   },
+   "is_best": false,
+   "label": "Remove Defend Defect (deck #7)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "8"
+   },
+   "is_best": false,
+   "label": "Remove Zap (deck #8)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "9"
+   },
+   "is_best": false,
+   "label": "Remove Dualcast (deck #9)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "10"
+   },
+   "is_best": false,
+   "label": "Remove Ultimate Strike (deck #10)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "11"
+   },
+   "is_best": false,
+   "label": "Remove Boost Away (deck #11)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "12"
+   },
+   "is_best": false,
+   "label": "Remove Turbo (deck #12)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "13"
+   },
+   "is_best": false,
+   "label": "Remove Sweeping Beam (deck #13)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "14"
+   },
+   "is_best": false,
+   "label": "Remove Go For The Eyes (deck #14)",
+   "prob": null
+  },
+  {
+   "action": "select_cards",
+   "args": {
+    "indices": "15"
+   },
+   "is_best": false,
+   "label": "Remove Go For The Eyes (deck #15)",
+   "prob": null
+  },
+  {
+   "action": "leave_room",
+   "args": {},
+   "is_best": false,
+   "label": "leave_room",
+   "prob": null
   }
  ],
- "ppo_available": true,
- "surface": "path",
+ "ppo_available": false,
+ "surface": "shop",
  "value": null
 }

@@ -1,7 +1,55 @@
 {
- "count": 76,
- "resume": {
-  "kind": "run",
-  "reason": null
- }
+ "base": {
+  "block": 36.6,
+  "damage": 34.8,
+  "velocity": 30.2,
+  "volume": 33.8
+ },
+ "candidates": [
+  {
+   "delta": {
+    "block": -1.7,
+    "damage": -0.2,
+    "velocity": -6.9,
+    "volume": -3.4
+   },
+   "index": 0,
+   "scores": {
+    "block": 34.9,
+    "damage": 34.6,
+    "velocity": 23.3,
+    "volume": 30.4
+   }
+  },
+  {
+   "delta": {
+    "block": -1.0,
+    "damage": -0.9,
+    "velocity": -4.3,
+    "volume": -2.3
+   },
+   "index": 1,
+   "scores": {
+    "block": 35.6,
+    "damage": 33.9,
+    "velocity": 25.9,
+    "volume": 31.5
+   }
+  },
+  {
+   "delta": {
+    "block": 5.4,
+    "damage": -1.8,
+    "velocity": 9.2,
+    "volume": 4.1
+   },
+   "index": 2,
+   "scores": {
+    "block": 42.0,
+    "damage": 33.0,
+    "velocity": 39.4,
+    "volume": 37.9
+   }
+  }
+ ]
 }

@@ -53,18 +53,37 @@
     "can_play": false,
     "color": "green",
     "cost": 1,
-    "description": "Deal 9 damage.\nDraw 1 card.\nDiscard 1 card.",
-    "description_rich": "Deal 9 damage.\nDraw 1 card.\nDiscard 1 card.",
-    "id": "DAGGER_THROW",
-    "image": "https://assets.test/card_atlas/silent/dagger_throw.png",
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_SILENT",
+    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
     "index": -1,
-    "name": "Dagger Throw",
-    "rarity": "Common",
+    "name": "Defend",
+    "rarity": "Basic",
     "stats": {
-     "damage": 9
+     "block": 5
     },
     "target_type": "None",
-    "type": "Attack",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "green",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_SILENT",
+    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
     "upgraded": false
    },
    {
@@ -106,42 +125,6 @@
     "upgraded": false
    },
    {
-    "base_cost": 0,
-    "can_play": false,
-    "color": "green",
-    "cost": 0,
-    "description": "Deal 3 damage.\nApply 1 Weak.",
-    "description_rich": "Deal 3 damage.\nApply 1 [gold]Weak[/gold].",
-    "id": "NEUTRALIZE",
-    "image": "https://assets.test/card_atlas/silent/neutralize.png",
-    "index": -1,
-    "name": "Neutralize",
-    "rarity": "Basic",
-    "stats": {
-     "damage": 3
-    },
-    "target_type": "None",
-    "type": "Attack",
-    "upgraded": false
-   },
-   {
-    "base_cost": 2,
-    "can_play": false,
-    "color": "green",
-    "cost": 2,
-    "description": "Retain.\nApply 7 Poison.",
-    "description_rich": "[gold]Retain[/gold].\nApply 7 [gold]Poison[/gold].",
-    "id": "SNAKEBITE",
-    "image": "https://assets.test/card_atlas/silent/snakebite.png",
-    "index": -1,
-    "name": "Snakebite",
-    "rarity": "Common",
-    "stats": {},
-    "target_type": "None",
-    "type": "Skill",
-    "upgraded": false
-   },
-   {
     "base_cost": 1,
     "can_play": false,
     "color": "green",
@@ -201,24 +184,24 @@
    {
     "base_cost": 1,
     "can_play": false,
-    "color": "green",
+    "color": "colorless",
     "cost": 1,
-    "description": "Deal 8 damage.\nApply 1 Weak.",
-    "description_rich": "Deal 8 damage.\nApply 1 [gold]Weak[/gold].",
-    "id": "SUCKER_PUNCH",
-    "image": "https://assets.test/card_atlas/silent/sucker_punch.png",
+    "description": "Deal 14 damage.",
+    "description_rich": "Deal 14 damage.",
+    "id": "ULTIMATE_STRIKE",
+    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
     "index": -1,
-    "name": "Sucker Punch",
-    "rarity": "Common",
+    "name": "Ultimate Strike",
+    "rarity": "Uncommon",
     "stats": {
-     "damage": 8
+     "damage": 14
     },
     "target_type": "None",
     "type": "Attack",
     "upgraded": false
    }
   ],
-  "draw_pile_count": 10,
+  "draw_pile_count": 9,
   "enemies": [
    {
     "block": 0,
@@ -260,17 +243,17 @@
     "color": "green",
     "cost": 1,
     "damage_preview": {
-     "0": 6
+     "0": 8
     },
-    "description": "Deal 6 damage.",
-    "description_rich": "Deal 6 damage.",
-    "id": "STRIKE_SILENT",
-    "image": "https://assets.test/card_atlas/silent/strike_silent.png",
+    "description": "Deal 8 damage.\nApply 1 Weak.",
+    "description_rich": "Deal 8 damage.\nApply 1 [gold]Weak[/gold].",
+    "id": "SUCKER_PUNCH",
+    "image": "https://assets.test/card_atlas/silent/sucker_punch.png",
     "index": 0,
-    "name": "Strike",
-    "rarity": "Basic",
+    "name": "Sucker Punch",
+    "rarity": "Common",
     "stats": {
-     "damage": 6
+     "damage": 8
     },
     "target_type": "AnyEnemy",
     "type": "Attack",
@@ -300,18 +283,21 @@
     "can_play": true,
     "color": "green",
     "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_SILENT",
-    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+    "damage_preview": {
+     "0": 6
+    },
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_SILENT",
+    "image": "https://assets.test/card_atlas/silent/strike_silent.png",
     "index": 2,
-    "name": "Defend",
+    "name": "Strike",
     "rarity": "Basic",
     "stats": {
-     "block": 5
+     "damage": 6
     },
-    "target_type": "None",
-    "type": "Skill",
+    "target_type": "AnyEnemy",
+    "type": "Attack",
     "upgraded": false
    },
    {
@@ -337,22 +323,22 @@
     "upgraded": false
    },
    {
-    "base_cost": 1,
+    "base_cost": 0,
     "can_play": true,
-    "color": "colorless",
-    "cost": 1,
+    "color": "green",
+    "cost": 0,
     "damage_preview": {
-     "0": 14
+     "0": 3
     },
-    "description": "Deal 14 damage.",
-    "description_rich": "Deal 14 damage.",
-    "id": "ULTIMATE_STRIKE",
-    "image": "https://assets.test/card_atlas/colorless/ultimate_strike.png",
+    "description": "Deal 3 damage.\nApply 1 Weak.",
+    "description_rich": "Deal 3 damage.\nApply 1 [gold]Weak[/gold].",
+    "id": "NEUTRALIZE",
+    "image": "https://assets.test/card_atlas/silent/neutralize.png",
     "index": 4,
-    "name": "Ultimate Strike",
-    "rarity": "Uncommon",
+    "name": "Neutralize",
+    "rarity": "Basic",
     "stats": {
-     "damage": 14
+     "damage": 3
     },
     "target_type": "AnyEnemy",
     "type": "Attack",
@@ -378,21 +364,19 @@
     "upgraded": false
    },
    {
-    "base_cost": 1,
+    "base_cost": 2,
     "can_play": true,
     "color": "green",
-    "cost": 1,
-    "description": "Gain 5 Block.",
-    "description_rich": "Gain 5 [gold]Block[/gold].",
-    "id": "DEFEND_SILENT",
-    "image": "https://assets.test/card_atlas/silent/defend_silent.png",
+    "cost": 2,
+    "description": "Retain.\nApply 7 Poison.",
+    "description_rich": "[gold]Retain[/gold].\nApply 7 [gold]Poison[/gold].",
+    "id": "SNAKEBITE",
+    "image": "https://assets.test/card_atlas/silent/snakebite.png",
     "index": 6,
-    "name": "Defend",
-    "rarity": "Basic",
-    "stats": {
-     "block": 5
-    },
-    "target_type": "None",
+    "name": "Snakebite",
+    "rarity": "Common",
+    "stats": {},
+    "target_type": "AnyEnemy",
     "type": "Skill",
     "upgraded": false
    }
@@ -608,19 +592,6 @@
      "name": "Snakebite",
      "rarity": "Common",
      "type": "Skill",
-     "upgraded": false
-    },
-    {
-     "color": "green",
-     "cost": 1,
-     "description": "Deal 9 damage.\nDraw 1 card.\nDiscard 1 card.",
-     "description_rich": "Deal 9 damage.\nDraw 1 card.\nDiscard 1 card.",
-     "id": "DAGGER_THROW",
-     "image": "https://assets.test/card_atlas/silent/dagger_throw.png",
-     "index": 16,
-     "name": "Dagger Throw",
-     "rarity": "Common",
-     "type": "Attack",
      "upgraded": false
     }
    ],

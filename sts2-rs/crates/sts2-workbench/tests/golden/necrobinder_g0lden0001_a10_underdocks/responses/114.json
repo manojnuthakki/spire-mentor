@@ -1,7 +1,7 @@
 {
  "base": {
-  "block": 33.2,
-  "damage": 36.8,
+  "block": 35.1,
+  "damage": 35.6,
   "velocity": 0.0,
   "volume": 0.0
  },
@@ -9,29 +9,29 @@
   {
    "delta": {
     "block": -1.2,
-    "damage": 4.4,
+    "damage": 4.5,
     "velocity": 0.0,
     "volume": 0.0
    },
    "index": 0,
    "scores": {
-    "block": 32.0,
-    "damage": 41.2,
+    "block": 33.9,
+    "damage": 40.1,
     "velocity": 0.0,
     "volume": 0.0
    }
   },
   {
    "delta": {
-    "block": -1.7,
-    "damage": -1.7,
+    "block": -1.9,
+    "damage": -1.8,
     "velocity": 0.0,
     "volume": 0.0
    },
    "index": 1,
    "scores": {
-    "block": 31.5,
-    "damage": 35.1,
+    "block": 33.2,
+    "damage": 33.8,
     "velocity": 0.0,
     "volume": 0.0
    }

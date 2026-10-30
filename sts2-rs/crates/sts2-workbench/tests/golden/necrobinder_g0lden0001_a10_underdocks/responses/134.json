@@ -1,48 +1,12 @@
 {
- "config": {
-  "c_puct": 2.5,
-  "depth": 200,
-  "draw_widening_c": 2.0,
-  "hidden_info": "beliefdraw",
-  "rollout_policy": "heuristic",
-  "seed": 1,
-  "sims": 48,
-  "threads": 1
- },
- "pv": null,
- "scores": [
+ "runs": [
   {
-   "action": "DEFEND_NECROBINDER.title",
-   "is_best": true,
-   "low_confidence": false,
-   "q": 1.155,
-   "q_saturated": false,
-   "stable_idx": 0,
-   "target_index": null,
-   "visits": 16,
-   "win_prob": 1.0
-  },
-  {
-   "action": "STRIKE_NECROBINDER.title",
-   "is_best": false,
-   "low_confidence": false,
-   "q": 1.1418,
-   "q_saturated": false,
-   "stable_idx": 4,
-   "target_index": null,
-   "visits": 16,
-   "win_prob": 1.0
-  },
-  {
-   "action": "end turn",
-   "is_best": false,
-   "low_confidence": false,
-   "q": 1.1318,
-   "q_saturated": false,
-   "stable_idx": -1,
-   "target_index": null,
-   "visits": 16,
-   "win_prob": 1.0
+   "enemy_min_pct": 2.381,
+   "final_floor": 6,
+   "final_turn": null,
+   "stem": "20260101_000000_Necrobinder_G0LDEN0001",
+   "turn1_q": null,
+   "won": false
   }
  ]
 }
