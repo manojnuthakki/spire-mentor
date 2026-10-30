@@ -1638,6 +1638,19 @@ impl RunManager {
                     return vec![RunAction::LeaveShop];
                 };
                 let gold = self.run_state.gold;
+                // C# `MerchantEntry.EnoughGold` is `Cost <= Gold`, and `Cost`
+                // folds `Hook.ModifyMerchantPrice` (The Courier, Membership
+                // Card) over the rolled price in a `MerchantRoom` only: the
+                // price shown and charged, not `entry.price`. The Fake
+                // Merchant's shop is an event room's (its own prices).
+                // sts2-agent fork (shop-discount-buy).
+                let relics = if inv.fake_merchant {
+                    std::borrow::Cow::Borrowed(&[][..])
+                } else {
+                    self.run_state.active_relics()
+                };
+                let affordable =
+                    |base: i32| crate::shop::merchant_price_with_modifiers(&relics, base) <= gold;
                 let mut actions: Vec<RunAction> = Vec::new();
                 let card_total = inv.cards.len() + inv.colorless_cards.len();
                 for idx in 0..card_total {
@@ -1647,7 +1660,7 @@ impl RunManager {
                         &inv.colorless_cards[idx - inv.cards.len()]
                     };
                     if crate::shop::is_shop_entry_available(entry.price)
-                        && entry.price <= gold
+                        && affordable(entry.price)
                         && entry.card.is_some()
                     {
                         actions.push(RunAction::ShopBuyCard { idx });
@@ -1655,7 +1668,7 @@ impl RunManager {
                 }
                 for (idx, entry) in inv.relics.iter().enumerate() {
                     if crate::shop::is_shop_entry_available(entry.price)
-                        && entry.price <= gold
+                        && affordable(entry.price)
                         && entry.relic_id.is_some()
                     {
                         actions.push(RunAction::ShopBuyRelic { idx });
@@ -1679,14 +1692,14 @@ impl RunManager {
                 if !potion_row_locked {
                     for (idx, entry) in inv.potions.iter().enumerate() {
                         if crate::shop::is_shop_entry_available(entry.price)
-                            && entry.price <= gold
+                            && affordable(entry.price)
                             && entry.potion_kind.is_some()
                         {
                             actions.push(RunAction::ShopBuyPotion { idx });
                         }
                     }
                 }
-                if !inv.fake_merchant && !inv.removal_used && gold >= inv.removal_cost {
+                if !inv.fake_merchant && !inv.removal_used && affordable(inv.removal_cost) {
                     // v0.107.1 shop removal is `CardSelectCmd.FromDeckForRemoval`
                     // with NO extra filter (`OneOffSynchronizer.DoMerchantCard
                     // Removal` → `CardModel.IsRemovable`: `Type != Quest &&
