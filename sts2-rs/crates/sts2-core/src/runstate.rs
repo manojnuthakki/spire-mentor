@@ -1652,6 +1652,11 @@ pub struct RunState {
     /// sts2-agent fork.
     pub event_layout_hps: Vec<i32>,
 
+    /// The act 2 treasure point Spoils Map's quest marks (C#
+    /// `SpoilsMap.SpoilsCoord`, `MapPoint.Quests`); opening its chest pays
+    /// each Spoils Map in the deck 600 gold and removes it. sts2-agent fork.
+    pub spoils_coord: Option<crate::map::MapCoord>,
+
     /// Set on first map-generation, used by Python to guard re-rolling
     /// the layout. Mirrors Python `RunState._rooms_generated: bool`
     /// (`run_state.py:1397`). Currently a flag holder — the actual
@@ -1963,6 +1968,7 @@ impl Default for RunState {
             current_event: None,
             potions_locked: false,
             event_layout_hps: Vec::new(),
+            spoils_coord: None,
             event_state: crate::events::MultiPageEventState::default(),
             event_combat: None,
             neow_offers: None,
@@ -4249,8 +4255,40 @@ impl RunState {
     /// channel picks coords off the post-swap layout (FurCoat). Beads
     /// `sts2-rs-fchti` (early channel) + `sts2-rs-eboqq` (late channel).
     pub fn modify_generated_map(&mut self, act_map: &mut crate::map::ActMap, act_index: u8) {
+        // C# `Hook.ModifyGeneratedMap` iterates the deck's cards before the
+        // relics: Spoils Map (`SpoilsActIndex` 1, act 2) answers with a new
+        // `SpoilsActMap` on its own `spoils_map` stream; its
+        // `ModifyGeneratedMapLate` records the map's first Treasure point,
+        // where `AfterMapGenerated` puts its quest (sts2-agent fork).
+        let spoils = act_index == 2
+            && self
+                .master_deck
+                .iter()
+                .any(|c| c.card_id == crate::cards::CardId::SpoilsMap);
+        if spoils {
+            let num_rooms = self
+                .acts
+                .get(1)
+                .map_or(crate::acts::DEFAULT_ACT_NUM_ROOMS, |a| {
+                    i32::from(a.num_rooms)
+                });
+            let mut rng = crate::dotnet_rng::Rng::with_name(self.rng.seed, "spoils_map");
+            *act_map = crate::map_generator::generate_spoils_act_map(
+                num_rooms,
+                &mut rng,
+                i32::from(self.ascension_level),
+                2,
+            );
+        }
         let _ = crate::run_effects::dispatch_modify_generated_map(self, act_map, act_index);
         let _ = crate::run_effects::dispatch_modify_generated_map_late(self, act_map, act_index);
+        if spoils {
+            self.spoils_coord = act_map
+                .points
+                .iter()
+                .find(|p| p.point_type == crate::map::MapPointType::Treasure)
+                .map(|p| p.coord);
+        }
     }
 
     /// Immediate-regen primitive for the current act's map. Mirrors

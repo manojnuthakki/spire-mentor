@@ -2147,6 +2147,9 @@ impl RunManager {
         }
     }
 
+    /// C# `SpoilsMap`'s `GoldVar(600)`, paid when its quest's chest is opened.
+    const SPOILS_MAP_GOLD: i32 = 600;
+
     /// C# treasure room, as the (BUG-016-patched) headless plays it —
     /// fully auto-resolved, no decision surface:
     ///   1. room enter → `BeginRelicPicking`: ONE float
@@ -2202,6 +2205,26 @@ impl RunManager {
             gold *= crate::runstate::POVERTY_ASCENSION_GOLD_MULTIPLIER;
         }
         self.run_state.gain_gold(gold.trunc() as i32);
+        // C# `TryHandleSpoilsMap`: at the point Spoils Map's quest marks, each
+        // Spoils Map in the deck pays its 600 gold and leaves the deck
+        // (`SpoilsMap.OnQuestComplete`); no RNG (sts2-agent fork).
+        let here = self.run_state.current_room.and_then(|r| r.map_coord);
+        // The quest is on act 2's map only (`SpoilsActIndex`).
+        if self.run_state.act_index == 2 && here.is_some() && here == self.run_state.spoils_coord {
+            let maps = self
+                .run_state
+                .master_deck
+                .iter()
+                .filter(|c| c.card_id == crate::cards::CardId::SpoilsMap)
+                .count();
+            for _ in 0..maps {
+                self.run_state.gain_gold(Self::SPOILS_MAP_GOLD);
+            }
+            self.run_state
+                .master_deck
+                .retain(|c| c.card_id != crate::cards::CardId::SpoilsMap);
+            self.run_state.spoils_coord = None;
+        }
         if let Some(id) = picked {
             if self.run_state.interactive_rewards {
                 // sts2-agent fork: the chest's relic is offered, taken or left
