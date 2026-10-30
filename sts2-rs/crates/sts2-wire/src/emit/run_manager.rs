@@ -498,6 +498,13 @@ pub fn card_value(card: &sts2_core::cards::Card) -> Value {
         super::names::card_type_python_name(card.card_type)
     };
     set(&mut d, "type", card_type);
+    // Headless's `star_cost` (C# `GetStarCostWithModifiers()`, left out for a
+    // card without one) and `star_cost_x` (Stardust), sts2-agent fork.
+    if sts2_core::card_has_star_cost_x(card.card_id) {
+        set(&mut d, "star_cost_x", true);
+    } else if sts2_core::card_base_star_cost(card.card_id) > 0 {
+        set(&mut d, "star_cost", sts2_core::effective_star_cost(card));
+    }
     let mut flags: Vec<&str> = Vec::new();
     if sts2_core::lookup_card_removable().is_some_and(|removable| !removable(card)) {
         flags.push("eternal");

@@ -106,6 +106,19 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
         "cost_override",
         sts2_core::hooks::effective_card_cost(state, card.uid),
     );
+    // Headless's `star_cost` (C# `GetStarCostWithModifiers()`: the free
+    // markers, Brilliant Scarf and Void Form; left out for a card without one)
+    // and `star_cost_x` (Stardust). Wire output only; the rebuild ignores them
+    // (sts2-agent fork).
+    if sts2_core::card_has_star_cost_x(card.card_id) {
+        set(&mut d, "star_cost_x", true);
+    } else if sts2_core::card_base_star_cost(card.card_id) > 0 {
+        set(
+            &mut d,
+            "star_cost",
+            sts2_core::effective_star_cost_in_combat(state, card),
+        );
+    }
     // The instance's own cost, separate from the effective one above, plus
     // the per-instance scratch that explains the difference. Emitting only
     // the effective cost made every transient discount permanent on rebuild;
@@ -745,6 +758,12 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
             set(&mut osty, "hp", c.current_hp.clamp(0, emitted_max_hp));
             set(&mut osty, "max_hp", emitted_max_hp);
             set(&mut osty, "block", c.block.max(0));
+            // Osty's powers (Die For You, kept when it dies), as Headless
+            // lists them (sts2-agent fork). Wire output only.
+            osty.insert(
+                "powers".into(),
+                powers_to_value(&c.powers, &state.powers, "$.player.osty.powers")?,
+            );
             player.insert("osty".to_owned(), Value::Object(osty));
         }
     }

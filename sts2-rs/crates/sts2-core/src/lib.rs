@@ -12493,8 +12493,10 @@ fn is_zero_cost_buff_prior(card_id: cards::CardId) -> bool {
 /// *modifiers* (`GetStarCostWithModifiers`) are Regent-relic-specific and
 /// not modelled here; the base cost suffices to gate a star-less Ironclad
 /// (the only star-card surface in the IC sweep — generated Regent Attacks).
-/// Bead `sts2-rs-starcost`.
-const fn card_base_star_cost(id: crate::cards::CardId) -> i32 {
+/// Bead `sts2-rs-starcost`. 0 for a card without a star cost (C#
+/// `CanonicalStarCost` -1).
+#[must_use]
+pub const fn card_base_star_cost(id: crate::cards::CardId) -> i32 {
     use crate::cards::CardId;
     match id {
         CardId::SevenStars => 7,
@@ -12516,6 +12518,12 @@ const fn card_base_star_cost(id: crate::cards::CardId) -> i32 {
         CardId::CloakOfStars | CardId::CrescentSpear => 1,
         _ => 0,
     }
+}
+
+/// C# `CardModel.HasStarCostX`: only Stardust costs X stars.
+#[must_use]
+pub const fn card_has_star_cost_x(id: crate::cards::CardId) -> bool {
+    matches!(id, crate::cards::CardId::Stardust)
 }
 
 /// Effective star cost of a specific card instance — `card_base_star_cost`
