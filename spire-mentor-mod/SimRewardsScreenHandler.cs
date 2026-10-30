@@ -13,6 +13,7 @@ using MegaCrit.Sts2.Core.AutoSlay.Handlers;
 using MegaCrit.Sts2.Core.AutoSlay.Helpers;
 using MegaCrit.Sts2.Core.Context;
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Nodes.CommonUi;
 using MegaCrit.Sts2.Core.Nodes.Rewards;
 using MegaCrit.Sts2.Core.Nodes.Screens;
@@ -114,13 +115,18 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
             .ToList();
     }
 
-    /// <summary>Enabled potion rewards not yet clicked that the player can't take now.</summary>
+    /// <summary>
+    /// Enabled potion rewards not yet clicked that only a full belt keeps from the player
+    /// (`belt_full`: a drink or a discard makes room). One the run refuses (Sozu) is not
+    /// among them: no discard would make it claimable, and it is not shown.
+    /// </summary>
     private static List<NRewardButton> PotionsWithoutRoom(NRewardsScreen screen, HashSet<NRewardButton> claimed)
     {
         Player? me = LocalContext.GetMe(RunManager.Instance.DebugOnlyGetState());
         return UiHelper.FindAll<NRewardButton>(screen)
             .Where(b => b.IsEnabled && !claimed.Contains(b))
-            .Where(b => b.Reward is PotionReward pr && me != null && !SimPotionRules.CanProcure(me, pr.Potion))
+            .Where(b => b.Reward is PotionReward pr && me != null && !me.HasOpenPotionSlots
+                        && (pr.Potion == null || Hook.ShouldProcurePotion(me.RunState, me.Creature.CombatState, pr.Potion, me)))
             .ToList();
     }
 
@@ -160,6 +166,10 @@ public class SimRewardsScreenHandler : IScreenHandler, IHandler
                 foreach ((Dictionary<string, object> option, NRewardButton b) in options.Zip(buttons))
                 {
                     option["enabled"] = claimable.Contains(b);
+                    if (!claimable.Contains(b))
+                    {
+                        option["reason"] = "belt_full";  // PotionsWithoutRoom's only kind
+                    }
                 }
                 proceedOffered = ProceedEnabled(proceed);
                 if (proceedOffered)
