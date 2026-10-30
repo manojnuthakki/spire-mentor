@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Lifecycle test for SimActionOutcome.cs (sts2-agent fork, D1b): drives the game's own
+    GameAction.Execute (sts2.dll, referenced from the install, never copied into the repo) with
+    actions that finish, cancel inside ExecuteAction, cancel before running, and throw, and checks
+    SimActionWatch tells them apart. Run: ./run.sh (STS2_GAME_DIR overrides the install).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RollForward>LatestMinor</RollForward>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="../../SimActionOutcome.cs" />
+    <Reference Include="sts2"><HintPath>$(Sts2Dll)</HintPath><Private>true</Private></Reference>
+    <Reference Include="GodotSharp"><HintPath>$(GodotDll)</HintPath><Private>true</Private></Reference>
+  </ItemGroup>
+</Project>

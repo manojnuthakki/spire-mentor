@@ -14,8 +14,9 @@
 // as the game needs, and the shop handler opens it again; any other aimed potion is never
 // offered (`use_now` false).
 //
-// Each action is enqueued here and awaited by its own lifecycle (GameAction.State: Finished,
-// or Canceled, which leaves the belt as it was and is answered as a refusal), with the screens
+// Each action is enqueued here and awaited by its own lifecycle (SimActionWatch: done; cancelled,
+// which leaves the belt as it was and is answered as a refusal; faulted, which fails the run, as
+// what it changed is unknown), with the screens
 // it opens drained above the decision's own (SimAutoSlayer.AwaitWithScreenDrainAsync's floor).
 // A wedged action has no timeout of its own: the run watchdog's stall limit ends the run.
 
@@ -203,26 +204,36 @@ internal static class SimOutOfCombatPotions
             Creature? target = potion.IsValidTarget(player.Creature) ? player.Creature : null;
             action = new UsePotionAction(potion, target, false);
         }
+        var watch = new SimActionWatch(action);
         RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(action);
 
-        await SimAutoSlayer.AwaitWithScreenDrainAsync(SettledAsync(action, ct), ct,
+        await SimAutoSlayer.AwaitWithScreenDrainAsync(SettledAsync(watch, ct), ct,
             $"potion {potion.Id.Entry} outside combat", floor);
-        if (action.State == GameActionState.Canceled)
+        string what = $"the {(discard ? "discard" : "use")} of {potion.Id.Entry} in slot {slot}";
+        switch (watch.Result)
         {
-            // The game cancelled it before it changed anything (no potion, an invalid target).
-            SimProtocolHelpers.SendError(discard ? "potion_not_discardable" : "potion_not_usable",
-                $"the game cancelled the {(discard ? "discard" : "use")} of {potion.Id.Entry} in slot {slot}", runState, player);
+            case SimActionResult.Canceled:
+                // Cancelled before it changed anything (no potion, an invalid target): a refusal.
+                SimProtocolHelpers.SendError(discard ? "potion_not_discardable" : "potion_not_usable",
+                    $"the game cancelled {what}", runState, player);
+                break;
+            case SimActionResult.Faulted:
+                // What it changed before the fault is unknown: no decision is offered on that
+                // state. The run fails (run_complete "terminated").
+                SimProtocolHelpers.SendError("potion_faulted", $"{what} threw: {action.Exception?.InnerException?.Message}",
+                    runState, player);
+                throw new InvalidOperationException($"{what} faulted", action.Exception);
         }
     }
 
     /// <summary>
-    /// Completes once the action has run to its end (Finished) or been cancelled; a paused
-    /// action (a choice it gathers) is waited through. Unbounded by itself: the caller's
-    /// drain checks the run watchdog.
+    /// Completes once the action has settled (<see cref="SimActionWatch.Result"/> not
+    /// Pending); a paused action (a choice it gathers) is waited through. Unbounded by
+    /// itself: the caller's drain checks the run watchdog.
     /// </summary>
-    private static async Task SettledAsync(GameAction action, CancellationToken ct)
+    private static async Task SettledAsync(SimActionWatch watch, CancellationToken ct)
     {
-        while (action.State != GameActionState.Finished && action.State != GameActionState.Canceled)
+        while (watch.Result == SimActionResult.Pending)
         {
             ct.ThrowIfCancellationRequested();
             await Task.Delay(SettlePollMs, ct);
