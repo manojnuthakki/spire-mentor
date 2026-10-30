@@ -471,7 +471,14 @@ pub fn enter_combat_from_roster(
 /// `new DynamicVar("Combats", 3m)`).
 const FISHING_ROD_COMBATS: i32 = 3;
 
-pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
+/// The fight's persistent changes written back into the run: max HP, HP,
+/// the potion belt, relic counters, gold, the deck's run-persistent damage
+/// scalers and the run RNG, with no combat-end effect or reward. C# shares
+/// one `Player` (and the run's RNG) between the fight and the run, so these
+/// need no write-back there. [`exit_combat`] starts with it; on its own it is
+/// the harness's `abandon_combat`, for a fight left unfinished by a forced
+/// room entry (sts2-agent fork).
+pub fn sync_combat_to_run(rs: &mut RunState, combat: &CombatState) {
     // Write the combat-side max_hp back to the run BEFORE clamping current_hp.
     // C# shares one Player object across CombatManager/RunState, so in-combat
     // max-HP gains (Feed kill -> CreatureCmd.GainMaxHp, FruitJuice potion, etc.)
@@ -519,6 +526,47 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
             rs.relic_counters.insert(relic_id, r.counter);
         }
     }
+
+    // Bead `sts2-rs-RP17`: write back the combat-time gold (SealOfGold's
+    // per-turn `-5` spends). `enter_combat` snapshotted `rs.gold` in and nothing
+    // outside combat touched it meanwhile, so this applies exactly the in-combat
+    // delta (a no-op for combats with no gold-spending relic). Runs BEFORE the
+    // reward gold (`apply_combat_gold_and_potion`), matching C# (gold spent
+    // during the fight, rewards added after).
+    rs.gold = combat.gold;
+
+    // Run-master propagation for scaling cards (C# `DeckVersion.BuffFromPlay`).
+    // The Scythe's `OnPlay` buffs BOTH its combat copy AND the run-master deck
+    // card (`(base.DeckVersion as TheScythe)?.BuffFromPlay(intValue)`,
+    // `TheScythe.cs:73`) — `IncreasedDamage` / `CurrentDamage` are
+    // `[SavedProperty]`, so the growth persists for the whole run. In this
+    // two-layer split the combat copy's run-persistent `base_damage` carries
+    // the accumulated value; fold it back onto the corresponding master-deck
+    // card so the next combat starts boosted. Bead `sts2-rs-RP114`.
+    propagate_scaling_cards_to_master_deck(rs, combat);
+
+    // Flush the combat's RNG streams back to the run. C# uses ONE
+    // `RunState.Rng` for the whole run, so a combat's advances to
+    // `MonsterAi` / `Shuffle` / `Niche` (intents, draws, mid-combat summon
+    // HP) persist to the next room. [`enter_combat_from_roster`] cloned
+    // `rs.rng` in; this writes the post-combat cursors back. Streams the
+    // combat never touched (`run_manager`, `up_front`, the player reward
+    // streams, …) round-trip unchanged, so this is the exact symmetric
+    // inverse of the carry-in. Bead `sts2-rs-jenwp` (M3b monster_ai).
+    rs.rng = combat.run_rng.clone();
+}
+
+/// [`RunManager::force_enter_room`](sts2_core::run_manager::RunManager::force_enter_room)'s
+/// `abandon_combat`: the fight's persistent changes ([`sync_combat_to_run`])
+/// and the cards Swipe stole and nobody took back, which leave the deck as
+/// they do at a fight's end (sts2-agent fork).
+pub fn abandon_combat(rs: &mut RunState, combat: &CombatState) {
+    sync_combat_to_run(rs, combat);
+    settle_swiped_cards_and_extras(rs, combat, false);
+}
+
+pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
+    sync_combat_to_run(rs, combat);
 
     // Bead `sts2-rs-run-rest-option`: PumpkinCandle (v0.107.1)
     // `AfterCombatEnd` decrements its `KindleCount` by 1, floored at 0
@@ -594,14 +642,6 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
         1.0 - f64::from(combat.escaped_creatures) / total_monsters as f64
     };
 
-    // Bead `sts2-rs-RP17`: write back the combat-time gold (SealOfGold's
-    // per-turn `-5` spends). `enter_combat` snapshotted `rs.gold` in and nothing
-    // outside combat touched it meanwhile, so this applies exactly the in-combat
-    // delta (a no-op for combats with no gold-spending relic). Runs BEFORE the
-    // reward gold (`apply_combat_gold_and_potion`), matching C# (gold spent
-    // during the fight, rewards added after).
-    rs.gold = combat.gold;
-
     // Royalties combat-victory gold (C# `RoyaltiesPower.AfterCombatEnd` →
     // `room.AddExtraReward(player, new GoldReward(Amount))`). The Regent's
     // `RoyaltiesCard` applies N stacks of `Royalties` mid-combat (Gold.BaseValue
@@ -642,16 +682,6 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
         rs.gain_gold(combat.heist_recovered_gold);
     }
 
-    // Run-master propagation for scaling cards (C# `DeckVersion.BuffFromPlay`).
-    // The Scythe's `OnPlay` buffs BOTH its combat copy AND the run-master deck
-    // card (`(base.DeckVersion as TheScythe)?.BuffFromPlay(intValue)`,
-    // `TheScythe.cs:73`) — `IncreasedDamage` / `CurrentDamage` are
-    // `[SavedProperty]`, so the growth persists for the whole run. In this
-    // two-layer split the combat copy's run-persistent `base_damage` carries
-    // the accumulated value; fold it back onto the corresponding master-deck
-    // card so the next combat starts boosted. Bead `sts2-rs-RP114`.
-    propagate_scaling_cards_to_master_deck(rs, combat);
-
     // Bead `sts2-rs-RP13`: ThievingHopper / SwipePower run-deck steal. C#
     // `SwipePower.Steal` permanently removes the stolen card from the run deck
     // (`CardPileCmd.RemoveFromDeck(card.DeckVersion)`); a thief that DIES
@@ -664,16 +694,6 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // combat-end upgrade, which picks only from the deck.
     settle_swiped_cards_and_extras(rs, combat, extras);
 
-    // Flush the combat's RNG streams back to the run. C# uses ONE
-    // `RunState.Rng` for the whole run, so a combat's advances to
-    // `MonsterAi` / `Shuffle` / `Niche` (intents, draws, mid-combat summon
-    // HP) persist to the next room. [`enter_combat_from_roster`] cloned
-    // `rs.rng` in; this writes the post-combat cursors back. Streams the
-    // combat never touched (`run_manager`, `up_front`, the player reward
-    // streams, …) round-trip unchanged, so this is the exact symmetric
-    // inverse of the carry-in. Bead `sts2-rs-jenwp` (M3b monster_ai).
-    rs.rng = combat.run_rng.clone();
-
     // Bead `sts2-rs-v0107-content-port-wb8lk.6`: FishingRod.AfterCombatEnd
     // (v0.107.1 `FishingRod.cs:42-60`). On every normal (`RoomType.Monster`)
     // combat the relic's `CombatsSeen` counter ticks; on every 3rd one it
@@ -683,7 +703,8 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // Run-side because it mutates the master deck (combat-end → run effect),
     // mirroring the Grimoire/Swipe arms above.
     //
-    // MUST run AFTER the `rs.rng = combat.run_rng.clone()` flushback above:
+    // MUST run AFTER the `rs.rng = combat.run_rng.clone()` flushback
+    // (`sync_combat_to_run`, at the top):
     // C# reads the single persistent `RunState.Rng.Niche` in `AfterCombatEnd`,
     // i.e. the cursor AS ADVANCED by the just-finished combat (mid-combat
     // niche draws — summon HP, etc.). Pre-flushback `rs.rng.niche` is still the

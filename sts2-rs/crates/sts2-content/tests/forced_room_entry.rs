@@ -163,3 +163,83 @@ fn treasure_room_opens() {
         Some(RoomType::Treasure)
     );
 }
+
+#[test]
+fn leaving_a_live_fight_keeps_what_it_changed() {
+    let mut rm = neow_run(7);
+    assert_eq!(
+        rm.force_enter_room(ForcedRoom::Combat("NIBBITS_WEAK")),
+        ActionResult::Advanced
+    );
+    let combat = rm.combat.as_mut().expect("a fight");
+    combat.player.current_hp -= 18;
+    combat.player.max_hp += 2;
+    combat.gold -= 5;
+    let (hp, max_hp, gold) = (combat.player.current_hp, combat.player.max_hp, combat.gold);
+    let belt = combat.player.potions.len();
+    assert_eq!(
+        rm.force_enter_room(ForcedRoom::Shop),
+        ActionResult::Advanced
+    );
+    // C#'s one `Player`: the fight's changes stay, and no combat-end
+    // effect runs (Burning Blood heals only on a won fight).
+    assert_eq!(rm.run_state.current_hp, hp);
+    assert_eq!(rm.run_state.max_hp, max_hp);
+    assert_eq!(rm.run_state.gold, gold);
+    assert_eq!(rm.run_state.potions.len(), belt);
+    assert!(rm.combat.is_none());
+}
+
+/// A run on its first node with Winged Boots, then one off-path move, or
+/// `None` when the map offers none.
+fn off_path_with_boots(seed: i32) -> Option<RunManager> {
+    let mut rm = on_first_node(seed);
+    rm.run_state.relics.push(sts2_core::RelicId::WingedBoots);
+    // Whatever the node holds, a shop left at once gets back to the map.
+    assert_eq!(
+        rm.force_enter_room(ForcedRoom::Shop),
+        ActionResult::Advanced
+    );
+    rm.take_action(RunAction::LeaveShop);
+    assert_eq!(rm.phase(), Phase::MapChoice);
+    let coord = rm.run_state.current_room?.map_coord?;
+    let children: Vec<i32> = rm
+        .run_state
+        .current_act_map
+        .as_ref()?
+        .children_of(coord)
+        .iter()
+        .map(|p| p.col())
+        .collect();
+    let mv = rm
+        .get_available_actions()
+        .into_iter()
+        .find(|a| matches!(a, RunAction::Move { col } if !children.contains(col)))?;
+    assert_eq!(rm.take_action(mv), ActionResult::Advanced);
+    Some(rm)
+}
+
+#[test]
+fn a_forced_entry_after_an_off_path_move_spends_winged_boots_again() {
+    let mut rm = (1..40)
+        .find_map(off_path_with_boots)
+        .expect("a seed with an off-path move");
+    assert_eq!(rm.run_state.winged_boots_off_path_used, 1);
+    // `WingedBoots.AfterRoomEntered` reads the last two visited coords.
+    assert_eq!(
+        rm.force_enter_room(ForcedRoom::Shop),
+        ActionResult::Advanced
+    );
+    assert_eq!(rm.run_state.winged_boots_off_path_used, 2);
+}
+
+#[test]
+fn a_forced_entry_after_an_on_path_move_leaves_winged_boots() {
+    let mut rm = on_first_node(7);
+    rm.run_state.relics.push(sts2_core::RelicId::WingedBoots);
+    assert_eq!(
+        rm.force_enter_room(ForcedRoom::Shop),
+        ActionResult::Advanced
+    );
+    assert_eq!(rm.run_state.winged_boots_off_path_used, 0);
+}

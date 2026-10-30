@@ -395,6 +395,13 @@ pub struct ContentCallbacks {
             room_type: crate::runstate::RoomType,
         ) -> Option<CombatState>,
     >,
+    /// Write a fight the harness left unfinished back into [`RunState`]
+    /// (HP, max HP, gold, potions, relic counters, the run RNG and the
+    /// deck's persistent changes), with no combat-end effect or reward:
+    /// C# shares one `Player` between the fight and the run, so what the
+    /// fight changed stays when `ExitCurrentRooms` leaves it. Used by
+    /// [`RunManager::force_enter_room`] (sts2-agent fork).
+    pub abandon_combat: Option<fn(&mut RunState, &CombatState)>,
     /// Generate the 3-card option list for a normal card reward. The
     /// callback resolves character pool + rarity rolls.
     pub generate_card_reward_options: Option<fn(rs: &mut RunState) -> Vec<crate::cards::CardId>>,
@@ -601,6 +608,7 @@ impl core::fmt::Debug for ContentCallbacks {
                 "build_combat_for_encounter",
                 &self.build_combat_for_encounter.is_some(),
             )
+            .field("abandon_combat", &self.abandon_combat.is_some())
             .field(
                 "generate_card_reward_options",
                 &self.generate_card_reward_options.is_some(),
@@ -5001,6 +5009,16 @@ impl RunManager {
         };
 
         // `ExitCurrentRooms`: whatever room is open is left as it stands.
+        // A live fight's persistent changes stay (C#'s one `Player`); a
+        // finished fight's snapshot was written back when it ended.
+        if self.phase == Phase::Combat {
+            let Some(abandon) = self.callbacks.abandon_combat else {
+                return ActionResult::NotImplemented;
+            };
+            if let Some(combat) = self.combat.as_ref() {
+                abandon(&mut self.run_state, combat);
+            }
+        }
         self.combat = None;
         self.run_state.event_combat = None;
         let _ = self.run_state.exit_event_room();
@@ -5039,7 +5057,7 @@ impl RunManager {
             _ => crate::runstate::Room::new(room_type),
         };
         let act = usize::from(self.run_state.act_index).saturating_sub(1);
-        match room {
+        let result = match room {
             ForcedRoom::Event(id) => {
                 // `enter_event_room` enters the coord-keeping Event room
                 // itself; `MarkVisited(Event)` moves the act's event cursor.
@@ -5068,7 +5086,32 @@ impl RunManager {
                 self.run_state.enter_room(new_room);
                 self.set_up_room(room_type)
             }
+        };
+        self.winged_boots_after_room_entered();
+        result
+    }
+
+    /// C# `WingedBoots.AfterRoomEntered` for a room the harness entered: with
+    /// uses left, the room the only one open (`ExitCurrentRooms` left the
+    /// rest) and the last two visited coords not parent and child, one more
+    /// use. A map move spends its use as it moves (`do_map_move`); a forced
+    /// entry after an off-path move spends another, as the game does.
+    fn winged_boots_after_room_entered(&mut self) {
+        let rs = &self.run_state;
+        if !rs.winged_boots_uses_remaining() {
+            return;
         }
+        let (Some(map), Some(cur), [.., prev, _]) = (
+            rs.current_act_map.as_ref(),
+            rs.current_room.and_then(|r| r.map_coord),
+            rs.visited_map_coords.as_slice(),
+        ) else {
+            return;
+        };
+        if map.children_of(*prev).iter().any(|p| p.coord == cur) {
+            return;
+        }
+        self.run_state.winged_boots_record_off_path();
     }
 
     /// Remove one held `relic` by the harness, as C# `RelicCmd.Remove`
@@ -5081,15 +5124,22 @@ impl RunManager {
     /// history's `RelicsRemoved` isn't kept (the engine's entries carry no
     /// relic lists).
     ///
-    /// Returns `false`, changing nothing, when the relic isn't held or a
-    /// combat is live (the fight's relic store is built from the run's at
-    /// combat start; removing one mid-fight isn't modelled).
+    /// In a live fight the relic also leaves the fight's relic store (one
+    /// copy, the last of its kind held), so it stops listening there as
+    /// `RemoveRelicInternal` unsubscribes it; what it already did stays.
+    /// A finished fight's retained snapshot is left alone.
+    ///
+    /// Returns `false`, changing nothing, when the relic isn't held.
     pub fn force_remove_relic(&mut self, relic: crate::RelicId) -> bool {
-        if self.combat.is_some() {
-            return false;
-        }
         if !self.run_state.lose_relic(relic) {
             return false;
+        }
+        if self.phase == Phase::Combat {
+            if let (Some(combat), Some(kind)) = (self.combat.as_mut(), relic.to_relic_kind()) {
+                if let Some(i) = combat.relics.iter().rposition(|r| r.kind == kind) {
+                    combat.relics.remove(i);
+                }
+            }
         }
         if !self.run_state.relics.contains(&relic) {
             self.run_state.wax_relics.remove(&relic);

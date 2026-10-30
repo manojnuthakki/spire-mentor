@@ -654,6 +654,7 @@ pub fn run_relic_state(rm: &RunManager) -> Value {
     d.insert("counters".to_owned(), Value::Object(counters));
     set(&mut d, "paels_wing_sacrificed", rs.pael_sacrificed_count());
     set(&mut d, "paels_tooth_stored", rs.paels_tooth_stored.len());
+    set(&mut d, "winged_boots_used", rs.winged_boots_off_path_used);
     Value::Object(d)
 }
 

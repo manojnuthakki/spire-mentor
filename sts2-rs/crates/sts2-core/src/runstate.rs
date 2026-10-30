@@ -2320,6 +2320,11 @@ impl RunState {
         // copy is gone (stackable relics can be held more than once).
         if !self.relics.contains(&relic_id) {
             self.relic_counters.remove(&relic_id);
+            // Winged Boots' uses live on the relic instance (C#
+            // `WingedBoots.TimesUsed`): a pair obtained later starts afresh.
+            if relic_id == RelicId::WingedBoots {
+                self.winged_boots_off_path_used = 0;
+            }
         }
         true
     }

@@ -1063,7 +1063,7 @@ impl PyRunManager {
 
     /// The run-side relic state, read-only (sts2-agent fork): `counters` (each
     /// `relic_counters` entry by relic name), `paels_wing_sacrificed`,
-    /// `paels_tooth_stored`. See `emit::run_manager::run_relic_state`.
+    /// `paels_tooth_stored`, `winged_boots_used` (`WingedBoots.TimesUsed`). See `emit::run_manager::run_relic_state`.
     fn run_relic_state(&self, py: Python<'_>) -> PyResult<PyObject> {
         crate::value_to_py(py, &emit_rm::run_relic_state(&self.inner)).map(Bound::unbind)
     }

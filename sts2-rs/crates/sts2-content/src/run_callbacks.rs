@@ -54,6 +54,7 @@ pub fn ironclad_content_callbacks() -> ContentCallbacks {
         build_combat_for_room: Some(build_combat_for_room),
         encounter_room_type: Some(encounter_room_type),
         build_combat_for_encounter: Some(build_combat_for_encounter),
+        abandon_combat: Some(crate::run_bridge::abandon_combat),
         generate_card_reward_options: Some(generate_card_reward_options),
         generate_noncombat_card_reward_options: Some(
             crate::cards::spec_index::roll_noncombat_card_reward_options,
