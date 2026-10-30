@@ -556,7 +556,13 @@ mod tests {
             let spec = spec_for(*id);
             assert_eq!(spec.id, *id);
             assert_eq!(spec.python_name, id.python_name());
-            assert!(!spec.options.is_empty(), "{id:?} has no options");
+            // The Fake Merchant has none in the game (its shop is the run
+            // manager's, sts2-agent fork).
+            assert_eq!(
+                spec.options.is_empty(),
+                *id == EventId::FakeMerchant,
+                "{id:?} options"
+            );
         }
     }
 

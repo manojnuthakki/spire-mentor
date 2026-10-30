@@ -872,9 +872,16 @@ pub fn shop_inventory(rm: &RunManager) -> Value {
     // C# `MerchantEntry.Cost` folds `Hook.ModifyMerchantPrice`
     // (Courier / MembershipCard) over the rolled base while in the
     // shop, so the displayed cost is discounted for the owner.
-    let relics = rm.run_state.active_relics();
+    // The Fake Merchant's shop is an event room's: its entries keep their own
+    // price (the hooks apply only in a `MerchantRoom`). sts2-agent fork (S18).
+    let relics = if inv.fake_merchant {
+        std::borrow::Cow::Borrowed(&[][..])
+    } else {
+        rm.run_state.active_relics()
+    };
     let price_of = |base: i32| sts2_core::shop::merchant_price_with_modifiers(&relics, base);
     let mut d = obj();
+    set(&mut d, "fake_merchant", inv.fake_merchant);
 
     let mut cards = Vec::new();
     for (idx, e) in inv

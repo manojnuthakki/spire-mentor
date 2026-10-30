@@ -383,6 +383,12 @@ pub struct ShopInventory {
     /// `true` iff the remove-card slot has been consumed this shop
     /// visit. Mirrors Python `ShopInventory.removal_used`.
     pub removal_used: bool,
+    /// `true` for the Fake Merchant event's inventory (C# `FakeMerchant.Inventory`,
+    /// sold by its `NFakeMerchant` node in an `EventRoom`): relics only, no card
+    /// removal, the entries' own prices (`MerchantEntry.Cost` applies the
+    /// merchant price hooks only in a `MerchantRoom`) and no restock (the same
+    /// gate in `OnTryPurchaseWrapper`). sts2-agent fork.
+    pub fake_merchant: bool,
 }
 
 impl ShopInventory {
@@ -399,8 +405,66 @@ impl ShopInventory {
             potions: Vec::new(),
             removal_cost: CARD_REMOVAL_BASE_COST,
             removal_used: false,
+            fake_merchant: false,
         }
     }
+}
+
+/// C# `FakeMerchant._inventoryRelics`: the 9 fake relics, in source order.
+pub const FAKE_MERCHANT_RELICS: [crate::relics::RelicId; 9] = {
+    use crate::relics::RelicId;
+    [
+        RelicId::FakeAnchor,
+        RelicId::FakeBloodVial,
+        RelicId::FakeHappyFlower,
+        RelicId::FakeLeesWaffle,
+        RelicId::FakeMango,
+        RelicId::FakeOrichalcum,
+        RelicId::FakeSneckoEye,
+        RelicId::FakeStrikeDummy,
+        RelicId::FakeVenerableTeaSet,
+    ]
+};
+
+/// C# `FakeMerchant`'s relics' `MerchantCost` (each fake relic overrides it to 50).
+pub const FAKE_MERCHANT_RELIC_COST: i32 = 50;
+
+/// The relics the Fake Merchant stocks, in its inventory's order: C#
+/// `FakeMerchant.BeforeEventStarted`'s
+/// `_inventoryRelics.ToList().UnstableShuffle(base.Rng).Take(6)`. The event is
+/// shared (`IsShared`), so its stream is the run seed plus `"FAKE_MERCHANT"`'s
+/// hash with no player offset; it reads no shared run stream.
+#[must_use]
+pub fn fake_merchant_stock(run_seed: i32) -> Vec<crate::relics::RelicId> {
+    let mut idx: Vec<usize> = (0..FAKE_MERCHANT_RELICS.len()).collect();
+    crate::dotnet_rng::Rng::with_name(run_seed, "FAKE_MERCHANT").shuffle(&mut idx);
+    idx.truncate(6);
+    idx.into_iter().map(|i| FAKE_MERCHANT_RELICS[i]).collect()
+}
+
+/// The Fake Merchant's inventory (C# `FakeMerchant.BeforeEventStarted`): one
+/// `MerchantRelicEntry` per stocked relic, in order, each pricing itself in its
+/// constructor (`CalcCost`: `MerchantCost` × `Shops.NextFloat(0.85, 1.15)`,
+/// rounded half to even), so six reads of the player's `Shops` stream.
+/// sts2-agent fork (S18).
+pub fn fake_merchant_inventory(run_state: &mut crate::runstate::RunState) -> ShopInventory {
+    let mut inv = ShopInventory::empty();
+    inv.fake_merchant = true;
+    for relic_id in fake_merchant_stock(run_state.rng.seed) {
+        let jitter = run_state.rng.shops.next_float_range(
+            MERCHANT_RELIC_PRICE_VARIANCE_MIN,
+            MERCHANT_RELIC_PRICE_VARIANCE_MAX,
+        );
+        #[allow(clippy::cast_possible_truncation)]
+        let price = (f64::from(FAKE_MERCHANT_RELIC_COST) * jitter).round_ties_even() as i32;
+        inv.relics.push(ShopRelicEntry {
+            // Event rarity has no merchant bucket; nothing reads it here (no restock).
+            relic_rarity: ShopRelicRarity::Shop,
+            relic_id: Some(relic_id),
+            price,
+        });
+    }
+    inv
 }
 
 // ── Rarity / price RNG rolls (bead `sts2-rs-64mq2`) ──────────────────
@@ -937,7 +1001,12 @@ pub fn buy_relic_before_purchase_hook(
     if !is_shop_entry_available(entry.price) {
         return Err(ShopPurchaseOutcome::SoldOut);
     }
-    let price = merchant_price_with_modifiers(&run_state.active_relics(), entry.price);
+    // The Fake Merchant's entries keep their own price (no `MerchantRoom`).
+    let price = if inv.fake_merchant {
+        entry.price
+    } else {
+        merchant_price_with_modifiers(&run_state.active_relics(), entry.price)
+    };
     if run_state.gold < price {
         return Err(ShopPurchaseOutcome::CannotAfford);
     }

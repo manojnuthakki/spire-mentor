@@ -12,7 +12,7 @@ use sts2_content::events::dispatch;
 use sts2_content::run_bridge::build_event_combat;
 use sts2_core::events::{BattlewornDummySetting, EventEncounter};
 use sts2_core::monsters::MonsterKind;
-use sts2_core::{EventId, PowerKind, RelicId, RunState};
+use sts2_core::{EventId, PowerKind, RunState};
 
 fn enemy_has_power(combat: &sts2_core::CombatState, kind: PowerKind) -> bool {
     combat
@@ -169,82 +169,6 @@ fn lantern_key_fight_stages_card_reward_no_resume() {
         req.victory_rewards[0],
         sts2_core::runstate::Reward::Card(_)
     ));
-}
-
-#[test]
-fn fake_merchant_throw_foul_stages_full_inventory_and_consumes_potion() {
-    use sts2_core::potions::PotionKind;
-    use sts2_core::runstate::Reward;
-    let mut rs = RunState::new();
-    // The player holds the FoulPotion they throw (+ an unrelated potion to
-    // prove only one FoulPotion is consumed).
-    rs.potions = vec![PotionKind::FoulPotion, PotionKind::FoulPotion];
-    rs.enter_event_room(EventId::FakeMerchant);
-    let out = dispatch::resolve(&mut rs, "throw_foul").expect("event active");
-    assert!(!out.finished, "throw_foul defers finish to post-combat");
-
-    // Exactly one FoulPotion consumed (the thrown one).
-    assert_eq!(
-        rs.potions,
-        vec![PotionKind::FoulPotion],
-        "one FoulPotion thrown/consumed"
-    );
-
-    let req = rs.event_combat.as_ref().expect("combat staged");
-    assert!(!req.resume);
-    assert_eq!(req.encounter, EventEncounter::FakeMerchant);
-    // FakeMerchantsRug + the 6 stocked fake-inventory relics (C# extra rewards).
-    assert_eq!(
-        req.victory_rewards.len(),
-        7,
-        "Rug + 6 stocked fake relics, got {:?}",
-        req.victory_rewards
-    );
-    assert!(
-        matches!(&req.victory_rewards[0], Reward::Relic(rr) if rr.relic_id == RelicId::FakeMerchantsRug),
-        "first extra reward is FakeMerchantsRug"
-    );
-    // Every reward is a relic, the 6 stock entries are distinct fake relics.
-    let mut stock_ids: Vec<RelicId> = req.victory_rewards[1..]
-        .iter()
-        .map(|r| match r {
-            Reward::Relic(rr) => rr.relic_id,
-            other => panic!("non-relic extra reward: {other:?}"),
-        })
-        .collect();
-    let before_dedup = stock_ids.len();
-    stock_ids.sort_unstable();
-    stock_ids.dedup();
-    assert_eq!(stock_ids.len(), before_dedup, "stocked relics are distinct");
-}
-
-#[test]
-fn fake_merchant_buy_purchases_a_stocked_fake_relic_for_50() {
-    // The 9 fake-inventory relics (C# FakeMerchant._inventoryRelics).
-    const FAKE_INVENTORY: [RelicId; 9] = [
-        RelicId::FakeAnchor,
-        RelicId::FakeBloodVial,
-        RelicId::FakeHappyFlower,
-        RelicId::FakeLeesWaffle,
-        RelicId::FakeMango,
-        RelicId::FakeOrichalcum,
-        RelicId::FakeSneckoEye,
-        RelicId::FakeStrikeDummy,
-        RelicId::FakeVenerableTeaSet,
-    ];
-    let mut rs = RunState::new();
-    rs.gold = 100;
-    rs.direct_event_relic_grant = true; // a merchant purchase is obtained inline
-    rs.enter_event_room(EventId::FakeMerchant);
-    let out = dispatch::resolve(&mut rs, "buy").expect("event active");
-    assert!(out.finished);
-    assert_eq!(rs.gold, 50, "paid the 50-gold relic cost");
-    assert_eq!(rs.relics.len(), 1, "obtained exactly one relic");
-    assert!(
-        FAKE_INVENTORY.contains(&rs.relics[0]),
-        "bought a stocked fake-inventory relic, got {:?}",
-        rs.relics[0]
-    );
 }
 
 #[test]

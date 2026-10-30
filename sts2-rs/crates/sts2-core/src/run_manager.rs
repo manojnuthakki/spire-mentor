@@ -1686,7 +1686,7 @@ impl RunManager {
                         }
                     }
                 }
-                if !inv.removal_used && gold >= inv.removal_cost {
+                if !inv.fake_merchant && !inv.removal_used && gold >= inv.removal_cost {
                     // v0.107.1 shop removal is `CardSelectCmd.FromDeckForRemoval`
                     // with NO extra filter (`OneOffSynchronizer.DoMerchantCard
                     // Removal` → `CardModel.IsRemovable`: `Type != Quest &&
@@ -1886,7 +1886,14 @@ impl RunManager {
             (Phase::CardReward, RunAction::SacrificeCardReward) => self.do_card_reward_sacrifice(),
             (Phase::BossRelic, RunAction::PickBossRelic { idx }) => self.do_boss_relic_pick(idx),
             (Phase::Shop, RunAction::LeaveShop) => {
-                self.shop_inventory = None;
+                // The Fake Merchant's Proceed leaves its (finished) event.
+                if self
+                    .shop_inventory
+                    .take()
+                    .is_some_and(|inv| inv.fake_merchant)
+                {
+                    let _ = self.run_state.exit_event_room();
+                }
                 self.phase = Phase::MapChoice;
                 ActionResult::Advanced
             }
@@ -2137,7 +2144,7 @@ impl RunManager {
                 if let Some(bind) = self.callbacks.bind_event_room {
                     bind(&mut self.run_state);
                 }
-                self.phase = Phase::Event;
+                self.begin_event_phase();
                 ActionResult::Advanced
             }
             crate::runstate::RoomType::Monster
@@ -2145,6 +2152,56 @@ impl RunManager {
             | crate::runstate::RoomType::Boss
             | crate::runstate::RoomType::Unknown => ActionResult::InvalidForPhase,
         }
+    }
+
+    /// The phase of an event room whose event is bound: the event's options,
+    /// or for the Fake Merchant (C# `FakeMerchant`: no options, finished from
+    /// the start, `BeforeEventStarted` stocks its `MerchantInventory`) the shop
+    /// its `NFakeMerchant` node shows over that inventory. sts2-agent fork (S18).
+    fn begin_event_phase(&mut self) {
+        if self.run_state.current_event == Some(crate::events::EventId::FakeMerchant) {
+            self.shop_inventory = Some(crate::shop::fake_merchant_inventory(&mut self.run_state));
+            self.phase = Phase::Shop;
+        } else {
+            self.phase = Phase::Event;
+        }
+    }
+
+    /// C# `FakeMerchant.FoulPotionThrown`, a Foul Potion thrown at the Fake
+    /// Merchant: `FakeMerchantEventEncounter` inside the event, not resumed
+    /// after, with the rug and every still-stocked relic (in the inventory's
+    /// order) as the fight's extra rewards. sts2-agent fork (S18).
+    fn throw_foul_potion_at_fake_merchant(&mut self) -> ActionResult {
+        use crate::runstate::{RelicReward, Reward};
+        let inv = self
+            .shop_inventory
+            .take()
+            .expect("the fake merchant's shop");
+        let mut rewards = vec![Reward::Relic(RelicReward::new(
+            crate::relics::RelicId::FakeMerchantsRug,
+        ))];
+        rewards.extend(inv.relics.iter().filter_map(|e| {
+            e.relic_id
+                .filter(|_| crate::shop::is_shop_entry_available(e.price))
+                .map(|id| Reward::Relic(RelicReward::new(id)))
+        }));
+        self.run_state.event_combat = Some(crate::events::EventCombatRequest::no_resume(
+            crate::events::EventEncounter::FakeMerchant,
+            crate::events::EventId::FakeMerchant,
+            rewards,
+        ));
+        if let Some(build) = self.callbacks.build_event_combat {
+            let req = self.run_state.event_combat.clone().expect("set");
+            let combat = build(&mut self.run_state, &req);
+            self.combat = Some(combat);
+            self.phase = Phase::Combat;
+            return ActionResult::Advanced;
+        }
+        // No builder wired (raw-core tests): the fight resolves at once.
+        let req = self.run_state.event_combat.take().expect("set");
+        self.grant_event_combat_outcome(&req, true);
+        let _ = self.run_state.exit_event_room();
+        self.route_after_event_rewards()
     }
 
     /// C# `SpoilsMap`'s `GoldVar(600)`, paid when its quest's chest is opened.
@@ -3205,6 +3262,14 @@ impl RunManager {
                     }
                 }
             }
+            PotionKind::FoulPotion
+                if self
+                    .shop_inventory
+                    .as_ref()
+                    .is_some_and(|inv| inv.fake_merchant) =>
+            {
+                return self.throw_foul_potion_at_fake_merchant();
+            }
             PotionKind::FoulPotion => self.run_state.gain_gold(100),
             _ => return ActionResult::InvalidForPhase,
         }
@@ -3957,6 +4022,14 @@ impl RunManager {
     /// the streams aligned with C# `RestockAfterPurchase` for any later
     /// shop visit. No-op without Courier or when the callback is unwired.
     fn restock_slot_if_courier(&mut self, slot: crate::shop::ShopSlot) {
+        // No restock outside a `MerchantRoom` (the Fake Merchant's shop).
+        if self
+            .shop_inventory
+            .as_ref()
+            .is_some_and(|inv| inv.fake_merchant)
+        {
+            return;
+        }
         if !self
             .run_state
             .owns_active_relic(crate::relics::RelicId::TheCourier)
@@ -5179,7 +5252,7 @@ impl RunManager {
                 if let Some(a) = self.run_state.acts.get_mut(act) {
                     a.events_visited += 1;
                 }
-                self.phase = Phase::Event;
+                self.begin_event_phase();
                 ActionResult::Advanced
             }
             ForcedRoom::Combat(id) => {
@@ -9056,6 +9129,7 @@ mod tests {
             }],
             removal_cost: 75,
             removal_used: false,
+            fake_merchant: false,
         }
     }
 

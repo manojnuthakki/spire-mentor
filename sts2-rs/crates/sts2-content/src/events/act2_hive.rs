@@ -22,17 +22,15 @@
 //!   (`pending_deck_{removals,transforms,upgrades,enchants}`) and several
 //!   handlers use it; the leftover stubs just aren't wired (`sts2-rs-m3n0g.2`).
 //! - `6ynt.4.multi-page` — genuinely missing surface (`sts2-rs-m3n0g.3`):
-//!   DollRoom 2-doll pick, EndlessConveyor belt loop, FakeMerchant inventory.
+//!   DollRoom 2-doll pick, EndlessConveyor belt loop. (FakeMerchant's inventory is
+//!   the run manager's shop, sts2-agent fork.)
 //! - `6ynt.4.rng` — event-side relic-pool roll still missing
 //!   (`sts2-rs-m3n0g.1`): random doll/relic, uncommon potion, relic-trade pool.
 //! - `6ynt.4.potion-add` — `Reward::Potion` LANDED. PotionCourier grab/ransack
-//!   are now wired (`sts2-rs-m3n0g.4`); FakeMerchant.throw_foul still routes
-//!   through the event→combat bridge (`sts2-rs-m3n0g.5`).
+//!   are now wired (`sts2-rs-m3n0g.4`); the Foul Potion thrown at the
+//!   FakeMerchant's shop routes through the event→combat bridge.
 
-use sts2_core::events::{EventCombatRequest, EventEncounter};
-use sts2_core::{
-    EventId, EventOptionInfo, EventOutcome, EventVarSpec, RelicId, RelicReward, Reward, RunState,
-};
+use sts2_core::{EventId, EventOptionInfo, EventOutcome, EventVarSpec, RelicId, RunState};
 
 use super::{
     allowed_act_2_only, allowed_act_2_plus, always_allowed, any_enchantable_deck_card,
@@ -434,155 +432,21 @@ pub const ENDLESS_CONVEYOR: EventSpec = EventSpec {
 
 // ── FakeMerchant ─────────────────────────────────────────────────────
 
-/// `FakeMerchant::buy` per-relic cost (C# `FakeMerchant.relicCost`, `act2.py:380`).
-pub const FAKE_MERCHANT_BUY_COST: i32 = 50;
-
-/// `Id.Entry` for FakeMerchant's own RNG stream, used to shuffle the merchant
-/// inventory in `BeforeEventStarted`. FakeMerchant is a SHARED event
-/// (`IsShared => true`), so the C# seed folds in NO NetId offset:
-/// `base.Rng = new Rng(RunState.Rng.Seed + 0 + hash("FAKE_MERCHANT"))`
-/// (`EventModel.BeginEvent`, `IsShared ? 0 : NetId`) — same convention as
-/// `JungleMazeAdventure`.
-const FAKE_MERCHANT_STREAM: &str = "FAKE_MERCHANT";
-
-/// C# `FakeMerchant._inventoryRelics` — the 9 fake relics, in source order
-/// (`FakeMerchant.cs:23-33`). `BeforeEventStarted` shuffles this list with
-/// the event's own RNG and stocks the first 6.
-const FAKE_MERCHANT_INVENTORY: [RelicId; 9] = [
-    RelicId::FakeAnchor,
-    RelicId::FakeBloodVial,
-    RelicId::FakeHappyFlower,
-    RelicId::FakeLeesWaffle,
-    RelicId::FakeMango,
-    RelicId::FakeOrichalcum,
-    RelicId::FakeSneckoEye,
-    RelicId::FakeStrikeDummy,
-    RelicId::FakeVenerableTeaSet,
-];
-
-/// Number of fake relics the merchant stocks (C# `.Take(6)`).
-const FAKE_MERCHANT_STOCK_SIZE: usize = 6;
-
-/// Roll the merchant's stocked inventory: shuffle [`FAKE_MERCHANT_INVENTORY`]
-/// with the event's own RNG and take the first 6. Mirrors C#
-/// `FakeMerchant.BeforeEventStarted`:
-/// `_inventoryRelics.ToList().UnstableShuffle(base.Rng).Take(6)`. The event
-/// RNG is non-shared (re-derived from the run seed + `hash("FAKE_MERCHANT")`),
-/// so this consumes NO shared run RNG and is deterministic — re-derivable per
-/// option handler, which is all the option-model needs (each FakeMerchant
-/// visit resolves exactly one option: buy XOR throw-foul XOR leave).
-fn fake_merchant_stock(state: &RunState) -> Vec<RelicId> {
-    let mut idx: Vec<usize> = (0..FAKE_MERCHANT_INVENTORY.len()).collect();
-    sts2_core::dotnet_rng::Rng::with_name(state.rng.seed, FAKE_MERCHANT_STREAM).shuffle(&mut idx);
-    idx.truncate(FAKE_MERCHANT_STOCK_SIZE);
-    idx.into_iter()
-        .map(|i| FAKE_MERCHANT_INVENTORY[i])
-        .collect()
-}
-
-/// `Buy a Relic`: purchase one stocked fake relic for 50 gold. The custom C#
-/// merchant UI lets the player pick any of the 6 displayed; the option-model
-/// purchases the first stocked (shuffle-order) entry. Mirrors the
-/// `MerchantRelicEntry` buy → `RelicCmd.Obtain`.
-fn fake_merchant_buy(state: &mut RunState) -> EventOutcome {
-    state.gold = state.gold.saturating_sub(FAKE_MERCHANT_BUY_COST);
-    let stock = fake_merchant_stock(state);
-    let relic = stock.first().copied().unwrap_or(RelicId::FakeAnchor);
-    state.grant_event_relic(relic);
-    EventOutcome::finished(format!("Bought a fake relic ({FAKE_MERCHANT_BUY_COST}g)."))
-}
-
-/// `Throw Foul Potion`: C# `FakeMerchant.FoulPotionThrown` →
-/// `EnterCombatWithoutExitingEvent<FakeMerchantEventEncounter>(relicRewards,
-/// shouldResumeAfterCombat: false)`.
-///
-/// Bead `sts2-rs-ck9z6` (GH #166): enters a real `Phase::Combat` against the
-/// FakeMerchantMonster. On a clean victory the combat-room extra rewards are
-/// granted — `FakeMerchantsRug` PLUS every *stocked* fake inventory relic, in
-/// the inventory's shuffle order, exactly as C# `FoulPotionThrown` builds its
-/// `List<RelicReward>` (`new RelicReward<FakeMerchantsRug>` then one per
-/// `Inventory.RelicEntries.Where(IsStocked)`). The thrown FoulPotion is
-/// consumed (the `Custom` merchant UI throws the potion the player holds).
-///
-/// In the option-model a FakeMerchant visit resolves exactly one option, so
-/// throw-foul sees the full 6-relic stock (no prior buy in the same
-/// resolution) — matching a fresh C# `FoulPotionThrown` where nothing was
-/// purchased.
-fn fake_merchant_throw_foul(state: &mut RunState) -> EventOutcome {
-    // Consume the thrown FoulPotion if the player holds one (C# throws the
-    // held potion; the event is gated on having a FoulPotion or 100 gold).
-    if let Some(pos) = state
-        .potions
-        .iter()
-        .position(|&p| p == sts2_core::potions::PotionKind::FoulPotion)
-    {
-        let _ = state.remove_potion_from_belt(pos);
-    }
-    let mut victory_rewards = vec![Reward::Relic(RelicReward::new(RelicId::FakeMerchantsRug))];
-    victory_rewards.extend(
-        fake_merchant_stock(state)
-            .into_iter()
-            .map(|id| Reward::Relic(RelicReward::new(id))),
-    );
-    state.event_combat = Some(EventCombatRequest::no_resume(
-        EventEncounter::FakeMerchant,
-        EventId::FakeMerchant,
-        victory_rewards,
-    ));
-    EventOutcome {
-        finished: false,
-        description: "You hurl the foul potion. The merchant drops the act — fight!".to_string(),
-        effects: Vec::new(),
-    }
-}
-
-fn fake_merchant_leave(_state: &mut RunState) -> EventOutcome {
-    EventOutcome::finished("Left the fake merchant.")
-}
-
-const FAKE_MERCHANT_OPTIONS: &[EventOptionSpec] = &[
-    EventOptionSpec {
-        option_id: "buy",
-        loc_key: "",
-        default_label: "Buy a Relic (50g)",
-        default_description: "Purchase a fake relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: fake_merchant_buy,
-    },
-    EventOptionSpec {
-        option_id: "throw_foul",
-        loc_key: "",
-        default_label: "Throw Foul Potion",
-        default_description: "Fight for real rewards.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: fake_merchant_throw_foul,
-    },
-    EventOptionSpec {
-        option_id: "leave",
-        loc_key: "",
-        default_label: "Leave",
-        default_description: "Leave the merchant.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: fake_merchant_leave,
-    },
-];
-
 /// Port pin: `sts2-rl-agent@01c094d:sts2_env/events/act2.py:303`.
 /// `is_allowed`: `fake_merchant_allowed`
 /// (`current_act_index >= 1 && (gold >= 100 || has_foul)`) — wired.
-/// (throw_foul potion-remove + combat setup still deferred: `sts2-rs-m3n0g`.)
+///
+/// sts2-agent fork (S18): no options, as in the game (C# `FakeMerchant`:
+/// `GenerateInitialOptions` is empty, the event is finished from the start).
+/// The run manager opens its shop instead (`RunManager::begin_event_phase`,
+/// `sts2_core::shop::fake_merchant_inventory`), and a Foul Potion thrown there
+/// starts `FakeMerchantEventEncounter` (`FakeMerchant.FoulPotionThrown`).
 pub const FAKE_MERCHANT: EventSpec = EventSpec {
     id: EventId::FakeMerchant,
     python_name: "FakeMerchant",
     is_allowed: fake_merchant_allowed,
     generate_options: super::default_option_info_from_spec,
-    options: FAKE_MERCHANT_OPTIONS,
+    options: &[],
 };
 
 // ── FieldOfManSizedHoles ─────────────────────────────────────────────
@@ -1480,21 +1344,10 @@ mod tests {
 
     // ── FakeMerchant ───────────────────────────────────────────────
 
+    /// The game's event has no options (its shop is the run manager's).
     #[test]
-    fn fake_merchant_buy_deducts_50g_and_queues_relic() {
-        let mut rs = rs_with_gold(200);
-        let outcome = (FAKE_MERCHANT.options[0].handler)(&mut rs);
-        assert!(outcome.finished);
-        assert_eq!(rs.gold, 200 - FAKE_MERCHANT_BUY_COST);
-        assert_eq!(rs.relic_rewards.len(), 1);
-    }
-
-    #[test]
-    fn fake_merchant_leave_is_finished_noop() {
-        let mut rs = rs_with_gold(200);
-        let outcome = (FAKE_MERCHANT.options[2].handler)(&mut rs);
-        assert!(outcome.finished);
-        assert_eq!(rs.gold, 200);
+    fn fake_merchant_has_no_options() {
+        assert!(FAKE_MERCHANT.options.is_empty());
     }
 
     // ── FieldOfManSizedHoles ───────────────────────────────────────
@@ -1793,28 +1646,6 @@ mod tests {
         assert!(outcome.finished);
         assert!(!rs.relics.contains(&given), "{given:?} handed over");
         assert_eq!(rs.relics.len(), 4, "3 - 1 + 2");
-    }
-
-    // ── FakeMerchant throw_foul (mutant coverage) ────────────────────
-
-    #[test]
-    fn fake_merchant_throw_foul_stages_event_combat() {
-        // Bead `sts2-rs-ck9z6` (GH #166): throw_foul now enters a real
-        // event→combat (NOT a finished outcome) — it stages a no-resume
-        // FakeMerchant fight whose victory reward is FakeMerchantsRug.
-        let mut rs = RunState::new();
-        let outcome = fake_merchant_throw_foul(&mut rs);
-        assert!(!outcome.finished, "throw_foul defers finish to post-combat");
-        assert!(
-            !outcome.description.is_empty(),
-            "throw_foul carries a description",
-        );
-        let req = rs.event_combat.as_ref().expect("combat staged");
-        assert!(!req.resume);
-        assert_eq!(
-            req.encounter,
-            sts2_core::events::EventEncounter::FakeMerchant
-        );
     }
 
     // ── JungleMazeAdventure gold (mutant coverage) ───────────────────
