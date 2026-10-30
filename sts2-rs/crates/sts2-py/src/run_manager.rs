@@ -1329,6 +1329,74 @@ impl PyRunManager {
         Some(id.python_name().to_string())
     }
 
+    /// Enter a room by the harness: the C# headless `enter_room {type,
+    /// encounter, event}` (`RunSimulator.EnterRoomImpl`), with its
+    /// arguments. `room_type` is `"combat"`, `"monster"` or `"elite"` (a
+    /// combat room of `encounter`, a C# encounter id such as
+    /// `"NIBBITS_WEAK"`, default `"SHRINKER_BEETLE_WEAK"` as the host's;
+    /// the room type is the encounter's), `"shop"`, `"rest"` or
+    /// `"rest_site"`, `"treasure"`, or `"event"` (`event`, a C# event id
+    /// such as `"THE_FUTURE_OF_POTIONS"`). See
+    /// `RunManager::force_enter_room` for what entering does. Raises
+    /// `ValueError` for an unknown type, encounter or event, and
+    /// `RuntimeError` when the engine refuses (the run is over, or a
+    /// selection is open). sts2-agent fork.
+    #[pyo3(signature = (room_type, encounter = None, event = None))]
+    fn force_enter_room(
+        &mut self,
+        room_type: &str,
+        encounter: Option<&str>,
+        event: Option<&str>,
+    ) -> PyResult<()> {
+        use sts2_core::run_manager::ForcedRoom;
+        let room = match room_type.to_ascii_lowercase().as_str() {
+            "combat" | "monster" | "elite" => {
+                let id = encounter
+                    .filter(|e| !e.is_empty())
+                    .unwrap_or("SHRINKER_BEETLE_WEAK");
+                if sts2_content::encounters::find(id).is_none() {
+                    return Err(PyValueError::new_err(format!("unknown encounter {id:?}")));
+                }
+                ForcedRoom::Combat(id)
+            }
+            "shop" => ForcedRoom::Shop,
+            "rest" | "rest_site" => ForcedRoom::RestSite,
+            "treasure" => ForcedRoom::Treasure,
+            "event" => {
+                let id = event
+                    .filter(|e| !e.is_empty())
+                    .ok_or_else(|| PyValueError::new_err("an event room needs `event`"))?;
+                // C# `Id.Entry` (UPPER_SNAKE) → the class name.
+                let name: String = id
+                    .split('_')
+                    .map(|w| {
+                        let lower = w.to_ascii_lowercase();
+                        let mut cs = lower.chars();
+                        cs.next().map_or_else(String::new, |f| {
+                            f.to_ascii_uppercase().to_string() + cs.as_str()
+                        })
+                    })
+                    .collect();
+                ForcedRoom::Event(
+                    sts2_core::EventId::from_python_name(&name)
+                        .ok_or_else(|| PyValueError::new_err(format!("unknown event {id:?}")))?,
+                )
+            }
+            other => {
+                return Err(PyValueError::new_err(format!(
+                    "unknown room type {other:?}"
+                )))
+            }
+        };
+        match self.inner.force_enter_room(room) {
+            ActionResult::Advanced => Ok(()),
+            other => Err(PyRuntimeError::new_err(format!(
+                "force_enter_room({room_type:?}) refused: {other:?} in phase {:?}",
+                self.inner.phase()
+            ))),
+        }
+    }
+
     fn card_reward_options<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
         crate::value_to_pylist(py, &emit_rm::card_reward_options(&self.inner))
     }

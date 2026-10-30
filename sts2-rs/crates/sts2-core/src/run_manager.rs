@@ -278,6 +278,25 @@ pub enum RunAction {
     Unhandled,
 }
 
+/// A room the harness enters by [`RunManager::force_enter_room`], the
+/// engine side of the C# headless `enter_room` command
+/// (`RunSimulator.EnterRoomImpl`), sts2-agent fork.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ForcedRoom<'a> {
+    /// A combat room of the encounter with this id (C# `Id.Entry`, e.g.
+    /// `"NIBBITS_WEAK"`); its room type is the encounter's.
+    Combat(&'a str),
+    /// A merchant room.
+    Shop,
+    /// A rest site.
+    RestSite,
+    /// A treasure room.
+    Treasure,
+    /// An event room bound to this event.
+    Event(crate::events::EventId),
+}
+
 /// Outcome of [`RunManager::take_action`]. Mirrors the loose `dict`
 /// return shape of Python's `take_action`, lifted to an enum so the
 /// caller can pattern-match without string-checking.
@@ -356,6 +375,23 @@ pub struct ContentCallbacks {
         fn(
             rs: &mut RunState,
             act_index: u8,
+            room_type: crate::runstate::RoomType,
+        ) -> Option<CombatState>,
+    >,
+    /// The room type of the encounter `encounter_id` (its tier: Monster,
+    /// Elite or Boss), or `None` for an id the content tables don't know.
+    /// Used by [`RunManager::force_enter_room`] before it leaves the
+    /// current room (sts2-agent fork).
+    pub encounter_room_type: Option<fn(encounter_id: &str) -> Option<crate::runstate::RoomType>>,
+    /// Build the combat of a GIVEN encounter for a room the harness
+    /// entered (C# `new CombatRoom(encounter.ToMutable(), runState)`, the
+    /// headless `enter_room`): the same roster, HP and cursor path as
+    /// [`Self::build_combat_for_room`], minus the encounter pick.
+    /// `None` for an unknown id (sts2-agent fork).
+    pub build_combat_for_encounter: Option<
+        fn(
+            rs: &mut RunState,
+            encounter_id: &str,
             room_type: crate::runstate::RoomType,
         ) -> Option<CombatState>,
     >,
@@ -559,6 +595,11 @@ impl core::fmt::Debug for ContentCallbacks {
             .field(
                 "build_combat_for_room",
                 &self.build_combat_for_room.is_some(),
+            )
+            .field("encounter_room_type", &self.encounter_room_type.is_some())
+            .field(
+                "build_combat_for_encounter",
+                &self.build_combat_for_encounter.is_some(),
             )
             .field(
                 "generate_card_reward_options",
@@ -4876,6 +4917,156 @@ impl RunManager {
             }
             if let Some(v) = hp {
                 combat.player.current_hp = v;
+            }
+        }
+    }
+
+    /// Enter `room` by the harness, from any phase but the run's end:
+    /// the engine side of the C# headless `enter_room`
+    /// (`RunSimulator.EnterRoomImpl` → `RunManager.EnterRoom`,
+    /// `RunManager.cs:1154`), sts2-agent fork.
+    ///
+    /// C# `EnterRoom` exits every current room (`ExitCurrentRooms`: a
+    /// combat, event, shop or reward screen in progress is left), pushes
+    /// the new room, runs `BeforeRoomEntered` and the room's `Enter`, then
+    /// `Act.MarkRoomVisited(room.RoomType)` (`RoomSet.MarkVisited`: the
+    /// Monster, Elite, Event or Boss cursor + 1). It is not a map move: no
+    /// map-point history entry, so neither the act floor nor the total floor
+    /// moves, and the player keeps the map position they had. The room is
+    /// set up as `CreateRoom` would (`RunManager.cs:867`) with the given
+    /// encounter or event: a combat of that encounter
+    /// (`new CombatRoom(encounter, runState)`, its roster rolled at the
+    /// current floor and its HP off `niche`), `MerchantRoom`,
+    /// `RestSiteRoom`, `TreasureRoom(CurrentActIndex)`, `EventRoom(event)`
+    /// (no pool pull, so the event is not added to the visited set).
+    ///
+    /// Refused (`InvalidForPhase`, nothing changed) at the run's end, while
+    /// a selection is open (a pending choice, card select or deck
+    /// operation: C# would abandon it mid-await, which the engine can't
+    /// represent), or for an unknown encounter (`NotImplemented` when the
+    /// content callbacks aren't wired).
+    pub fn force_enter_room(&mut self, room: ForcedRoom<'_>) -> ActionResult {
+        use crate::runstate::RoomType;
+        if self.phase == Phase::RunOver {
+            return ActionResult::RunOver;
+        }
+        let rs = &self.run_state;
+        if rs.pending_choice.is_some()
+            || !rs.pending_card_selects.is_empty()
+            || !rs.pending_card_grants.is_empty()
+            || !rs.pending_bundles.is_empty()
+            || rs.pending_deck_removals > 0
+            || rs.pending_deck_upgrades > 0
+            || !rs.pending_deck_transforms.is_empty()
+            || !rs.pending_deck_enchants.is_empty()
+            || !rs.pending_potion_swaps.is_empty()
+            || self
+                .combat
+                .as_ref()
+                .is_some_and(|c| c.pending_choice.is_some())
+        {
+            return ActionResult::InvalidForPhase;
+        }
+        let room_type = match room {
+            ForcedRoom::Combat(id) => {
+                let (Some(kind), Some(_)) = (
+                    self.callbacks.encounter_room_type,
+                    self.callbacks.build_combat_for_encounter,
+                ) else {
+                    return ActionResult::NotImplemented;
+                };
+                match kind(id) {
+                    Some(rt) => rt,
+                    None => return ActionResult::InvalidForPhase,
+                }
+            }
+            ForcedRoom::Shop => RoomType::Shop,
+            ForcedRoom::RestSite => RoomType::RestSite,
+            ForcedRoom::Treasure => RoomType::Treasure,
+            ForcedRoom::Event(_) => RoomType::Event,
+        };
+
+        // `ExitCurrentRooms`: whatever room is open is left as it stands.
+        self.combat = None;
+        self.run_state.event_combat = None;
+        let _ = self.run_state.exit_event_room();
+        self.shop_inventory = None;
+        self.card_reward_options.clear();
+        self.card_reward_upgraded.clear();
+        self.card_reward_bundles = None;
+        self.boss_relic_options.clear();
+        self.pending_boss_act_advance = false;
+        self.card_offer_choose_screen = false;
+        self.pending_choose_screen_post_add.clear();
+        self.card_offer_can_skip = false;
+        self.reward_sets.clear();
+        self.rewards_resume_phase = None;
+        self.screen_card_claim = None;
+        self.screen_removal_claim = None;
+        self.purchases_after_reward_sets.clear();
+        self.run_state.pending_rewards.clear();
+        self.run_state.relic_rewards.clear();
+        self.run_state.offered_reward_sets.clear();
+        self.run_state.room_extra_rewards.clear();
+        self.run_state.card_reward_upgraded_flags.clear();
+
+        // The new room keeps the standing map position (an off-map room,
+        // C#'s room stack over an unchanged `CurrentMapCoord`); entering a
+        // coord the player already visited moves no floor
+        // (`add_visited_coord` is idempotent).
+        let standing = self.run_state.current_room;
+        let new_room = match (
+            standing.and_then(|r| r.map_coord),
+            standing.and_then(|r| r.map_point_type),
+        ) {
+            (Some(coord), Some(point_type)) => {
+                crate::runstate::Room::at(coord, point_type, room_type)
+            }
+            _ => crate::runstate::Room::new(room_type),
+        };
+        let act = usize::from(self.run_state.act_index).saturating_sub(1);
+        match room {
+            ForcedRoom::Event(id) => {
+                // `enter_event_room` enters the coord-keeping Event room
+                // itself; `MarkVisited(Event)` moves the act's event cursor.
+                self.run_state.enter_event_room(id);
+                if let Some(a) = self.run_state.acts.get_mut(act) {
+                    a.events_visited += 1;
+                }
+                self.phase = Phase::Event;
+                ActionResult::Advanced
+            }
+            ForcedRoom::Combat(id) => {
+                self.run_state.enter_room(new_room);
+                let Some(build) = self.callbacks.build_combat_for_encounter else {
+                    return ActionResult::NotImplemented;
+                };
+                // The builder moves the Monster / Elite cursor
+                // (`MarkVisited`), as the map path's builder does.
+                let Some(combat) = build(&mut self.run_state, id, room_type) else {
+                    return ActionResult::NotImplemented;
+                };
+                self.combat = Some(combat);
+                self.phase = Phase::Combat;
+                ActionResult::Advanced
+            }
+            ForcedRoom::Shop => {
+                self.run_state.enter_room(new_room);
+                self.shop_inventory = self
+                    .callbacks
+                    .generate_shop_inventory
+                    .map(|f| f(&mut self.run_state));
+                self.phase = Phase::Shop;
+                ActionResult::Advanced
+            }
+            ForcedRoom::RestSite => {
+                self.run_state.enter_room(new_room);
+                self.enter_rest_site();
+                ActionResult::Advanced
+            }
+            ForcedRoom::Treasure => {
+                self.run_state.enter_room(new_room);
+                self.resolve_treasure_room()
             }
         }
     }

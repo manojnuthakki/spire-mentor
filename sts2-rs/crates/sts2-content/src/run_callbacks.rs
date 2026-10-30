@@ -52,6 +52,8 @@ pub fn ironclad_content_callbacks() -> ContentCallbacks {
         // randomizers + per-monster HP rolls for Act 1. Returns `None`
         // for Acts 2–3 so `select_encounter` (above) still handles them.
         build_combat_for_room: Some(build_combat_for_room),
+        encounter_room_type: Some(encounter_room_type),
+        build_combat_for_encounter: Some(build_combat_for_encounter),
         generate_card_reward_options: Some(generate_card_reward_options),
         generate_noncombat_card_reward_options: Some(
             crate::cards::spec_index::roll_noncombat_card_reward_options,
@@ -729,9 +731,6 @@ fn build_combat_for_room(
     room_type: RoomType,
 ) -> Option<sts2_core::CombatState> {
     use crate::encounters::{EncounterDef, EncounterTier};
-    use crate::monster_dispatch::MonsterSpawnArgs;
-    use sts2_core::dotnet_rng::Rng;
-    use sts2_core::MonsterKind;
 
     let table = act_encounter_table(act_index, rs.act1)?;
     let tier = match room_type {
@@ -844,6 +843,49 @@ fn build_combat_for_room(
         })
     };
 
+    Some(build_encounter_combat(rs, act_index, enc, room_type))
+}
+
+/// The room type of encounter `encounter_id` (C# `EncounterModel.RoomType`:
+/// a Weak or Normal encounter is a Monster room), or `None` for an id no act
+/// table has (sts2-agent fork, the harness's forced room entry).
+fn encounter_room_type(encounter_id: &str) -> Option<RoomType> {
+    use crate::encounters::EncounterTier;
+    Some(match crate::encounters::find(encounter_id)?.tier {
+        EncounterTier::Weak | EncounterTier::Normal => RoomType::Monster,
+        EncounterTier::Elite => RoomType::Elite,
+        EncounterTier::Boss => RoomType::Boss,
+    })
+}
+
+/// The combat of encounter `encounter_id` for a room the harness entered
+/// (C# `new CombatRoom(encounter.ToMutable(), runState)` in the headless
+/// `enter_room`): built at the run's current act and floor like a map
+/// room's, with no encounter pick (sts2-agent fork).
+fn build_combat_for_encounter(
+    rs: &mut RunState,
+    encounter_id: &str,
+    room_type: RoomType,
+) -> Option<sts2_core::CombatState> {
+    let enc = crate::encounters::find(encounter_id)?;
+    let act_index = rs.act_index;
+    Some(build_encounter_combat(rs, act_index, enc, room_type))
+}
+
+/// Build the combat of `enc` for a room of `room_type` entered in act
+/// `act_index` (1-based): the part of [`build_combat_for_room`] after the
+/// encounter is chosen (the roster off the per-encounter `Rng`, HP off
+/// `niche`, the `RoomSet` cursor for the room type, the slot model).
+fn build_encounter_combat(
+    rs: &mut RunState,
+    act_index: u8,
+    enc: &'static crate::encounters::EncounterDef,
+    room_type: RoomType,
+) -> sts2_core::CombatState {
+    use crate::monster_dispatch::MonsterSpawnArgs;
+    use sts2_core::dotnet_rng::Rng;
+    use sts2_core::MonsterKind;
+
     // Record the chosen encounter's stable index (harvest-only metadata,
     // AZ Milestone 1 Task 2) — `enc` is the only place downstream of this
     // point that still remembers which `EncounterDef` was rolled; the
@@ -918,7 +960,7 @@ fn build_combat_for_room(
     // and a no-op for the initial roster — every shipped `GenerateMonsters` is
     // already slot-ascending, so this only ever informs a LATER add.
     combat.assign_encounter_slots(enc.member_slots());
-    Some(combat)
+    combat
 }
 
 /// Spawn `encounter_id`'s roster off the C# `niche` stream and return each
