@@ -727,28 +727,39 @@ pub const SUNKEN_STATUE: EventSpec = EventSpec {
 
 // ── SunkenTreasury ───────────────────────────────────────────────────
 
-/// `SunkenTreasury.first_chest` gold (`shared.py:1658`, 60 ±8).
+/// `SunkenTreasury.first_chest` base gold (C# `SmallChestGold`, 60).
 pub const SUNKEN_TREASURY_SMALL_GOLD: i32 = 60;
-/// `SunkenTreasury.second_chest` gold (`shared.py:1659`, 333 ±30).
+/// `SunkenTreasury.second_chest` base gold (C# `LargeChestGold`, 333).
 pub const SUNKEN_TREASURY_LARGE_GOLD: i32 = 333;
+/// `Id.Entry` for the event's own RNG stream (non-shared, as Sunken Statue).
+pub const SUNKEN_TREASURY_STREAM: &str = "SUNKEN_TREASURY";
+
+/// C# `SunkenTreasury.CalculateVars`: `SmallChestGold += NextInt(16) - 8`,
+/// then `LargeChestGold += NextInt(61) - 30`, reads #1 and #2 of the event's
+/// own stream. Re-derived per call (the stream is private to this event, so
+/// re-deriving preserves in-stream order; mirrors `sunken_statue_rolled_gold`).
+pub fn sunken_treasury_rolled_gold(state: &RunState) -> (i32, i32) {
+    let mut rng = sts2_core::dotnet_rng::Rng::with_name(state.rng.seed, SUNKEN_TREASURY_STREAM);
+    let small = SUNKEN_TREASURY_SMALL_GOLD + rng.next_int(0, 15) - 8;
+    let large = SUNKEN_TREASURY_LARGE_GOLD + rng.next_int(0, 60) - 30;
+    (small, large)
+}
 
 fn sunken_treasury_first_chest(state: &mut RunState) -> EventOutcome {
-    state.gain_gold(SUNKEN_TREASURY_SMALL_GOLD);
-    EventOutcome::finished(format!("Gained {SUNKEN_TREASURY_SMALL_GOLD} gold."))
+    let (gold, _) = sunken_treasury_rolled_gold(state);
+    state.gain_gold(gold);
+    EventOutcome::finished(format!("Gained {gold} gold."))
 }
 
 fn sunken_treasury_second_chest(state: &mut RunState) -> EventOutcome {
     // C# `SunkenTreasury.SecondChest`: gain gold, then
-    // `AddCurseToDeck<Greed>` — an unconditional deck append. (The ±30 gold
-    // variance off the event Rng is a separate roll still pinned flat to the
-    // base — `6ynt.4.rng`.)
-    state.gain_gold(SUNKEN_TREASURY_LARGE_GOLD);
+    // `AddCurseToDeck<Greed>` — an unconditional deck append.
+    let (_, gold) = sunken_treasury_rolled_gold(state);
+    state.gain_gold(gold);
     if let Some(curse) = card_pod_from_id(CardId::Greed, false) {
         state.master_deck.push(curse);
     }
-    EventOutcome::finished(format!(
-        "Gained {SUNKEN_TREASURY_LARGE_GOLD} gold, gained a Greed curse."
-    ))
+    EventOutcome::finished(format!("Gained {gold} gold, gained a Greed curse."))
 }
 
 const SUNKEN_TREASURY_OPTIONS: &[EventOptionSpec] = &[
@@ -761,7 +772,7 @@ const SUNKEN_TREASURY_OPTIONS: &[EventOptionSpec] = &[
             "SmallChestGold",
             EventVarSpec::Int(SUNKEN_TREASURY_SMALL_GOLD as i64),
         )],
-        vars_fn: None,
+        vars_fn: Some(|s| vec![("SmallChestGold", sunken_treasury_rolled_gold(s).0.into())]),
         title_vars_fn: None,
         handler: sunken_treasury_first_chest,
     },
@@ -774,7 +785,7 @@ const SUNKEN_TREASURY_OPTIONS: &[EventOptionSpec] = &[
             "LargeChestGold",
             EventVarSpec::Int(SUNKEN_TREASURY_LARGE_GOLD as i64),
         )],
-        vars_fn: None,
+        vars_fn: Some(|s| vec![("LargeChestGold", sunken_treasury_rolled_gold(s).1.into())]),
         title_vars_fn: None,
         handler: sunken_treasury_second_chest,
     },
@@ -2881,22 +2892,41 @@ mod tests {
         assert_eq!(rs.current_hp, hp_before - SUNKEN_STATUE_DIVE_DAMAGE);
     }
 
+    /// The game's first chest on four seeds (Headless at fork 2c16a34, the
+    /// run's RNG cursors agreeing with the engine's there): 60 + NextInt(16) - 8
+    /// on the event's own stream (`SunkenTreasury.CalculateVars`).
     #[test]
-    fn sunken_treasury_first_chest_gains_60() {
-        let mut rs = fresh_state();
-        let gold_before = rs.gold;
-        let outcome = (SUNKEN_TREASURY.options[0].handler)(&mut rs);
-        assert!(outcome.finished);
-        assert_eq!(rs.gold, gold_before + SUNKEN_TREASURY_SMALL_GOLD);
+    fn sunken_treasury_first_chest_rolls_the_games_gold() {
+        for (seed, gold) in [
+            ("39RE6GZJPL", 53),
+            ("C66479N2WP", 57),
+            ("N58YDJVQMY", 56),
+            ("0JVRDUQ6XG", 56),
+        ] {
+            let mut rs = fresh_state();
+            rs.rng.seed = sts2_core::dotnet_rng::deterministic_hash_code(seed);
+            let gold_before = rs.gold;
+            let outcome = (SUNKEN_TREASURY.options[0].handler)(&mut rs);
+            assert!(outcome.finished);
+            assert_eq!(rs.gold - gold_before, gold, "{seed}");
+        }
     }
 
+    /// The second chest's 333 + NextInt(61) - 30 is the stream's second read,
+    /// after the small chest's, whichever chest is opened.
     #[test]
-    fn sunken_treasury_second_chest_gains_333() {
-        let mut rs = fresh_state();
-        let gold_before = rs.gold;
-        let outcome = (SUNKEN_TREASURY.options[1].handler)(&mut rs);
-        assert!(outcome.finished);
-        assert_eq!(rs.gold, gold_before + SUNKEN_TREASURY_LARGE_GOLD);
+    fn sunken_treasury_second_chest_rolls_after_the_first() {
+        for seed in ["39RE6GZJPL", "C66479N2WP", "N58YDJVQMY", "0JVRDUQ6XG"] {
+            let mut rs = fresh_state();
+            rs.rng.seed = sts2_core::dotnet_rng::deterministic_hash_code(seed);
+            let mut rng = sts2_core::dotnet_rng::Rng::with_name(rs.rng.seed, "SUNKEN_TREASURY");
+            rng.next_int(0, 15);
+            let expected = 333 + rng.next_int(0, 60) - 30;
+            let gold_before = rs.gold;
+            let outcome = (SUNKEN_TREASURY.options[1].handler)(&mut rs);
+            assert!(outcome.finished);
+            assert_eq!(rs.gold - gold_before, expected, "{seed}");
+        }
     }
 
     #[test]
