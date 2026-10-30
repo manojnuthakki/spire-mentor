@@ -3984,6 +3984,17 @@ impl RunManager {
             if let Some(pre_roll) = self.callbacks.pre_roll_act_boss {
                 pre_roll(&mut self.run_state);
             }
+            // sts2-agent fork: the player then enters the act's first map
+            // point, the Ancient's `EventRoom`; `EnterRoomInternal` runs
+            // `Hook.AfterRoomEntered` there (after the event's
+            // `BeforeEventStarted` heal), so Maw Bank pays at the Ancient. Of
+            // the engine's listeners only Maw Bank acts in an event room. Only
+            // the hook runs here; `current_room` is left as it was, since the
+            // act-start map move reads it.
+            let _ = crate::run_effects::dispatch_after_room_entered(
+                &mut self.run_state,
+                crate::runstate::RoomType::Event,
+            );
         }
     }
 
