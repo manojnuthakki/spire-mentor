@@ -2028,6 +2028,16 @@ fn listener_lava_lamp_card_reward(rs: &mut RunState, cards: &mut Vec<Card>) -> E
     if !run_owns(rs, RelicId::LavaLamp) {
         return EffectResult::NotImplemented;
     }
+    // C# `LavaLamp.TryModifyCardRewardOptionsLate`: only while the current
+    // room is a `CombatRoom`; a card reward a relic offers in a shop, rest
+    // site or treasure room is never one (an event room is left to the flag:
+    // its fights are). sts2-agent fork (noncombat-card-reward-hooks).
+    if matches!(
+        rs.current_room.map(|r| r.room_type),
+        Some(RoomType::Shop | RoomType::RestSite | RoomType::Treasure)
+    ) {
+        return EffectResult::NotImplemented;
+    }
     let took_damage = rs
         .relic_counters
         .get(&RelicId::LavaLamp)

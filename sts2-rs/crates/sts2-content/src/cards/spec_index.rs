@@ -1034,10 +1034,25 @@ pub fn roll_infested_touch_core_card(rs: &mut RunState) -> Option<CardId> {
 /// `CardCreationSource.Encounter` pity-updating combat roller). Wired as
 /// `ContentCallbacks::generate_noncombat_card_reward_options` and used by
 /// `RunManager::drain_pending_rewards` (PARITY132).
+///
+/// sts2-agent fork (noncombat-card-reward-hooks): each card keeps its upgrade
+/// roll (C# `RollForUpgrade` upgrades it), and the reward is a `CardReward`
+/// (`IsCardReward`), so `Hook.TryModifyCardRewardOptions` runs every relic's
+/// `TryModifyCardRewardOptionsLate` on it (the eggs, Wing Charm, Fresnel
+/// Lens, Glitter, Silver Crucible, Silken Tress; Lava Lamp's needs a combat
+/// room). The upgrade flags go to `rs.card_reward_upgraded_flags` as
+/// [`generate_card_reward_options`](crate::run_callbacks::generate_card_reward_options)'s do.
 #[must_use]
 pub fn roll_noncombat_card_reward_options(rs: &mut RunState) -> Vec<CardId> {
     let character = rs.character_id;
-    roll_reward_options_base_odds(rs, 3, true, &[character], false)
+    let mut cards: Vec<sts2_core::cards::Card> =
+        roll_reward_cards_base_odds(rs, 3, true, &[character], false)
+            .into_iter()
+            .filter_map(|(id, upgraded)| card_pod_from_id(id, upgraded))
+            .collect();
+    let _ = sts2_core::run_effects::dispatch_modify_card_reward_options_late(rs, &mut cards);
+    rs.card_reward_upgraded_flags = cards.iter().map(|c| c.upgraded).collect();
+    cards.into_iter().map(|c| c.card_id).collect()
 }
 
 /// The ordinal sort key C# uses for a character's `CardPoolModel` inside
@@ -1187,6 +1202,27 @@ fn roll_reward_options_base_odds(
     character_ids: &[CharacterId],
     include_colorless: bool,
 ) -> Vec<CardId> {
+    roll_reward_cards_base_odds(
+        rs,
+        count,
+        consume_upgrade_roll,
+        character_ids,
+        include_colorless,
+    )
+    .into_iter()
+    .map(|(id, _)| id)
+    .collect()
+}
+
+/// [`roll_reward_options_base_odds`] with each card's upgrade roll result
+/// (`false` when no roll is made).
+fn roll_reward_cards_base_odds(
+    rs: &mut RunState,
+    count: usize,
+    consume_upgrade_roll: bool,
+    character_ids: &[CharacterId],
+    include_colorless: bool,
+) -> Vec<(CardId, bool)> {
     use sts2_core::card_rewards::{
         combat_card_upgrade_base_chance, roll_for_upgrade_with_dotnet, RarityContext,
     };
@@ -1194,6 +1230,7 @@ fn roll_reward_options_base_odds(
     let ascension_level = rs.card_rarity_odds.ascension_level;
     let upgrade_base = combat_card_upgrade_base_chance();
     let mut chosen: Vec<CardId> = Vec::new();
+    let mut upgrades: Vec<bool> = Vec::new();
     for _ in 0..count {
         let mut rarity = rs
             .card_rarity_odds
@@ -1227,17 +1264,18 @@ fn roll_reward_options_base_odds(
             .rewards
             .next_int_exclusive(0, candidates.len() as i32) as usize;
         chosen.push(candidates[idx]);
-        if consume_upgrade_roll {
-            let _ = roll_for_upgrade_with_dotnet(
-                &mut rs.rng.rewards,
-                rarity,
-                act_index,
-                ascension_level,
-                upgrade_base,
-            );
-        }
+        upgrades.push(
+            consume_upgrade_roll
+                && roll_for_upgrade_with_dotnet(
+                    &mut rs.rng.rewards,
+                    rarity,
+                    act_index,
+                    ascension_level,
+                    upgrade_base,
+                ),
+        );
     }
-    chosen
+    chosen.into_iter().zip(upgrades).collect()
 }
 
 /// Shared candidate pool for an out-of-combat card transform: the

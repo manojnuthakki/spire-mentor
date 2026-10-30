@@ -3821,8 +3821,7 @@ fn listener_paels_growth(rs: &mut RunState) -> EffectResult {
 /// `WingCharm::modify_card_reward_options_late` — pick one random
 /// option from the generated card-reward list and add `Swift(1)`
 /// (Python `shop_event.py::WingCharm.modify_card_reward_options_late`,
-/// `SWIFT = 1`). Index draw uses the dotnet `rs.rng.rewards` stream
-/// (bead `sts2-rs-hm2eb`; was the legacy Xoshiro `rewards_rng()` shim).
+/// `SWIFT = 1`), among the cards Swift can enchant, on `rs.rng.niche`.
 /// Same channel as
 /// Glitter / FresnelLens. Bead `sts2-rs-70anj.4`.
 fn listener_wing_charm_card_reward(
@@ -3833,13 +3832,25 @@ fn listener_wing_charm_card_reward(
     if !rs.owns_active_relic(RelicId::WingCharm) {
         return EffectResult::NotImplemented;
     }
-    if cards.is_empty() {
+    // C# `WingCharm.TryModifyCardRewardOptionsLate`: one of the cards Swift
+    // can enchant, drawn with `RunState.Rng.Niche.NextItem` (sts2-agent fork,
+    // noncombat-card-reward-hooks; it read the rewards stream over every
+    // card).
+    let candidates: Vec<usize> = cards
+        .iter()
+        .enumerate()
+        .filter(|(_, card)| {
+            crate::cards::spec_index::spec_for_card_id(card.card_id).is_some_and(|spec| {
+                crate::enchantments::can_enchant_card(&spec, card, EnchantmentId::Swift)
+            })
+        })
+        .map(|(i, _)| i)
+        .collect();
+    if candidates.is_empty() {
         return EffectResult::NotImplemented;
     }
-    // Bead `sts2-rs-hm2eb` (943w7 Stage 3): dotnet `RunRngSet` reward
-    // stream, not the legacy Xoshiro `rewards_rng()` shim.
-    let idx = rs.rng.rewards.next_int_exclusive(0, cards.len() as i32) as usize;
-    cards[idx].add_enchantment(EnchantmentId::Swift, WING_CHARM_SWIFT);
+    let pick = rs.rng.niche.next_int_exclusive(0, candidates.len() as i32) as usize;
+    cards[candidates[pick]].add_enchantment(EnchantmentId::Swift, WING_CHARM_SWIFT);
     EffectResult::Resolved
 }
 
