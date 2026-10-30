@@ -462,6 +462,12 @@ pub struct ContentCallbacks {
     /// `RunAction::EventChoice { idx }` per option. Bead
     /// `sts2-rs-nzdz1`.
     pub event_option_count: Option<fn(rs: &RunState) -> usize>,
+    /// Whether the active event's option `idx` is enabled (sts2-agent fork).
+    /// A disabled option (the game's locked options, Trial's DOUBLE_DOWN as
+    /// the host's agent mode lists it) is neither offered by
+    /// `get_available_actions` nor accepted by `take_action`; every option
+    /// keeps its own index. Unwired, every option counts as enabled.
+    pub event_option_enabled: Option<fn(rs: &RunState, idx: usize) -> bool>,
     /// Bind the act's next event to an event room the map just entered, when
     /// none is bound (sts2-agent fork): C# picks the event as the room is
     /// entered and runs its `BeforeEventStarted` (The Future of Potions',
@@ -639,6 +645,7 @@ impl core::fmt::Debug for ContentCallbacks {
             )
             .field("resolve_event_at", &self.resolve_event_at.is_some())
             .field("event_option_count", &self.event_option_count.is_some())
+            .field("event_option_enabled", &self.event_option_enabled.is_some())
             .field("bind_event_room", &self.bind_event_room.is_some())
             .field(
                 "generate_shop_inventory",
@@ -1784,7 +1791,19 @@ impl RunManager {
                     .map(|f| f(&self.run_state))
                     .filter(|&n| n > 0)
                     .unwrap_or(1);
-                (0..n).map(|idx| RunAction::EventChoice { idx }).collect()
+                // A disabled option is not offered (its index is kept for
+                // the others); if none is enabled, all are, as before.
+                let enabled: Vec<usize> = (0..n)
+                    .filter(|&idx| self.event_option_enabled(idx))
+                    .collect();
+                let idxs = if enabled.is_empty() {
+                    (0..n).collect()
+                } else {
+                    enabled
+                };
+                idxs.into_iter()
+                    .map(|idx| RunAction::EventChoice { idx })
+                    .collect()
             }
             Phase::Treasure => vec![RunAction::CollectTreasure],
         }
@@ -1929,7 +1948,13 @@ impl RunManager {
             }
             (Phase::RestSite, RunAction::RestOption { idx }) => self.do_rest_site_at(idx),
             (Phase::RestSite, RunAction::SmithCard { idx }) => self.do_smith_card_at(idx),
-            (Phase::Event, RunAction::EventChoice { idx }) => self.do_event_choice(idx),
+            (Phase::Event, RunAction::EventChoice { idx }) => {
+                if self.event_choice_refused(idx) {
+                    ActionResult::InvalidForPhase
+                } else {
+                    self.do_event_choice(idx)
+                }
+            }
             (Phase::Treasure, RunAction::CollectTreasure) => {
                 // Open the chest. `enter_treasure` queued the relic via
                 // `offer_relic_rewards`; surface it on the standard relic-reward
@@ -4800,6 +4825,27 @@ impl RunManager {
         ActionResult::Advanced
     }
 
+    /// Whether the active event's option `idx` is enabled (the
+    /// `event_option_enabled` callback; unwired, every option is).
+    fn event_option_enabled(&self, idx: usize) -> bool {
+        self.callbacks
+            .event_option_enabled
+            .map_or(true, |f| f(&self.run_state, idx))
+    }
+
+    /// A disabled event option is refused while another is enabled (the
+    /// host refuses a disabled option and leaves the run as it was).
+    fn event_choice_refused(&self, idx: usize) -> bool {
+        if self.event_option_enabled(idx) {
+            return false;
+        }
+        let n = self
+            .callbacks
+            .event_option_count
+            .map_or(0, |f| f(&self.run_state));
+        (0..n).any(|i| self.event_option_enabled(i))
+    }
+
     fn do_event_choice(&mut self, idx: usize) -> ActionResult {
         // Bead `sts2-rs-26qg3`: snapshot the current map coord BEFORE the
         // event resolver runs so we can re-write `current_room` with a
@@ -4827,9 +4873,7 @@ impl RunManager {
         // queued rewards, so a fatal Rip ends the run instead of opening a
         // phantom card-reward (parity RP45: hp 4 − 5 = dead, C# game_over vs
         // Rust card_reward).
-        // An option that abandons the run (Trial's DOUBLE_DOWN, resolved
-        // anyway) set `is_over` itself: the run ends here, lost.
-        if self.run_state.current_hp <= 0 || self.run_state.is_over {
+        if self.run_state.current_hp <= 0 {
             self.run_state.is_over = true;
             self.run_state.player_won = false;
             self.phase = Phase::RunOver;

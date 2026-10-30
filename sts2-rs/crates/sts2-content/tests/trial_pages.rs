@@ -184,16 +184,46 @@ fn merchant_guilty_adds_regret_and_two_relics_and_noble_guilty_heals_ten() {
     assert_eq!(rm.run_state.current_event, None, "finished");
 }
 
-/// The game's `DoubleDown` opens the abandon-run popup, and confirming it ends the
-/// run, lost. The engine has no popup: DOUBLE_DOWN stays listed disabled (the host's
-/// agent mode), and if it is resolved anyway the run is abandoned. Before, it left the
-/// REJECT page as it was, so an agent picking it (the engine smoke's reference AI,
-/// seeds 2 and 4) chose it forever.
+/// DOUBLE_DOWN is disabled, as the host's agent mode lists it (abandons_run): the
+/// engine offers no action for it, and an explicit pick is refused with the run as
+/// it was (the host's scenario trial_double_down_unavailable). At 1227441 the engine
+/// listed it and, picked, left the page as it was, so the engine smoke's reference
+/// AI (seeds 2 and 4) chose it forever.
 #[test]
-fn double_down_resolved_anyway_abandons_the_run() {
+fn double_down_is_not_offered_and_an_explicit_pick_is_refused() {
     let mut rm = in_trial("1");
     choose(&mut rm, 1);
-    choose(&mut rm, 1);
-    assert_eq!(rm.phase(), Phase::RunOver);
-    assert!(rm.is_over() && !rm.run_state.player_won);
+    assert_eq!(
+        rm.get_available_actions(),
+        vec![RunAction::EventChoice { idx: 0 }],
+        "only ACCEPT, at its own index"
+    );
+    let (hp, gold, deck) = (
+        rm.run_state.current_hp,
+        rm.run_state.gold,
+        rm.run_state.master_deck.len(),
+    );
+    assert_eq!(
+        rm.take_action(RunAction::EventChoice { idx: 1 }),
+        ActionResult::InvalidForPhase
+    );
+    assert_eq!(rm.phase(), Phase::Event);
+    assert!(!rm.is_over());
+    assert_eq!(
+        (
+            rm.run_state.current_hp,
+            rm.run_state.gold,
+            rm.run_state.master_deck.len()
+        ),
+        (hp, gold, deck)
+    );
+    assert_eq!(
+        page(&rm),
+        [
+            ("TRIAL.pages.REJECT.options.ACCEPT", true),
+            ("TRIAL.pages.REJECT.options.DOUBLE_DOWN", false)
+        ]
+    );
+    choose(&mut rm, 0);
+    assert_eq!(page(&rm).len(), 2, "ACCEPT goes on to the case page");
 }

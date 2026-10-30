@@ -520,6 +520,17 @@ pub fn event_option_count_callback(state: &RunState) -> usize {
     present(state).map_or(0, |opts| opts.len())
 }
 
+/// `event_option_enabled` callback for [`sts2_core::run_manager::ContentCallbacks`]
+/// (sts2-agent fork): whether the active event's option `idx` is enabled. An
+/// option out of range, or no active event, counts as enabled (the run manager
+/// then resolves it as before).
+#[must_use]
+pub fn event_option_enabled_callback(state: &RunState, idx: usize) -> bool {
+    present(state)
+        .and_then(|opts| opts.get(idx).map(|o| o.enabled))
+        .unwrap_or(true)
+}
+
 /// `resume_event_after_combat` callback for
 /// [`sts2_core::run_manager::ContentCallbacks`].
 ///
