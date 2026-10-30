@@ -1645,6 +1645,13 @@ pub struct RunState {
     /// ([`crate::run_manager::RunManager::potions_locked`]). sts2-agent fork.
     pub potions_locked: bool,
 
+    /// The max HP of a combat-layout event's monsters (Punch Off, The Lantern
+    /// Key, The Architect), drawn on Niche when its room is entered, as C#'s
+    /// `EventModel.GenerateInternalCombatState` creates them; the event's fight
+    /// takes them from here instead of drawing again. Empty otherwise.
+    /// sts2-agent fork.
+    pub event_layout_hps: Vec<i32>,
+
     /// Set on first map-generation, used by Python to guard re-rolling
     /// the layout. Mirrors Python `RunState._rooms_generated: bool`
     /// (`run_state.py:1397`). Currently a flag holder — the actual
@@ -1955,6 +1962,7 @@ impl Default for RunState {
             melted_relics: std::collections::BTreeSet::new(),
             current_event: None,
             potions_locked: false,
+            event_layout_hps: Vec::new(),
             event_state: crate::events::MultiPageEventState::default(),
             event_combat: None,
             neow_offers: None,
@@ -2584,6 +2592,23 @@ impl RunState {
                 | crate::events::EventId::StoneOfAllTime
                 | crate::events::EventId::RanwidTheElder
         );
+        // `EventRoom.EnterInternal` → `GenerateInternalCombatState`: a
+        // combat-layout event creates its encounter's monsters at once, each
+        // `CreateCreature` drawing its HP on Niche (`SetUniqueMonsterHpValue`).
+        use crate::monsters::MonsterKind;
+        let layout: &[MonsterKind] = match event_id {
+            crate::events::EventId::PunchOff => {
+                &[MonsterKind::PunchConstruct, MonsterKind::PunchConstruct]
+            }
+            crate::events::EventId::TheLanternKey => &[MonsterKind::MysteriousKnight],
+            crate::events::EventId::TheArchitect => &[MonsterKind::Architect],
+            _ => &[],
+        };
+        self.event_layout_hps = if layout.is_empty() {
+            Vec::new()
+        } else {
+            crate::monsters::roll_unique_max_hps(layout, &mut self.rng.niche, self.ascension_level)
+        };
     }
 
     /// Roll the run-start Neow offers if not already cached. Idempotent:

@@ -127,11 +127,19 @@ pub fn build_event_combat(
         EventEncounter::MysteriousKnight => MonsterKind::MysteriousKnight,
         EventEncounter::FakeMerchant => MonsterKind::FakeMerchantMonster,
     };
-    let hp =
+    // A combat-layout event's monster was created, its HP drawn, when its
+    // room was entered (`RunState::bind_event`); the fight reuses it, as C#'s
+    // `EnterCombatWithoutExitingEvent` does (sts2-agent fork).
+    let hp = if matches!(req.encounter, EventEncounter::MysteriousKnight)
+        && !rs.event_layout_hps.is_empty()
+    {
+        rs.event_layout_hps.remove(0)
+    } else {
         sts2_core::monsters::roll_unique_max_hps(&[kind], &mut rs.rng.niche, rs.ascension_level)
             .first()
             .copied()
-            .unwrap_or(0);
+            .unwrap_or(0)
+    };
     let roster = [(kind, MonsterSpawnArgs::None, hp)];
     enter_combat_from_roster(rs, &roster, RoomType::Unknown)
 }
