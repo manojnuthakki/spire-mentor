@@ -3,10 +3,14 @@
 // GameAction.State alone can't say: GameAction.Execute sets Finished in its `finally` whenever
 // the execution task has completed, also when ExecuteAction called Cancel() (State went to
 // Canceled, then to Finished) or threw (GameAction.Exception set; TaskHelper.RunSafely logs and
-// rethrows). So the cancellation is caught as it happens (BeforeCancelled) and the fault read
-// from the action. Depends on GameAction only, so tests/potion-lifecycle drives it against the
-// game's own class.
+// rethrows) or its task was cancelled (an OperationCanceledException: Exception stays null). So
+// the game's own cancellation is caught as it happens (BeforeCancelled), and success is read
+// positively from the execution task (GameAction._executionTask, private: by reflection),
+// never from a missing exception. Depends on GameAction only, so tests/potion-lifecycle drives
+// it against the game's own class.
 
+using System.Reflection;
+using System.Threading.Tasks;
 using MegaCrit.Sts2.Core.Entities.Actions;
 using MegaCrit.Sts2.Core.GameActions;
 
@@ -24,12 +28,18 @@ internal enum SimActionResult
     /// the queue cancels only actions not yet run, so nothing changed.
     /// </summary>
     Canceled,
-    /// <summary>Threw: what it changed before the fault is unknown.</summary>
+    /// <summary>
+    /// Threw, or its execution task was cancelled without the game's Cancel (an interrupted
+    /// effect), or its task can't be read: what it changed is unknown.
+    /// </summary>
     Faulted,
 }
 
 internal sealed class SimActionWatch
 {
+    private static readonly FieldInfo? ExecutionTaskField =
+        typeof(GameAction).GetField("_executionTask", BindingFlags.Instance | BindingFlags.NonPublic);
+
     private bool _cancelled;
 
     /// <summary>Watch <paramref name="action"/>; call before it is enqueued.</summary>
@@ -48,9 +58,20 @@ internal sealed class SimActionWatch
             GameActionState state = Action.State;
             if (state != GameActionState.Finished && state != GameActionState.Canceled)
                 return SimActionResult.Pending;
-            if (Action.Exception != null)
-                return SimActionResult.Faulted;
-            return _cancelled || state == GameActionState.Canceled ? SimActionResult.Canceled : SimActionResult.Done;
+            Task? execution = ExecutionTaskField?.GetValue(Action) as Task;
+            if (execution == null)
+            {
+                // Never ran: cancelled before execution (the queue, or Cancel()); anything else
+                // settled without a task can't be shown to have succeeded.
+                return state == GameActionState.Canceled && _cancelled && ExecutionTaskField != null
+                    ? SimActionResult.Canceled
+                    : SimActionResult.Faulted;
+            }
+            if (!execution.IsCompleted)
+                return SimActionResult.Pending;  // Canceled set mid-execution: wait for the task
+            if (!execution.IsCompletedSuccessfully)
+                return SimActionResult.Faulted;  // threw, or the task was cancelled
+            return _cancelled ? SimActionResult.Canceled : SimActionResult.Done;
         }
     }
 }
