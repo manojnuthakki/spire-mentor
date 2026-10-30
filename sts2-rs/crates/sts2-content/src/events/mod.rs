@@ -236,19 +236,30 @@ pub fn round_tea_party_allowed(state: &RunState) -> bool {
     state.current_hp >= 12
 }
 
-/// `PunchOff`: C# `TotalFloor >= 6`. Rust `total_floor` is ONE LESS than
-/// C#'s `MapPointHistory` floor (Neow uncounted), hence the `+ 1`.
+/// C#'s `TotalFloor` where the game pulls a room's event: `CreateRoom` runs
+/// before the room enters the map point history (`RunManager.EnterMapPointInternal`),
+/// so it counts the rooms before this one, each act's Ancient included. The
+/// engine picks after the map move's `add_visited_coord` has counted this room
+/// in `total_floor`, which counts no Ancient: in act `a` the game's value is
+/// `total_floor + a - 1` (sts2-agent fork).
+#[must_use]
+pub fn game_total_floor_at_pull(state: &RunState) -> i32 {
+    state.total_floor + i32::from(state.act_index) - 1
+}
+
+/// `PunchOff`: C# `TotalFloor >= 6`, read at the pull
+/// ([`game_total_floor_at_pull`]).
 #[must_use]
 pub fn punch_off_allowed(state: &RunState) -> bool {
-    state.total_floor + 1 >= 6
+    game_total_floor_at_pull(state) >= 6
 }
 
 /// `SlipperyBridge`: C# `TotalFloor > 6 && deck.Any(IsRemovable)` (the
-/// deck is never empty of removable cards in practice). Same `+ 1`
-/// floor-base translation as [`punch_off_allowed`].
+/// deck is never empty of removable cards in practice), read at the pull
+/// ([`game_total_floor_at_pull`]).
 #[must_use]
 pub fn slippery_bridge_allowed(state: &RunState) -> bool {
-    state.total_floor + 1 > 6 && !state.master_deck.is_empty()
+    game_total_floor_at_pull(state) > 6 && !state.master_deck.is_empty()
 }
 
 /// `EndlessConveyor`: C# `Gold >= 120`.
@@ -797,28 +808,30 @@ mod tests {
     }
 
     #[test]
-    fn punch_off_needs_total_floor_5() {
-        // gate is `total_floor + 1 >= 6`, i.e. total_floor >= 5.
+    fn punch_off_needs_total_floor_6_at_the_pull() {
+        // act 1: the game's TotalFloor at the pull is the engine's total_floor.
         let mut rs = RunState::new();
-        rs.total_floor = 4;
-        assert!(!punch_off_allowed(&rs)); // 4+1=5 < 6
+        rs.act_index = 1;
         rs.total_floor = 5;
-        assert!(punch_off_allowed(&rs)); // 5+1=6 boundary (kills `>=`→`<`, `+`→`-`/`*`)
+        assert!(!punch_off_allowed(&rs));
+        rs.total_floor = 6;
+        assert!(punch_off_allowed(&rs)); // boundary (kills `>=`→`<`)
     }
 
     #[test]
     fn slippery_bridge_needs_floor_over_6_and_nonempty_deck() {
-        // gate is `total_floor + 1 > 6` (total_floor >= 6) AND deck non-empty.
+        // act 1: gate is `total_floor > 6` AND deck non-empty.
         let mut rs = RunState::new();
+        rs.act_index = 1;
         rs.master_deck.push(deck_card(
             CardId::StrikeIronclad,
             CardType::Attack,
             sts2_core::cards::CardTags::NONE,
         ));
-        rs.total_floor = 5;
-        assert!(!slippery_bridge_allowed(&rs)); // 5+1=6 not > 6 (kills `>`→`>=`/`==`, `+`→`-`/`*`)
         rs.total_floor = 6;
-        assert!(slippery_bridge_allowed(&rs)); // 6+1=7 > 6 (kills `>`→`<`)
+        assert!(!slippery_bridge_allowed(&rs)); // 6 not > 6 (kills `>`→`>=`/`==`)
+        rs.total_floor = 7;
+        assert!(slippery_bridge_allowed(&rs)); // 7 > 6 (kills `>`→`<`)
         rs.master_deck.clear();
         assert!(!slippery_bridge_allowed(&rs)); // empty deck (kills `delete !`, `&&`→`||`)
     }

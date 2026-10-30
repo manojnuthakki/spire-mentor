@@ -1731,9 +1731,8 @@ const PUNCHOFF_OPTIONS: &[EventOptionSpec] = &[
     },
 ];
 
-/// `PunchOff` spec. Pin: `shared.py:1268`. `is_allowed`'s
-/// `total_floor >= 6` precondition deferred (no `total_floor` field
-/// on RunState yet).
+/// `PunchOff` spec. Pin: `shared.py:1268`. `is_allowed`: C#
+/// `TotalFloor >= 6` at the pull ([`punch_off_allowed`]).
 pub const PUNCH_OFF: EventSpec = EventSpec {
     id: EventId::PunchOff,
     python_name: "PunchOff",

@@ -483,7 +483,7 @@ fn slippery_bridge_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptio
 pub const SLIPPERY_BRIDGE: EventSpec = EventSpec {
     id: EventId::SlipperyBridge,
     python_name: "SlipperyBridge",
-    // C# `TotalFloor > 6 && deck.Any(IsRemovable)` (Rust total_floor + 1).
+    // C# `TotalFloor > 6 && deck.Any(IsRemovable)` (read at the pull: `game_total_floor_at_pull`).
     is_allowed: slippery_bridge_allowed,
     generate_options: slippery_bridge_options,
     options: SLIPPERY_BRIDGE_OPTIONS,
