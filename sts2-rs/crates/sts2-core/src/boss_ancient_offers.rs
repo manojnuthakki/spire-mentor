@@ -53,9 +53,8 @@ pub struct AncientConditions {
     pub num_other_characters: usize,
     /// Orobas `OptionPool3`: TouchOfOrobas / ArchaicTooth, each present iff
     /// its `SetupForPlayer` holds (a starter relic / transcendence starter
-    /// card exists). Computed content-side; never empty in practice
-    /// (TouchOfOrobas's starter relic always exists), so the C# LOCKED
-    /// placeholder is unreachable here.
+    /// card exists), from `RunState::orobas_pool3`. Never empty: the C#
+    /// LOCKED placeholder (neither holds) isn't modelled.
     pub orobas_pool3: Vec<RelicId>,
     /// Darv: PandorasBox is offered unless a run modifier clears the deck
     /// (`!Modifiers.Any(ClearsPlayerDeck)`). Standard runs → `true`.

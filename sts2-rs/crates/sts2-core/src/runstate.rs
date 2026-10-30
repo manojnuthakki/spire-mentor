@@ -4052,6 +4052,52 @@ impl RunState {
         crate::boss_ancient_offers::roll_offers(ancient, &mut rng, &cond)
     }
 
+    /// Orobas's `OptionPool3`: Touch of Orobas when a Starter relic is held
+    /// (`TouchOfOrobas.SetupForPlayer`), Archaic Tooth when the deck holds a
+    /// card it transcends (`ArchaicTooth.SetupForPlayer`: Bash, Neutralize,
+    /// Unleash, Falling Star, Dualcast). The game's LOCKED placeholder for
+    /// neither (only a removed starter relic and no such card) isn't modelled:
+    /// Touch of Orobas stands in, the draw unchanged (sts2-agent fork).
+    fn orobas_pool3(&self) -> Vec<RelicId> {
+        use crate::cards::CardId;
+        let starter = self.relics.iter().any(|r| {
+            matches!(
+                r,
+                RelicId::BurningBlood
+                    | RelicId::BlackBlood
+                    | RelicId::RingOfTheSnake
+                    | RelicId::RingOfTheDrake
+                    | RelicId::CrackedCore
+                    | RelicId::InfusedCore
+                    | RelicId::BoundPhylactery
+                    | RelicId::PhylacteryUnbound
+                    | RelicId::DivineRight
+                    | RelicId::DivineDestiny
+            )
+        });
+        let transcendable = self.master_deck.iter().any(|c| {
+            matches!(
+                c.card_id,
+                CardId::Bash
+                    | CardId::Neutralize
+                    | CardId::Unleash
+                    | CardId::FallingStar
+                    | CardId::Dualcast
+            )
+        });
+        let mut pool = Vec::new();
+        if starter {
+            pool.push(RelicId::TouchOfOrobas);
+        }
+        if transcendable {
+            pool.push(RelicId::ArchaicTooth);
+        }
+        if pool.is_empty() {
+            pool.push(RelicId::TouchOfOrobas);
+        }
+        pool
+    }
+
     /// Deck/run predicates the Ancient `GenerateInitialOptions` methods read.
     /// `act_index_0based` is the next act's `CurrentActIndex` (Darv gate).
     fn compute_ancient_conditions(
@@ -4109,10 +4155,7 @@ impl RunState {
             // Headless `UnlockState.all` exposes all 5 characters; the
             // SeaGlass pick draws from the 4 that aren't the player's.
             num_other_characters: 4,
-            // TouchOfOrobas's starter relic always exists; ArchaicTooth's
-            // transcendence starter card is assumed present (Ironclad). The
-            // C# LOCKED placeholder is therefore unreachable.
-            orobas_pool3: vec![RelicId::TouchOfOrobas, RelicId::ArchaicTooth],
+            orobas_pool3: self.orobas_pool3(),
             // Standard runs carry no deck-clearing modifier.
             pandoras_allowed: true,
             tezcatara_basic_strike,
