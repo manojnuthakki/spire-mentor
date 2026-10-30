@@ -1978,12 +1978,15 @@ fn trial_reject(state: &mut RunState) -> EventOutcome {
     trial_not_finished("Reconsider.")
 }
 
-fn trial_double_down(_state: &mut RunState) -> EventOutcome {
-    // C# `DoubleDown` only opens the abandon-run confirm popup (confirm
-    // abandons the run, cancel stays on this page); the engine has no
-    // abandon, so the option is presented disabled and, if resolved anyway,
-    // leaves the page as it is.
-    trial_not_finished("Double down.")
+fn trial_double_down(state: &mut RunState) -> EventOutcome {
+    // C# `DoubleDown` opens the abandon-run confirm popup; confirming it ends
+    // the run, lost. The engine has no popup: the option is presented disabled
+    // (the host's agent mode) and, if resolved anyway, abandons the run
+    // (`do_event_choice` ends it on `is_over`). Leaving the page as it was let
+    // an agent pick it forever.
+    state.is_over = true;
+    state.player_won = false;
+    EventOutcome::finished("Double down: the run is abandoned.")
 }
 
 fn trial_merchant_guilty(state: &mut RunState) -> EventOutcome {

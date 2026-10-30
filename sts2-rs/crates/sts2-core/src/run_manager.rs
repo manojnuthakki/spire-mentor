@@ -4827,7 +4827,9 @@ impl RunManager {
         // queued rewards, so a fatal Rip ends the run instead of opening a
         // phantom card-reward (parity RP45: hp 4 − 5 = dead, C# game_over vs
         // Rust card_reward).
-        if self.run_state.current_hp <= 0 {
+        // An option that abandons the run (Trial's DOUBLE_DOWN, resolved
+        // anyway) set `is_over` itself: the run ends here, lost.
+        if self.run_state.current_hp <= 0 || self.run_state.is_over {
             self.run_state.is_over = true;
             self.run_state.player_won = false;
             self.phase = Phase::RunOver;

@@ -183,3 +183,17 @@ fn merchant_guilty_adds_regret_and_two_relics_and_noble_guilty_heals_ten() {
     assert_eq!(rm.run_state.current_hp, 40);
     assert_eq!(rm.run_state.current_event, None, "finished");
 }
+
+/// The game's `DoubleDown` opens the abandon-run popup, and confirming it ends the
+/// run, lost. The engine has no popup: DOUBLE_DOWN stays listed disabled (the host's
+/// agent mode), and if it is resolved anyway the run is abandoned. Before, it left the
+/// REJECT page as it was, so an agent picking it (the engine smoke's reference AI,
+/// seeds 2 and 4) chose it forever.
+#[test]
+fn double_down_resolved_anyway_abandons_the_run() {
+    let mut rm = in_trial("1");
+    choose(&mut rm, 1);
+    choose(&mut rm, 1);
+    assert_eq!(rm.phase(), Phase::RunOver);
+    assert!(rm.is_over() && !rm.run_state.player_won);
+}
