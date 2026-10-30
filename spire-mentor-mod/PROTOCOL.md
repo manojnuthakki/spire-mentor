@@ -107,6 +107,7 @@ identical everywhere.
 | `is_removable` | bool | `CardModel.IsRemovable` (`!Keywords.Contains(Eternal)`) -- the game's own verdict on whether the card can appear on a removal screen, which is the ONLY filter `CardSelectCmd.FromDeckForRemoval` applies. Clients building a per-deck-card removal action set must use this rather than reconstructing it from the id plus `enchantment`: the keyword set it reads is not otherwise on the wire (GH #592). |
 | `upgraded` | bool | **Only present (as `true`) if upgraded** -- legacy field, kept for backward compatibility; prefer `upgrade_level`. |
 | `exhaust` / `innate` / `retain` / `ethereal` | bool | Keyword flags (from `CardModel.Keywords`, which already folds in hook-granted keywords like Hex-applied Ethereal). |
+| `unplayable` / `eternal` | bool | *(sts2-agent fork)* The same keyword flags for Unplayable (curses, most statuses; also on cards outside the hand, where `unplayable_reason` isn't sent) and Eternal (`is_removable` is its negation). |
 | `will_exhaust` | bool | `ExhaustOnNextPlay` -- a one-off exhaust flag independent of the `exhaust` keyword. |
 | `will_retain` | bool | `ShouldRetainThisTurn` -- single-turn retain, independent of the `retain` keyword. |
 | `is_curse` / `is_status` | bool | `type == Curse` / `type == Status`. |
@@ -238,6 +239,7 @@ Sent once per card-play decision (~4x/s during combat).
 | `available_actions` | string[] | `["PLAY","END_TURN"]` plus `"POTION"` iff any potion slot has `can_use=true`. |
 | `round` | int | `CombatState.RoundNumber`. |
 | `room_type` | string | The live `RunState.CurrentRoom.RoomType` (`Monster`\|`Elite`\|`Boss`\|`Event`\|...), same enum string the headless `RunContext` emits as `context.room_type`. The client maps `"Elite"` onto the engine's `is_elite` flag (an eval-net feature). Defaults to `"Combat"` when no room is known. |
+| `settled` | bool | *(sts2-agent fork)* True when nothing was moving while the board was built: the last card play or potion use the agent asked for has ended (finished, cancelled or faulted; not executing, parked on a selection or resuming after one), no card selection is open and the game's action executor has nothing ready to run. The handler waits for it before each board (the time a selection stays open isn't counted; otherwise up to 2 s), so a play or potion that opened a selection is followed by a board built after it ended. False only when that wait ran out: read the board again (any verb with a stale `state_id`). |
 | `player.stars` | int | **Regent only** (same condition as headless `RunSimulator.CombatPlayState`: `pcs.Stars >= 0` and character `REGENT`). The star economy for star-cost cards; the client hoists it to the headless dialect's top-level `stars`. |
 
 ### `map_select`

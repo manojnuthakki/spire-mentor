@@ -349,6 +349,11 @@ public static class SimStateExtractor
             ["innate"] = card.Keywords.Contains(CardKeyword.Innate),
             ["retain"] = card.Keywords.Contains(CardKeyword.Retain),
             ["ethereal"] = card.Keywords.Contains(CardKeyword.Ethereal),
+            // sts2-agent fork (D1b): the two keywords the flags above left out. Without them a
+            // consumer could only infer Unplayable (from unplayable_reason in hand, a missing
+            // base cost elsewhere) and never see Eternal (a curse no removal takes: Greed).
+            ["unplayable"] = card.Keywords.Contains(CardKeyword.Unplayable),
+            ["eternal"] = card.Keywords.Contains(CardKeyword.Eternal),
             ["will_exhaust"] = SafeBool(() => card.ExhaustOnNextPlay),
             ["will_retain"] = SafeBool(() => card.ShouldRetainThisTurn),
             // GH #370. The Sly twins of `retain` / `will_retain` above. `sly`

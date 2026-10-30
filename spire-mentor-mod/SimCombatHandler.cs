@@ -61,6 +61,7 @@ public class SimCombatHandler : IRoomHandler, IHandler
         await WaitHelper.Until(() => CombatManager.Instance.IsInProgress, ct,
             SimConfig.Instance.Scaled(AutoSlayConfig.nodeWaitTimeout), "Combat never started");
         Logger.Log("[SimCombat] Combat started");
+        _lastAction = null;
 
         Player player = LocalContext.GetMe(RunManager.Instance.DebugOnlyGetState())
             ?? throw new InvalidOperationException("SimCombat: no local player in the run state");
@@ -111,6 +112,7 @@ public class SimCombatHandler : IRoomHandler, IHandler
             if (actionsTaken > 0 && actionsTaken % WatchdogRefreshEveryActions == 0)
                 SimAutoSlayer.CurrentWatchdog?.Reset($"Combat turn {turn}, played {actionsTaken} cards");
 
+            await AwaitSettledAsync(player, ct);
             (string stateJson, long stateId) = SerializeCombatState(player);
             string reply = await SimAgentGate.RequestActionAsync(stateJson, ct, "combat_action");
             bool endedTurn = await ExecuteAgentAction(reply, player, stateId, ct);
@@ -408,6 +410,7 @@ public class SimCombatHandler : IRoomHandler, IHandler
         int handBefore = PileType.Hand.GetPile(player).Cards.Count;
 
         var action = new PlayCardAction(card, target);
+        _lastAction = new SimActionWatch(action);
         RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(action);
 
         // A free card that draws its own replacement changes neither signal,
@@ -422,6 +425,51 @@ public class SimCombatHandler : IRoomHandler, IHandler
         {
             Logger.Log($"[SimCombat] WARNING: {card.Id.Entry} still resolving after {ResolutionSettleMs}ms; " +
                        "the next state may be mid-resolution");
+        }
+    }
+
+    /// <summary>The last card play or potion use the agent asked for in this fight (<see cref="SimCombatSettle"/>).</summary>
+    private static SimActionWatch? _lastAction;
+
+    /// <summary>Whether the board is settled now (combat_action's <c>settled</c>; <see cref="SimCombatSettle"/>).</summary>
+    private static bool IsSettled()
+    {
+        try
+        {
+            return SimCombatSettle.Settled(_lastAction, SimCardSelector.SelectionOpen,
+                RunManager.Instance.ActionExecutor.IsRunning);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log($"[SimCombat] settled probe: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Waits, before the board is serialized, until it is settled (or the turn or the fight is over).
+    /// A play or potion that opened a selection returns from its own settle wait as the selection
+    /// opens; the agent answers it on the card selector's path, and only then does the action resume
+    /// and end. The time a selection stays open is the agent's and doesn't count; otherwise the wait
+    /// gives up after <see cref="ResolutionSettleMs"/> and the board goes out with <c>settled</c>
+    /// false (the agent reads it again).
+    /// </summary>
+    private static async Task AwaitSettledAsync(Player player, CancellationToken ct)
+    {
+        int waited = 0;
+        while (!IsSettled() && IsPlayerInPlayPhase(player) && CombatManager.Instance.IsInProgress)
+        {
+            if (SimCardSelector.SelectionOpen)
+                waited = 0;
+            else if (waited >= ResolutionSettleMs)
+            {
+                Logger.Log($"[SimCombat] WARNING: the board is still not settled after {ResolutionSettleMs}ms " +
+                           $"(last action {_lastAction?.Action.State}); sent with settled false");
+                return;
+            }
+            else
+                waited += FrameSettleMs;
+            await Task.Delay(FrameSettleMs, ct);
         }
     }
 
@@ -482,6 +530,7 @@ public class SimCombatHandler : IRoomHandler, IHandler
         Player player, PotionModel potion, int slot, Creature? target, CancellationToken ct)
     {
         var action = new UsePotionAction(potion, target, CombatManager.Instance.IsInProgress);
+        _lastAction = new SimActionWatch(action);
         RunManager.Instance.ActionQueueSynchronizer.RequestEnqueue(action);
 
         // The slot empties at the very start of the use.
@@ -672,9 +721,12 @@ public class SimCombatHandler : IRoomHandler, IHandler
     {
         try
         {
+            // Read before and after the board: settled true means nothing was moving while it was built.
+            bool settledBefore = IsSettled();
             Dictionary<string, object>? state = BuildCombatState(player);
             if (state == null)
                 return (SerializationFailedJson, -1);
+            state["settled"] = settledBefore && IsSettled();
             return (JsonSerializer.Serialize(state), (long)state["state_id"]);
         }
         catch (Exception ex)
