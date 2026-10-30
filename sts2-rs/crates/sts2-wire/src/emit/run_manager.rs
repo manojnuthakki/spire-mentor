@@ -1074,7 +1074,9 @@ pub fn reward_screen(rm: &RunManager) -> Value {
                             format!("RELIC.{}", relic.relic_id.to_python_name()),
                         );
                     }
-                    ScreenReward::Card { options, upgraded } => {
+                    ScreenReward::Card {
+                        options, upgraded, ..
+                    } => {
                         set(&mut d, "type", "card");
                         let opts: Vec<Value> = options
                             .iter()

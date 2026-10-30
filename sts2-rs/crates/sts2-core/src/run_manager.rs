@@ -711,6 +711,11 @@ pub enum ScreenReward {
     Card {
         options: Vec<crate::cards::CardId>,
         upgraded: Vec<bool>,
+        /// C# `CardReward` listens to `RelicObtained` until it is opened
+        /// (`OnSelect`) or skipped: a relic obtained meanwhile modifies its
+        /// options ([`RunManager::modify_card_rewards_for_obtained_relic`]).
+        /// sts2-agent fork.
+        hooked: bool,
     },
     /// C# `SpecialCardReward`: this card is added to the deck when claimed
     /// (Swipe's returned card).
@@ -2743,6 +2748,7 @@ impl RunManager {
             screen.push(ScreenReward::Card {
                 options: std::mem::take(&mut self.card_reward_options),
                 upgraded: std::mem::take(&mut self.card_reward_upgraded),
+                hooked: true,
             });
         }
         for extra in std::mem::take(&mut self.run_state.room_extra_rewards) {
@@ -2804,7 +2810,11 @@ impl RunManager {
             OfferedReward::Card {
                 options: Some(options),
                 upgraded,
-            } => ScreenReward::Card { options, upgraded },
+            } => ScreenReward::Card {
+                options,
+                upgraded,
+                hooked: true,
+            },
             OfferedReward::Card { options: None, .. } => {
                 // A non-combat card reward (`CardCreationSource.Other`): base
                 // odds, no pity (the same roller `drain_pending_rewards` uses).
@@ -2817,7 +2827,11 @@ impl RunManager {
                 if options.is_empty() {
                     return None;
                 }
-                ScreenReward::Card { options, upgraded }
+                ScreenReward::Card {
+                    options,
+                    upgraded,
+                    hooked: true,
+                }
             }
             OfferedReward::RoomCard => {
                 let roller = self.callbacks.generate_card_reward_options?;
@@ -2826,7 +2840,11 @@ impl RunManager {
                 if options.is_empty() {
                     return None;
                 }
-                ScreenReward::Card { options, upgraded }
+                ScreenReward::Card {
+                    options,
+                    upgraded,
+                    hooked: true,
+                }
             }
             OfferedReward::SpecialCard(card) => ScreenReward::SpecialCard { card },
             OfferedReward::RemoveCard => ScreenReward::RemoveCard,
@@ -2972,13 +2990,26 @@ impl RunManager {
                 // (Small Capsule's) opens over this one.
                 self.run_state.relic_rewards.push(relic);
                 let last = self.run_state.relic_rewards.len() - 1;
-                let _ = self.run_state.accept_relic_reward(last);
+                if let Some(id) = self.run_state.accept_relic_reward(last) {
+                    self.modify_card_rewards_for_obtained_relic(id);
+                }
                 // What its pickup queued the engine's own way (a choose
                 // screen, a bundle, a card or potion reward) comes up over
                 // the screen.
                 self.advance_after_card_reward();
             }
-            ScreenReward::Card { options, upgraded } => {
+            ScreenReward::Card {
+                options, upgraded, ..
+            } => {
+                // Opened: C# unsubscribes it from `RelicObtained` at the end
+                // of `OnSelect`, whether a card is taken or not.
+                if let Some(ScreenReward::Card { hooked, .. }) = self
+                    .reward_sets
+                    .last_mut()
+                    .and_then(|set| set.rewards.get_mut(idx))
+                {
+                    *hooked = false;
+                }
                 self.card_reward_options = options;
                 self.card_reward_upgraded = upgraded;
                 self.screen_card_claim = Some(idx);
@@ -3025,6 +3056,45 @@ impl RunManager {
         self.remove_screen_reward(claim);
         self.phase = Phase::CardReward;
         ActionResult::Advanced
+    }
+
+    /// C# `CardReward.OnRelicObtained`: every card reward still listening
+    /// (rolled, not yet opened or skipped) applies the obtained relic's own
+    /// `TryModifyCardRewardOptionsLate` to the cards it rolled (Frozen, Molten
+    /// and Toxic Egg upgrade theirs). Its early `TryModifyCardRewardOptions`
+    /// has one user, Lasting Candy, which does nothing on its pickup
+    /// (`CombatsSeen == 0`). sts2-agent fork.
+    fn modify_card_rewards_for_obtained_relic(&mut self, relic: crate::relics::RelicId) {
+        let Some(late) = crate::run_effects::lookup_modify_card_reward_options_late(relic) else {
+            return;
+        };
+        let Some(factory) = crate::lookup_card_factory() else {
+            return;
+        };
+        for s in 0..self.reward_sets.len() {
+            for r in 0..self.reward_sets[s].rewards.len() {
+                let ScreenReward::Card {
+                    options,
+                    upgraded,
+                    hooked: true,
+                } = &self.reward_sets[s].rewards[r]
+                else {
+                    continue;
+                };
+                let mut cards: Vec<crate::cards::Card> = options
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, id)| factory(*id, upgraded.get(i).copied().unwrap_or(false)))
+                    .collect();
+                if cards.len() != options.len() {
+                    continue;
+                }
+                let _ = late(&mut self.run_state, &mut cards);
+                if let ScreenReward::Card { upgraded, .. } = &mut self.reward_sets[s].rewards[r] {
+                    *upgraded = cards.iter().map(|c| c.upgraded).collect();
+                }
+            }
+        }
     }
 
     fn remove_screen_reward(&mut self, idx: usize) {
@@ -6301,6 +6371,7 @@ mod tests {
         let mut rm = screen_rm(vec![ScreenReward::Card {
             options: options.clone(),
             upgraded: vec![false, true],
+            hooked: true,
         }]);
         assert_eq!(
             rm.take_action(RunAction::ClaimReward { idx: 0 }),
