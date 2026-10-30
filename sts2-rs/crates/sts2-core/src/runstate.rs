@@ -272,21 +272,41 @@ pub struct CardReward {
     /// `modify_card_reward_options_late` hook bus mutates this vector
     /// in place.
     pub options: Vec<CardId>,
+    /// C# `CardCreationFlags.NoUpgradeRoll` on an empty reward's options
+    /// (`ForNonCombatWithDefaultOdds` / `ForNonCombatWithUniformOdds`: Glass
+    /// Eye, Trial, Sea Glass): its cards roll no upgrade and draw no upgrade
+    /// float. sts2-agent fork.
+    pub no_upgrade_roll: bool,
 }
 
 impl CardReward {
-    /// Construct an empty `CardReward` (no options).
+    /// Construct an empty `CardReward` (no options), rolled with each card's
+    /// upgrade roll (C# plain `CardCreationOptions`: Orrery, Lost Coffer).
     #[must_use]
     pub fn empty() -> Self {
         Self {
             options: Vec::new(),
+            no_upgrade_roll: false,
+        }
+    }
+
+    /// Construct an empty `CardReward` whose options carry C#
+    /// `CardCreationFlags.NoUpgradeRoll`. sts2-agent fork.
+    #[must_use]
+    pub fn empty_no_upgrade_roll() -> Self {
+        Self {
+            options: Vec::new(),
+            no_upgrade_roll: true,
         }
     }
 
     /// Construct a `CardReward` from the given option list.
     #[must_use]
     pub fn from_options(options: Vec<CardId>) -> Self {
-        Self { options }
+        Self {
+            options,
+            no_upgrade_roll: false,
+        }
     }
 }
 
@@ -739,10 +759,13 @@ pub enum OfferedReward {
         is_wax: bool,
     },
     /// `CardReward`: pre-rolled options (with their offered upgrades, empty
-    /// for none), or `None` to roll a non-combat reward at offer time.
+    /// for none), or `None` to roll a non-combat reward at offer time;
+    /// `no_upgrade_roll` (C# `CardCreationFlags.NoUpgradeRoll`) then rolls
+    /// no upgrade and draws no upgrade float (ignored for pre-rolled options).
     Card {
         options: Option<Vec<CardId>>,
         upgraded: Vec<bool>,
+        no_upgrade_roll: bool,
     },
     /// `CardReward(ForRoom(room))` added to a combat room (The Hunt): rolled
     /// with the room's own card-reward roller.

@@ -1004,6 +1004,7 @@ fn the_future_of_potions_trade(state: &mut RunState, slot: usize) -> EventOutcom
             vec![sts2_core::OfferedReward::Card {
                 options: Some(options),
                 upgraded: vec![true; count],
+                no_upgrade_roll: false,
             }],
             true,
         );

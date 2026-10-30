@@ -99,12 +99,14 @@ fn offer_rolled_relic_set(
 }
 
 /// sts2-agent fork: `n` card rewards rolled when the set opens (non-combat
-/// odds), offered as one set under `interactive_rewards`.
-fn offer_card_reward_set(rs: &mut RunState, n: usize) {
+/// odds), offered as one set under `interactive_rewards`; `no_upgrade_roll`
+/// is C# `CardCreationFlags.NoUpgradeRoll` on the rewards' options.
+fn offer_card_reward_set(rs: &mut RunState, n: usize, no_upgrade_roll: bool) {
     let rewards = (0..n)
         .map(|_| OfferedReward::Card {
             options: None,
             upgraded: Vec::new(),
+            no_upgrade_roll,
         })
         .collect();
     rs.offer_custom_rewards(rewards, true);
@@ -2696,12 +2698,15 @@ fn listener_glass_eye(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::GlassEye) {
         return EffectResult::NotImplemented;
     }
+    // C# `ForNonCombatWithUniformOdds(...)`: `NoUpgradeRoll`, so the cards
+    // roll no upgrade and draw no upgrade float (sts2-agent fork).
     if rs.interactive_rewards {
-        offer_card_reward_set(rs, GLASS_EYE_CARDS);
+        offer_card_reward_set(rs, GLASS_EYE_CARDS, true);
         return EffectResult::Resolved;
     }
     for _ in 0..GLASS_EYE_CARDS {
-        rs.pending_rewards.push(Reward::Card(CardReward::empty()));
+        rs.pending_rewards
+            .push(Reward::Card(CardReward::empty_no_upgrade_roll()));
     }
     EffectResult::Resolved
 }
@@ -2726,6 +2731,7 @@ fn listener_lost_coffer(rs: &mut RunState) -> EffectResult {
                 OfferedReward::Card {
                     options: None,
                     upgraded: Vec::new(),
+                    no_upgrade_roll: false,
                 },
                 OfferedReward::Potion(None),
             ],
@@ -2764,6 +2770,7 @@ fn listener_kaleidoscope(rs: &mut RunState) -> EffectResult {
             .map(|options| OfferedReward::Card {
                 options: Some(options),
                 upgraded: Vec::new(),
+                no_upgrade_roll: false,
             })
             .collect();
         rs.offer_custom_rewards(set, true);
@@ -4068,8 +4075,10 @@ fn listener_sea_glass(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::SeaGlass) {
         return EffectResult::NotImplemented;
     }
+    // C# `ForNonCombatWithUniformOdds(...)`: `NoUpgradeRoll` (sts2-agent fork).
     for _ in 0..SEA_GLASS_CARDS {
-        rs.pending_rewards.push(Reward::Card(CardReward::empty()));
+        rs.pending_rewards
+            .push(Reward::Card(CardReward::empty_no_upgrade_roll()));
     }
     EffectResult::Resolved
 }
@@ -4796,7 +4805,9 @@ fn listener_orrery(rs: &mut RunState) -> EffectResult {
         return EffectResult::NotImplemented;
     }
     if rs.interactive_rewards {
-        offer_card_reward_set(rs, ORRERY_CARDS);
+        // C# plain `CardCreationOptions(..., Other, RegularEncounter)`: each
+        // card rolls its upgrade.
+        offer_card_reward_set(rs, ORRERY_CARDS, false);
         return EffectResult::Resolved;
     }
     for _ in 0..ORRERY_CARDS {

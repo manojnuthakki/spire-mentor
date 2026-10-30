@@ -829,6 +829,7 @@ fn philosopher_pool(state: &mut RunState) -> EventOutcome {
         let card = sts2_core::OfferedReward::Card {
             options: None,
             upgraded: Vec::new(),
+            no_upgrade_roll: false,
         };
         state.offer_custom_rewards(vec![card; 3], true);
         return EventOutcome::finished("Received card rewards from philosopher pool (deferred).");

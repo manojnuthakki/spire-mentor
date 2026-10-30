@@ -89,6 +89,7 @@ fn brain_leech_rip(state: &mut RunState) -> EventOutcome {
             vec![sts2_core::OfferedReward::Card {
                 options: Some(options),
                 upgraded: Vec::new(),
+                no_upgrade_roll: false,
             }],
             true,
         );

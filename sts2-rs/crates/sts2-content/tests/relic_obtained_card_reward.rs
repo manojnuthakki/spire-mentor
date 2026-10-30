@@ -35,6 +35,7 @@ fn screen() -> RunManager {
             OfferedReward::Card {
                 options: Some(vec![CardId::Inflame, CardId::Anger]),
                 upgraded: vec![false, false],
+                no_upgrade_roll: false,
             },
         ],
         true,

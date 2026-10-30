@@ -2021,19 +2021,21 @@ fn trial_noble_innocent(state: &mut RunState) -> EventOutcome {
 
 fn trial_nondescript_guilty(state: &mut RunState) -> EventOutcome {
     // C# `NondescriptGuilty`: Doubt, then `RewardsCmd.OfferCustom` of two
-    // `CardReward(ForNonCombatWithDefaultOdds(character pool), 3)`.
+    // `CardReward(ForNonCombatWithDefaultOdds(character pool), 3)`: its
+    // `NoUpgradeRoll` rolls no upgrade (sts2-agent fork).
     trial_add_curse(state, CardId::Doubt);
     if state.interactive_rewards {
         let card = sts2_core::OfferedReward::Card {
             options: None,
             upgraded: Vec::new(),
+            no_upgrade_roll: true,
         };
         state.offer_custom_rewards(vec![card; TRIAL_PICKS], true);
     } else {
         for _ in 0..TRIAL_PICKS {
             state
                 .pending_rewards
-                .push(Reward::Card(CardReward::empty()));
+                .push(Reward::Card(CardReward::empty_no_upgrade_roll()));
         }
     }
     EventOutcome::finished("Guilty: gained Doubt and two card rewards.")

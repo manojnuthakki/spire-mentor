@@ -348,7 +348,7 @@ fn the_events_offer_their_rewards_as_one_set() {
     ));
     assert!(matches!(
         offered(EventId::TheFutureOfPotions, "trade_0").as_slice(),
-        [O::Card { options: Some(o), upgraded }] if !o.is_empty() && upgraded.iter().all(|u| *u)
+        [O::Card { options: Some(o), upgraded, .. }] if !o.is_empty() && upgraded.iter().all(|u| *u)
     ));
 }
 

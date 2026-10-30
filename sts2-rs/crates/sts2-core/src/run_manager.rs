@@ -415,8 +415,12 @@ pub struct ContentCallbacks {
     /// then flipped a later combat reward's rarity (PARITY132). Consumes the
     /// identical float sequence (1 rarity + 1 pick + 1 upgrade per card) so the
     /// `Rewards` cursor stays aligned. `None` falls back to the pity roller.
+    ///
+    /// sts2-agent fork: `roll_upgrade` is false when the source's C# options
+    /// carry `CardCreationFlags.NoUpgradeRoll` (Glass Eye, Trial): no upgrade
+    /// and no upgrade float (`CardFactory.CreateForReward`).
     pub generate_noncombat_card_reward_options:
-        Option<fn(rs: &mut RunState) -> Vec<crate::cards::CardId>>,
+        Option<fn(rs: &mut RunState, roll_upgrade: bool) -> Vec<crate::cards::CardId>>,
     /// Generate the 3-relic option list for a boss-relic reward.
     pub generate_boss_relic_pool: Option<fn(rs: &mut RunState) -> Vec<crate::RelicId>>,
     /// Apply any `Rewards`-stream side effects of *presenting* a boss-relic /
@@ -2948,19 +2952,20 @@ impl RunManager {
             OfferedReward::Card {
                 options: Some(options),
                 upgraded,
+                ..
             } => ScreenReward::Card {
                 options,
                 upgraded,
                 hooked: true,
             },
-            OfferedReward::Card { options: None, .. } => {
+            OfferedReward::Card {
+                options: None,
+                no_upgrade_roll,
+                ..
+            } => {
                 // A non-combat card reward (`CardCreationSource.Other`): base
                 // odds, no pity (the same roller `drain_pending_rewards` uses).
-                let roller = self
-                    .callbacks
-                    .generate_noncombat_card_reward_options
-                    .or(self.callbacks.generate_card_reward_options)?;
-                let options = roller(&mut self.run_state);
+                let options = self.roll_noncombat_card_reward(!no_upgrade_roll)?;
                 let upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
                 if options.is_empty() {
                     return None;
@@ -3613,6 +3618,22 @@ impl RunManager {
     /// [`Reward::Potion`]: crate::runstate::Reward::Potion
     /// [`Reward::Card`]: crate::runstate::Reward::Card
     /// [`Reward`]: crate::runstate::Reward
+    /// Roll a non-combat card reward's options
+    /// ([`ContentCallbacks::generate_noncombat_card_reward_options`], or the
+    /// pity roller when it is unwired); `roll_upgrade` is false for a source
+    /// whose C# options carry `NoUpgradeRoll`. `None` when no roller is
+    /// wired. sts2-agent fork.
+    fn roll_noncombat_card_reward(
+        &mut self,
+        roll_upgrade: bool,
+    ) -> Option<Vec<crate::cards::CardId>> {
+        if let Some(roller) = self.callbacks.generate_noncombat_card_reward_options {
+            return Some(roller(&mut self.run_state, roll_upgrade));
+        }
+        let roller = self.callbacks.generate_card_reward_options?;
+        Some(roller(&mut self.run_state))
+    }
+
     fn drain_pending_rewards(&mut self) -> bool {
         use crate::runstate::Reward;
         // Walk the queue IN ORDER: C# `RewardsCmd.OfferCustom` populates the
@@ -3631,7 +3652,7 @@ impl RunManager {
             enum Resolve {
                 Potion(Option<crate::potions::PotionKind>),
                 RemoveCard(u32),
-                SurfaceCard(Vec<crate::cards::CardId>),
+                SurfaceCard(Vec<crate::cards::CardId>, bool),
             }
             let queued = match &self.run_state.pending_rewards[i] {
                 Reward::Potion(reward) => Some(Resolve::Potion(reward.potion_kind)),
@@ -3641,7 +3662,10 @@ impl RunManager {
                     // already-populated CardReward — BrainLeech's
                     // colorless 3) surface verbatim; an empty sentinel
                     // rolls at queue position below.
-                    Some(Resolve::SurfaceCard(reward.options.clone()))
+                    Some(Resolve::SurfaceCard(
+                        reward.options.clone(),
+                        !reward.no_upgrade_roll,
+                    ))
                 }
                 Reward::Card(_) => break, // later drain rolls this one
                 _ => None,
@@ -3671,7 +3695,7 @@ impl RunManager {
                     // `CardRemovalReward.OnSelect` → `DoLocalCardRemoval` analog.
                     let _ = self.run_state.remove_cards_from_deck(count as usize);
                 }
-                Resolve::SurfaceCard(pre_resolved) => {
+                Resolve::SurfaceCard(pre_resolved, roll_upgrade) => {
                     if pre_resolved.is_empty() {
                         // Non-combat (`CardCreationSource.Other`) reward: roll
                         // BASE odds, NOT the pity-updating combat roller. These
@@ -3680,12 +3704,9 @@ impl RunManager {
                         // over-accumulated the offset and flipped a later
                         // combat reward's rarity (PARITY132). Falls back to the
                         // pity roller only if the base-odds callback is unwired.
-                        let roller = self
-                            .callbacks
-                            .generate_noncombat_card_reward_options
-                            .or(self.callbacks.generate_card_reward_options);
-                        self.card_reward_options =
-                            roller.map(|f| f(&mut self.run_state)).unwrap_or_default();
+                        self.card_reward_options = self
+                            .roll_noncombat_card_reward(roll_upgrade)
+                            .unwrap_or_default();
                         self.card_reward_upgraded =
                             std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
                     } else {
@@ -6544,6 +6565,7 @@ mod tests {
                     vec![crate::runstate::OfferedReward::Card {
                         options: None,
                         upgraded: Vec::new(),
+                        no_upgrade_roll: false,
                     }],
                     true,
                 );
@@ -8177,7 +8199,7 @@ mod tests {
         fn combat_cards(_rs: &mut RunState) -> Vec<crate::cards::CardId> {
             vec![crate::cards::CardId::Bash]
         }
-        fn noncombat_cards(_rs: &mut RunState) -> Vec<crate::cards::CardId> {
+        fn noncombat_cards(_rs: &mut RunState, _roll_upgrade: bool) -> Vec<crate::cards::CardId> {
             vec![
                 crate::cards::CardId::StrikeIronclad,
                 crate::cards::CardId::DefendIronclad,

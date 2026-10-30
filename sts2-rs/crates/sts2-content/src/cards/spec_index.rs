@@ -1042,11 +1042,18 @@ pub fn roll_infested_touch_core_card(rs: &mut RunState) -> Option<CardId> {
 /// Lens, Glitter, Silver Crucible, Silken Tress; Lava Lamp's needs a combat
 /// room). The upgrade flags go to `rs.card_reward_upgraded_flags` as
 /// [`generate_card_reward_options`](crate::run_callbacks::generate_card_reward_options)'s do.
+///
+/// The upgrade roll is the source's: C# `CreateForReward` rolls it only when
+/// the options lack `CardCreationFlags.NoUpgradeRoll`. Orrery, Lost Coffer and
+/// Colorful Philosophers build options without it (`roll_upgrade`); Glass
+/// Eye's and Sea Glass's `ForNonCombatWithUniformOdds` and Trial's
+/// `ForNonCombatWithDefaultOdds` add it: no upgrade, no upgrade `NextFloat`.
+/// The late hooks run either way.
 #[must_use]
-pub fn roll_noncombat_card_reward_options(rs: &mut RunState) -> Vec<CardId> {
+pub fn roll_noncombat_card_reward_options(rs: &mut RunState, roll_upgrade: bool) -> Vec<CardId> {
     let character = rs.character_id;
     let mut cards: Vec<sts2_core::cards::Card> =
-        roll_reward_cards_base_odds(rs, 3, true, &[character], false)
+        roll_reward_cards_base_odds(rs, 3, roll_upgrade, &[character], false)
             .into_iter()
             .filter_map(|(id, upgraded)| card_pod_from_id(id, upgraded))
             .collect();
