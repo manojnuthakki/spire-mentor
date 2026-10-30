@@ -33,6 +33,9 @@ await Check("cancelled before it runs", _ => Task.CompletedTask, true, true, Sim
 // ExecuteAction is async in every game action: a throw is held by its task.
 await Check("throws", _ => Task.FromException(new InvalidOperationException("effect failed")), true, false, SimActionResult.Faulted);
 await Check("throws after awaiting", async _ => { await Task.Delay(20); throw new InvalidOperationException("late"); }, true, false, SimActionResult.Faulted);
+// A cancelled execution task without the game's Cancel: an interrupted effect, not a success.
+await Check("its task is cancelled", _ => Task.FromCanceled(new CancellationToken(true)), true, false, SimActionResult.Faulted);
+await Check("the effect throws OperationCanceledException", async _ => { await Task.Delay(20); throw new OperationCanceledException("interrupted"); }, true, false, SimActionResult.Faulted);
 Console.WriteLine(failures == 0 ? "all passed" : $"{failures} failed");
 return failures == 0 ? 0 : 1;
 
