@@ -496,8 +496,12 @@ closed first as the game needs and opened again after) or discards it
 (`discard:true`, `DiscardPotionGameAction`), waits until the game's action has
 finished (`GameAction.State`; screens it opens are drained, the decision's own
 left alone), and sends the decision again (a fresh `state_id`). An action the
-game cancels (nothing changed) is answered with the refusal's error; one that
-never finishes ends the run on the watchdog's stall limit. Refused with
+game cancels (nothing changed; caught as it is cancelled, since `State` ends
+`Finished` either way) is answered with the refusal's error; one that throws
+sends `error:"potion_faulted"` and fails the run (`run_complete`
+`"terminated"`: what it changed is unknown); one that never finishes ends the
+run on the watchdog's stall limit (`SimActionOutcome.cs`; its lifecycle test:
+`tests/potion-lifecycle/run.sh`). Refused with
 `error:"potion_not_usable"` or `"potion_not_discardable"` where `use_now` /
 `discard_now` is false,
 `"empty_potion_slot"` for an empty slot, `"malformed_action"` without a

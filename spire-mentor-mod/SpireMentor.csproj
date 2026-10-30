@@ -62,6 +62,10 @@
         Condition="!Exists('$(BaseLibDir)/BaseLib.dll')" />
   </Target>
 
+  <ItemGroup>
+    <!-- The potion action lifecycle test is its own executable (tests/potion-lifecycle). -->
+    <Compile Remove="tests/potion-lifecycle/**" />
+  </ItemGroup>
   <ItemGroup Condition="Exists('$(Sts2DataDir)')">
     <Reference Include="sts2">
       <HintPath>$(Sts2DataDir)/sts2.dll</HintPath>
