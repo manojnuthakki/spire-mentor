@@ -229,8 +229,10 @@ fn ironclad_full_run_act1to3_terminates_and_visits_every_phase_and_room() {
     // shifted every seed-driven path; the old seed 3 no longer routes through
     // every phase/room). Seed 1 covers all 9 phases + 7 room types under the
     // MegaRandom RNG (re-derivable via a panic-skipping seed sweep over
-    // 0..5000).
-    let seed = 1_i32;
+    // 0..5000). sts2-agent fork: seed 36, the first of the same sweep, since
+    // the fork's F5 event and reward fixes moved seed 1's run off a boss
+    // relic pick.
+    let seed = 36_i32;
     let s = drive_run(seed);
 
     // (1) Outcome must resolve.
