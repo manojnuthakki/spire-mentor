@@ -5371,6 +5371,15 @@ pub fn modify_card_cost(
     };
     let power = state.powers.get_by_id(uid.0)?;
     let card_type = ctx.card_type?;
+    // C# `FreeAttackPower` / `FreeSkillPower` / `FreePowerPower` /
+    // `VeilpiercerPower` / `VoidFormPower` act only on a card whose pile is
+    // Hand or Play (a card in the draw, discard or exhaust pile keeps its
+    // cost); a cost asked by type alone (no card) keeps the discount
+    // (sts2-agent fork).
+    let in_hand_or_play = || {
+        ctx.card_uid
+            .map_or(true, |u| card_in_hand_or_play(state, u))
+    };
     match power.kind {
         PowerKind::Corruption => {
             if card_type == CardType::Skill {
@@ -5380,21 +5389,21 @@ pub fn modify_card_cost(
             }
         }
         PowerKind::FreeAttack => {
-            if power.amount > 0 && card_type == CardType::Attack {
+            if power.amount > 0 && card_type == CardType::Attack && in_hand_or_play() {
                 Some(CardCostMod::Override(0))
             } else {
                 None
             }
         }
         PowerKind::FreeSkill => {
-            if power.amount > 0 && card_type == CardType::Skill {
+            if power.amount > 0 && card_type == CardType::Skill && in_hand_or_play() {
                 Some(CardCostMod::Override(0))
             } else {
                 None
             }
         }
         PowerKind::FreePower => {
-            if power.amount > 0 && card_type == CardType::Power {
+            if power.amount > 0 && card_type == CardType::Power && in_hand_or_play() {
                 Some(CardCostMod::Override(0))
             } else {
                 None
@@ -5449,9 +5458,8 @@ pub fn modify_card_cost(
             // costs 0 while Veilpiercer's charges remain (the power is removed
             // at 0 by the per-play decrement in
             // [`dispatch_before_card_played_powers`], ending the effect). The
-            // engine only computes card cost for cards being evaluated in hand
-            // (or the card currently being played), so the C# Hand/Play pile
-            // gate is implicit at this call site. Resolve the costed-card
+            // C# Hand/Play pile gate is `in_hand_or_play` (a card in another
+            // pile is costed for display too). Resolve the costed-card
             // instance via its uid and reuse the canonical ethereal predicate
             // (`card_ethereal_inst` — keyword OR per-instance EtherealThisCombat).
             // Bead `sts2-rs-4wppb`.
@@ -5460,6 +5468,9 @@ pub fn modify_card_cost(
                 return None;
             }
             let cuid = ctx.card_uid?;
+            if !card_in_hand_or_play(state, cuid) {
+                return None;
+            }
             let card = state.cards.iter().find(|c| c.uid == cuid)?;
             if crate::card_effects::card_ethereal_inst(card) {
                 Some(CardCostMod::Override(0))
@@ -5484,7 +5495,8 @@ pub fn modify_card_cost(
             // mirror-low, on the 2026-08-03 live Regent A1 corpus). Read the
             // instance tally that `combat_loop` now maintains instead. Owner-
             // gated to the player. Bead `sts2-rs-jxz`.
-            if owner_of_listener(state, listener) != Some(CreatureRef::Player) {
+            if owner_of_listener(state, listener) != Some(CreatureRef::Player) || !in_hand_or_play()
+            {
                 return None;
             }
             let played = crate::combat_loop::void_form_cards_played_this_turn(state);
@@ -12494,7 +12506,15 @@ pub fn brilliant_scarf_makes_free(
         !r.is_melted
             && r.kind == crate::RelicKind::BrilliantScarf
             && r.counter == BRILLIANT_SCARF_FREE_AFTER
-    }) && (state.player.hand.contains(&card_uid) || state.player.play.contains(&card_uid))
+    }) && card_in_hand_or_play(state, card_uid)
+}
+
+/// The card's pile is Hand or Play (C# `card.Pile?.Type is Hand or Play`), the
+/// gate of the this-turn cost riders (BrilliantScarf, the Free* powers,
+/// Veilpiercer, VoidForm).
+#[must_use]
+pub fn card_in_hand_or_play(state: &CombatState, card_uid: CardUid) -> bool {
+    state.player.hand.contains(&card_uid) || state.player.play.contains(&card_uid)
 }
 
 #[must_use]
@@ -18924,6 +18944,8 @@ mod tests {
         let x_power = mk(3, CardId::Inflame, -1, CardType::Power);
         for c in [power, attack, x_power] {
             state.cards.push(c);
+            // The Free* powers act on a card in hand or play.
+            state.player.hand.push(c.uid);
         }
         assert_eq!(effective_card_cost(&state, power.uid), 2);
         assert_eq!(effective_card_cost(&state, attack.uid), 1);

@@ -12570,7 +12570,8 @@ pub fn effective_star_cost_in_combat(state: &CombatState, card: &crate::cards::C
         return 0;
     }
     let vf_amount = state.player_power_amount(crate::powers::PowerKind::VoidForm);
-    if vf_amount > 0 {
+    // C# `VoidFormPower.ShouldSkip`: only a card in Hand or Play (sts2-agent fork).
+    if vf_amount > 0 && crate::hooks::card_in_hand_or_play(state, card.uid) {
         let played = crate::combat_loop::void_form_cards_played_this_turn(state);
         if crate::powers::regent::void_form_cost_override(vf_amount, played, true).is_some() {
             return 0;
@@ -17420,6 +17421,8 @@ mod tests {
             ..Card::pod_defaults()
         };
         assert_eq!(effective_star_cost(&c), 3, "base DyingStar star cost is 3");
+        // VoidForm acts on a card in hand or play (C# `ShouldSkip`).
+        state.player.hand.push(c.uid);
 
         // The gate reads VoidForm's OWN per-instance tally, held on `counter`.
         let set_tally = |st: &mut CombatState, n: i32| {

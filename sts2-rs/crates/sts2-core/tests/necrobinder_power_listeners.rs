@@ -511,6 +511,8 @@ fn push_ethereal_card(state: &mut CombatState) -> CardUid {
 fn veilpiercer_makes_owned_ethereal_card_cost_zero() {
     let mut state = CombatState::default();
     let eth = push_ethereal_card(&mut state);
+    // The discount holds in hand (C# `Pile.Type` Hand or Play).
+    state.player.hand.push(eth);
     push_player_power(&mut state, PowerKind::Veilpiercer, 2);
 
     let eth_ctx = CardCostCtx {
@@ -534,6 +536,7 @@ fn veilpiercer_makes_owned_ethereal_card_cost_zero() {
         uid: plain_uid,
         ..Card::pod_defaults()
     });
+    state.player.hand.push(plain_uid);
     let plain_ctx = CardCostCtx {
         card_uid: Some(plain_uid),
         ..eth_ctx
@@ -542,6 +545,19 @@ fn veilpiercer_makes_owned_ethereal_card_cost_zero() {
         hooks::dispatch_modify_card_cost(&state, &plain_ctx),
         3,
         "Veilpiercer does not discount a non-Ethereal card"
+    );
+
+    // An Ethereal card in the discard pile keeps its cost (sts2-agent fork).
+    let discarded = push_ethereal_card(&mut state);
+    state.player.discard.push(discarded);
+    let discarded_ctx = CardCostCtx {
+        card_uid: Some(discarded),
+        ..eth_ctx
+    };
+    assert_eq!(
+        hooks::dispatch_modify_card_cost(&state, &discarded_ctx),
+        3,
+        "Veilpiercer does not discount an Ethereal card outside hand and play"
     );
 }
 
