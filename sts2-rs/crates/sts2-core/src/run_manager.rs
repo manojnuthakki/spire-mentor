@@ -877,6 +877,14 @@ pub struct RunManager {
     /// after `OnTryPurchase`, which awaits the obtain and its sets).
     /// sts2-agent fork.
     purchases_after_reward_sets: Vec<(crate::shop::ShopSlot, i32)>,
+    /// Lord's Parasol's purchases on entering a merchant room (C#
+    /// `LordsParasol.PurchaseEverything`), while they run: the next entry,
+    /// over the character cards, the colorless cards, the relics, the potions,
+    /// then the card removal. sts2-agent fork (lords-parasol-purchase).
+    lords_parasol_next: Option<usize>,
+    /// The open card removal is Lord's Parasol's (free, not cancelable): once
+    /// a card is removed the shop's removal is used. sts2-agent fork.
+    lords_parasol_removal: bool,
 }
 
 impl RunManager {
@@ -1044,6 +1052,8 @@ impl RunManager {
             screen_card_claim: None,
             screen_removal_claim: None,
             purchases_after_reward_sets: Vec::new(),
+            lords_parasol_next: None,
+            lords_parasol_removal: false,
         }
     }
 
@@ -1797,6 +1807,7 @@ impl RunManager {
             self.open_offered_reward_sets();
             self.settle_reward_sets();
         }
+        self.drive_lords_parasol();
         result
     }
 
@@ -2146,6 +2157,15 @@ impl RunManager {
                     .generate_shop_inventory
                     .map(|f| f(&mut self.run_state));
                 self.phase = Phase::Shop;
+                // C# `LordsParasol.AfterRoomEntered`: in a `MerchantRoom` its
+                // owner buys everything. sts2-agent fork (lords-parasol-purchase).
+                self.lords_parasol_removal = false;
+                self.lords_parasol_next = (self.shop_inventory.is_some()
+                    && self
+                        .run_state
+                        .owns_active_relic(crate::relics::RelicId::LordsParasol))
+                .then_some(0);
+                self.drive_lords_parasol();
                 ActionResult::Advanced
             }
             crate::runstate::RoomType::RestSite => {
@@ -4029,6 +4049,108 @@ impl RunManager {
         &self.boss_relic_options
     }
 
+    /// Run Lord's Parasol's purchases (C# `LordsParasol.PurchaseEverything`,
+    /// every entry with `OnTryPurchaseWrapper(inventory, ignoreCost: true)`)
+    /// from where they stand until they are done or wait on what a purchase
+    /// opened (a deck pick, the reward sets a relic offered); called again
+    /// after each action. In the game's order: each stocked character card,
+    /// colorless card, relic and potion (a potion with no open slot fails and
+    /// stays stocked), then the card removal, not cancelable. Each completed
+    /// purchase restocks with The Courier and fires the purchase hook with no
+    /// gold spent, as a bought entry does. sts2-agent fork
+    /// (lords-parasol-purchase).
+    fn drive_lords_parasol(&mut self) {
+        while let Some(next) = self.lords_parasol_next {
+            if self.phase != Phase::Shop
+                || self.reward_claim_in_progress()
+                || !self.reward_sets.is_empty()
+                || !self.run_state.offered_reward_sets.is_empty()
+                || self.run_state.pending_choice.is_some()
+            {
+                return;
+            }
+            let Some(inv) = self.shop_inventory.as_mut() else {
+                self.lords_parasol_next = None;
+                return;
+            };
+            let cards = inv.cards.len() + inv.colorless_cards.len();
+            let relics = cards + inv.relics.len();
+            let potions = relics + inv.potions.len();
+            self.lords_parasol_next = Some(next + 1);
+            if next < cards {
+                if crate::shop::buy_card_entry(&mut self.run_state, inv, next, true)
+                    == crate::shop::ShopPurchaseOutcome::Bought
+                {
+                    self.restock_slot_if_courier(crate::shop::ShopSlot::Card(next));
+                }
+            } else if next < relics {
+                let idx = next - cards;
+                if let Ok(gold_spent) = crate::shop::buy_relic_entry_before_purchase_hook(
+                    &mut self.run_state,
+                    inv,
+                    idx,
+                    true,
+                ) {
+                    let purchase = (crate::shop::ShopSlot::Relic(idx), gold_spent);
+                    if self.run_state.offered_reward_sets.is_empty() {
+                        self.finish_relic_purchase(purchase);
+                    } else {
+                        self.purchases_after_reward_sets.push(purchase);
+                    }
+                }
+            } else if next < potions {
+                let idx = next - relics;
+                if crate::shop::buy_potion_entry(&mut self.run_state, inv, idx, true)
+                    == crate::shop::ShopPurchaseOutcome::Bought
+                {
+                    self.restock_slot_if_courier(crate::shop::ShopSlot::Potion(idx));
+                    self.drain_pending_rewards();
+                }
+            } else {
+                // `CardRemovalEntry.OnTryPurchaseWrapper(ignoreCost: true,
+                // cancelable: false)`: a used entry, or a deck with no
+                // removable card, buys nothing.
+                // Without `interactive_card_removal` the first card of the
+                // offer is removed, as `RunState::remove_cards_from_deck` does.
+                self.lords_parasol_next = None;
+                if inv.removal_used {
+                    return;
+                }
+                let Some(&first) = self.run_state.removal_offer_order().first() else {
+                    return;
+                };
+                self.lords_parasol_removal = true;
+                if self.run_state.interactive_card_removal {
+                    self.run_state.pending_deck_removals += 1;
+                } else {
+                    self.run_state.master_deck.remove(first);
+                    self.finish_lords_parasol_removal();
+                }
+                return;
+            }
+            if self.run_state.interactive_rewards {
+                self.open_offered_reward_sets();
+                self.settle_reward_sets();
+            }
+        }
+    }
+
+    /// Lord's Parasol's card removal is done (C# `DoMerchantCardRemoval`:
+    /// `CardShopRemovalsUsed++`; the entry is used; the purchase hook with no
+    /// gold spent). sts2-agent fork (lords-parasol-purchase).
+    fn finish_lords_parasol_removal(&mut self) {
+        self.lords_parasol_removal = false;
+        let Some(inv) = self.shop_inventory.as_mut() else {
+            return;
+        };
+        let rs = &mut self.run_state;
+        rs.card_shop_removals_used = rs.card_shop_removals_used.saturating_add(1);
+        inv.removal_used = true;
+        inv.removal_cost =
+            crate::shop::card_removal_cost(rs.card_shop_removals_used, rs.ascension_level);
+        let _ = crate::run_effects::dispatch_on_item_purchased(rs, 0);
+    }
+
     /// Complete a relic purchase (sts2-agent fork): the `on_item_purchased`
     /// hook (Maw Bank), then The Courier's restock, in the order
     /// [`crate::shop::buy_relic`] runs them. Called at once, or once the reward
@@ -4206,6 +4328,9 @@ impl RunManager {
         };
         self.run_state.master_deck.remove(deck_idx);
         self.run_state.pending_deck_removals -= 1;
+        if self.lords_parasol_removal && self.run_state.pending_deck_removals == 0 {
+            self.finish_lords_parasol_removal();
+        }
         // Once the removal batch fully drains, append any cards a
         // "remove-then-add" event deferred (Wellspring Bathe → Guilty).
         // Deferring kept them out of the removal `card_select` pool so the
@@ -5247,6 +5372,8 @@ impl RunManager {
         self.screen_card_claim = None;
         self.screen_removal_claim = None;
         self.purchases_after_reward_sets.clear();
+        self.lords_parasol_next = None;
+        self.lords_parasol_removal = false;
         self.run_state.pending_rewards.clear();
         self.run_state.relic_rewards.clear();
         self.run_state.offered_reward_sets.clear();

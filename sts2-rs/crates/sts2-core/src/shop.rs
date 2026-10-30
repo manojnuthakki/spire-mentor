@@ -913,6 +913,18 @@ pub fn buy_card(
     inv: &mut ShopInventory,
     index: usize,
 ) -> ShopPurchaseOutcome {
+    buy_card_entry(run_state, inv, index, false)
+}
+
+/// [`buy_card`], or with `ignore_cost` the C# `OnTryPurchaseWrapper(inventory,
+/// ignoreCost: true)` Lord's Parasol uses: no affordability check, no gold
+/// lost, `goldSpent` 0 for the purchase hook. sts2-agent fork.
+pub fn buy_card_entry(
+    run_state: &mut crate::runstate::RunState,
+    inv: &mut ShopInventory,
+    index: usize,
+    ignore_cost: bool,
+) -> ShopPurchaseOutcome {
     let character_len = inv.cards.len();
     let total = character_len + inv.colorless_cards.len();
     if index >= total {
@@ -930,7 +942,11 @@ pub fn buy_card(
     // MembershipCard) to the rolled base before both the affordability check
     // and `LoseGold`; the rolled base (`entry.price`) stays undiscounted so
     // re-reads and the sold-out mark are stable.
-    let price = merchant_price_with_modifiers(&run_state.active_relics(), entry.price);
+    let price = if ignore_cost {
+        0
+    } else {
+        merchant_price_with_modifiers(&run_state.active_relics(), entry.price)
+    };
     if run_state.gold < price {
         return ShopPurchaseOutcome::CannotAfford;
     }
@@ -994,6 +1010,17 @@ pub fn buy_relic_before_purchase_hook(
     inv: &mut ShopInventory,
     index: usize,
 ) -> Result<i32, ShopPurchaseOutcome> {
+    buy_relic_entry_before_purchase_hook(run_state, inv, index, false)
+}
+
+/// [`buy_relic_before_purchase_hook`], or with `ignore_cost` Lord's Parasol's
+/// free purchase (no affordability check, no gold lost, `Ok(0)`). sts2-agent fork.
+pub fn buy_relic_entry_before_purchase_hook(
+    run_state: &mut crate::runstate::RunState,
+    inv: &mut ShopInventory,
+    index: usize,
+    ignore_cost: bool,
+) -> Result<i32, ShopPurchaseOutcome> {
     if index >= inv.relics.len() {
         return Err(ShopPurchaseOutcome::IndexOutOfBounds);
     }
@@ -1002,7 +1029,9 @@ pub fn buy_relic_before_purchase_hook(
         return Err(ShopPurchaseOutcome::SoldOut);
     }
     // The Fake Merchant's entries keep their own price (no `MerchantRoom`).
-    let price = if inv.fake_merchant {
+    let price = if ignore_cost {
+        0
+    } else if inv.fake_merchant {
         entry.price
     } else {
         merchant_price_with_modifiers(&run_state.active_relics(), entry.price)
@@ -1042,6 +1071,17 @@ pub fn buy_potion(
     inv: &mut ShopInventory,
     index: usize,
 ) -> ShopPurchaseOutcome {
+    buy_potion_entry(run_state, inv, index, false)
+}
+
+/// [`buy_potion`], or with `ignore_cost` Lord's Parasol's free purchase (no
+/// affordability check, no gold lost, `goldSpent` 0). sts2-agent fork.
+pub fn buy_potion_entry(
+    run_state: &mut crate::runstate::RunState,
+    inv: &mut ShopInventory,
+    index: usize,
+    ignore_cost: bool,
+) -> ShopPurchaseOutcome {
     if index >= inv.potions.len() {
         return ShopPurchaseOutcome::IndexOutOfBounds;
     }
@@ -1049,7 +1089,11 @@ pub fn buy_potion(
     if !is_shop_entry_available(entry.price) {
         return ShopPurchaseOutcome::SoldOut;
     }
-    let price = merchant_price_with_modifiers(&run_state.active_relics(), entry.price);
+    let price = if ignore_cost {
+        0
+    } else {
+        merchant_price_with_modifiers(&run_state.active_relics(), entry.price)
+    };
     if run_state.gold < price {
         return ShopPurchaseOutcome::CannotAfford;
     }
