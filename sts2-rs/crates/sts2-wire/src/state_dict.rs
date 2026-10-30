@@ -3389,12 +3389,17 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
     ];
     for (uids, cards) in other_piles {
         for (&uid, pc) in uids.iter().zip(cards.iter()) {
-            // This turn's Hand Trick Sly stays on the card in every pile until
-            // the turn's end (C# `IsSlyThisTurn`), as the emit shows it
-            // (sts2-agent fork). `retain_turn` stays hand-only here: the
-            // engine's `retain_this_turn` annotates hand cards.
+            // This turn's Hand Trick Sly and single-turn Retain stay on the card
+            // in every pile until the turn's end (C# `IsSlyThisTurn`,
+            // `ShouldRetainThisTurn`), as the emit shows them and as the live
+            // engine keeps them: a card played after its grant stays in
+            // `retain_this_turn` until the end-of-turn clear, and the retain
+            // flush reads only the hand (sts2-agent fork).
             if pc.flags.iter().any(|f| f == "sly_turn") {
                 state.player.sly_this_turn.push(uid);
+            }
+            if pc.flags.iter().any(|f| f == "retain_turn") {
+                state.player.retain_this_turn.push(uid);
             }
             if pc.flags.iter().any(|f| f == "sly")
                 && !state

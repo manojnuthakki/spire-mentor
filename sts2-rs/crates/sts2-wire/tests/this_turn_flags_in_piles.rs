@@ -90,3 +90,30 @@ fn a_discarded_cards_sly_turn_round_trips() {
         serde_json::json!(["sly_turn"])
     );
 }
+
+/// The rebuild keeps a card's `retain_turn` in every pile, as the emit shows it
+/// (the game's `ShouldRetainThisTurn` lasts the turn wherever the card is), and
+/// the rebuilt state passes the invariants: a card played this turn and drawn
+/// back keeps its Retain.
+#[test]
+fn a_cards_retain_turn_outside_hand_round_trips() {
+    let mut value: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/combat_action_ironclad.json"),
+        )
+        .expect("fixture"),
+    )
+    .expect("json");
+    value["deck"]["draw_pile"][1]["flags"] = serde_json::json!(["retain_turn"]);
+    let state = sts2_wire::state_from_json_str(&value.to_string()).expect("rebuilds");
+    let uid = state.player.draw[1];
+    assert!(state.player.retain_this_turn.contains(&uid));
+    sts2_core::invariants::check_combat_invariants(&state, "retain_turn in the draw pile")
+        .expect("invariants hold");
+    let back = sts2_wire::emit::combat_state_to_value(&state).expect("emits");
+    assert_eq!(
+        back["deck"]["draw_pile"][1]["flags"],
+        serde_json::json!(["retain_turn"])
+    );
+}

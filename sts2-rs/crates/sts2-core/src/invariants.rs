@@ -270,11 +270,28 @@ pub fn check_combat_invariants(state: &CombatState, ctx: &str) -> Result<(), Str
         &state.player.draw,
         "pinned_bottom",
     )?;
-    annotation(
-        &state.player.retain_this_turn,
-        &state.player.hand,
-        "retain_this_turn",
-    )?;
+    // `retain_this_turn` lasts the turn wherever the card goes (C#
+    // `ShouldRetainThisTurn` until `EndOfTurnCleanup`; the live engine keeps a
+    // played card's entry until the end-of-turn clear, and the retain flush
+    // reads only the hand), so it annotates a card in any pile (sts2-agent fork).
+    for u in &state.player.retain_this_turn {
+        ensure!(
+            state.cards.iter().any(|c| c.uid == *u),
+            "card {u:?} in retain_this_turn but not in state.cards arena ({ctx})"
+        );
+        ensure!(
+            [
+                &state.player.hand[..],
+                &state.player.draw[..],
+                &state.player.discard[..],
+                &state.player.exhaust[..],
+                &state.player.play[..],
+            ]
+            .iter()
+            .any(|pile| pile.contains(u)),
+            "card {u:?} in retain_this_turn but in no pile ({ctx})"
+        );
+    }
 
     // 5. Hand cap.
     ensure!(
