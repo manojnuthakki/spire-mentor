@@ -490,18 +490,21 @@ fn pinned_bottom_must_resolve_in_the_arena() {
     );
 }
 
+/// A single-turn Retain lasts the turn wherever the card goes (C#
+/// `ShouldRetainThisTurn` until `EndOfTurnCleanup`; a played card keeps its
+/// entry), so it may annotate a card in any pile, but not one in none
+/// (sts2-agent fork).
 #[test]
-fn retain_this_turn_must_be_in_hand() {
+fn retain_this_turn_must_be_in_a_pile() {
     let mut s = valid_state();
     s.cards
         .push(make_card(1, CardId::StrikeIronclad, 1, CardType::Attack));
     s.player.draw.push(uid(1));
     s.player.retain_this_turn.push(uid(1));
+    check_combat_invariants(&s, "t").expect("a draw-pile card may keep this turn's Retain");
+    s.player.draw.clear();
     let err = check_combat_invariants(&s, "t").unwrap_err();
-    assert!(
-        err.contains("in retain_this_turn but not in the pile it annotates"),
-        "{err}"
-    );
+    assert!(err.contains("in retain_this_turn but in no pile"), "{err}");
 }
 
 // ── check_combat_invariants: hand cap / enemy mirror ───────────────────
