@@ -495,6 +495,20 @@ pub fn resolve_event_at_callback(state: &mut RunState, idx: usize) -> bool {
     resolve_by_index(state, idx).is_some()
 }
 
+/// `bind_event_room` callback for [`sts2_core::run_manager::ContentCallbacks`]
+/// (sts2-agent fork): on entering an event room from the map, pick the act's
+/// next event with [`pick_event`] and enter it, as C# does before the first
+/// page (so its `BeforeEventStarted`, e.g. a belt lock, holds from the start).
+/// No-op when an event is already bound, so [`resolve_event_at_callback`]'s
+/// lazy pick and this never pick twice; [`pick_event`] draws no RNG.
+pub fn bind_event_room_callback(state: &mut RunState) {
+    if state.current_event.is_none() {
+        if let Some(event_id) = pick_event(state, None) {
+            state.enter_event_room(event_id);
+        }
+    }
+}
+
 /// `event_option_count` callback for [`sts2_core::run_manager::ContentCallbacks`].
 ///
 /// Returns the number of options the currently-active event offers.

@@ -2575,7 +2575,9 @@ impl RunState {
         // `BeforeEventStarted`: `Owner.CanRemovePotions = false`.
         self.potions_locked = matches!(
             event_id,
-            crate::events::EventId::TheFutureOfPotions | crate::events::EventId::StoneOfAllTime
+            crate::events::EventId::TheFutureOfPotions
+                | crate::events::EventId::StoneOfAllTime
+                | crate::events::EventId::RanwidTheElder
         );
     }
 

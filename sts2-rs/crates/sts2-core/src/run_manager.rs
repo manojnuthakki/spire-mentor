@@ -462,6 +462,14 @@ pub struct ContentCallbacks {
     /// `RunAction::EventChoice { idx }` per option. Bead
     /// `sts2-rs-nzdz1`.
     pub event_option_count: Option<fn(rs: &RunState) -> usize>,
+    /// Bind the act's next event to an event room the map just entered, when
+    /// none is bound (sts2-agent fork): C# picks the event as the room is
+    /// entered and runs its `BeforeEventStarted` (The Future of Potions',
+    /// Stone of All Time's and Ranwid's belt lock) before the first page. The
+    /// content layer's pick walks the act's event order and draws no RNG; a
+    /// bound event (Neow) is left alone. Unwired, the event is still picked
+    /// lazily at the first choice (`resolve_event_at`).
+    pub bind_event_room: Option<fn(rs: &mut RunState)>,
     /// Build the active [`crate::shop::ShopInventory`] for the shop
     /// room the player just entered. Invoked once on Shop-room entry;
     /// the returned inventory is owned by the [`RunManager`] until
@@ -631,6 +639,7 @@ impl core::fmt::Debug for ContentCallbacks {
             )
             .field("resolve_event_at", &self.resolve_event_at.is_some())
             .field("event_option_count", &self.event_option_count.is_some())
+            .field("bind_event_room", &self.bind_event_room.is_some())
             .field(
                 "generate_shop_inventory",
                 &self.generate_shop_inventory.is_some(),
@@ -2120,6 +2129,9 @@ impl RunManager {
             }
             crate::runstate::RoomType::Treasure => self.resolve_treasure_room(),
             crate::runstate::RoomType::Event => {
+                if let Some(bind) = self.callbacks.bind_event_room {
+                    bind(&mut self.run_state);
+                }
                 self.phase = Phase::Event;
                 ActionResult::Advanced
             }
