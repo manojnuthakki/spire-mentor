@@ -467,13 +467,33 @@ fn slippery_bridge_damage(state: &RunState) -> i32 {
     SLIPPERY_BRIDGE_BASE_DAMAGE + i32::from(state.event_state.page)
 }
 
+/// Loc key of the Hold On option on each page. Page 0 is the INITIAL page's
+/// `HOLD_ON_0`; after N holds C# `SlipperyBridge.HoldOn` sets the page
+/// `HOLD_ON_<N-1>` with the option `HOLD_ON_<N>`, each suffix from
+/// `GetHoldOnSuffix` (the count, or `LOOP` from 7 on), so every page from the
+/// 8th hold on is `HOLD_ON_LOOP.options.HOLD_ON_LOOP`.
+const SLIPPERY_BRIDGE_HOLD_ON_KEYS: [&str; 9] = [
+    "SLIPPERY_BRIDGE.pages.INITIAL.options.HOLD_ON_0",
+    "SLIPPERY_BRIDGE.pages.HOLD_ON_0.options.HOLD_ON_1",
+    "SLIPPERY_BRIDGE.pages.HOLD_ON_1.options.HOLD_ON_2",
+    "SLIPPERY_BRIDGE.pages.HOLD_ON_2.options.HOLD_ON_3",
+    "SLIPPERY_BRIDGE.pages.HOLD_ON_3.options.HOLD_ON_4",
+    "SLIPPERY_BRIDGE.pages.HOLD_ON_4.options.HOLD_ON_5",
+    "SLIPPERY_BRIDGE.pages.HOLD_ON_5.options.HOLD_ON_6",
+    "SLIPPERY_BRIDGE.pages.HOLD_ON_6.options.HOLD_ON_LOOP",
+    "SLIPPERY_BRIDGE.pages.HOLD_ON_LOOP.options.HOLD_ON_LOOP",
+];
+
 fn slippery_bridge_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
     let dmg = SLIPPERY_BRIDGE_BASE_DAMAGE + i32::from(state.event_state.page);
+    let key = SLIPPERY_BRIDGE_HOLD_ON_KEYS
+        [usize::from(state.event_state.page).min(SLIPPERY_BRIDGE_HOLD_ON_KEYS.len() - 1)];
     default_option_info_from_spec(state, spec)
         .into_iter()
         .map(|mut info| {
             if info.option_id == "hold_on" {
                 info.description = format!("Take {dmg} damage, reroll card.");
+                info.loc_key = key;
             }
             info
         })
