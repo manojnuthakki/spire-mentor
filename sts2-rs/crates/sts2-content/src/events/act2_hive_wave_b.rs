@@ -50,9 +50,9 @@ use sts2_core::{
 };
 
 use super::{
-    allowed_act_2_plus, any_enchantable_deck_card, default_option_info_from_spec,
-    future_of_potions_allowed, relic_trader_allowed, slippery_bridge_allowed,
-    stone_of_all_time_allowed, EventOptionSpec, EventSpec,
+    allowed_act_2_plus, default_option_info_from_spec, future_of_potions_allowed,
+    relic_trader_allowed, slippery_bridge_allowed, stone_of_all_time_allowed, EventOptionSpec,
+    EventSpec,
 };
 
 // ── shared helpers ───────────────────────────────────────────────────
@@ -495,12 +495,51 @@ pub const SLIPPERY_BRIDGE: EventSpec = EventSpec {
 /// `act2.py:889`.
 pub const SPIRALING_WHIRLPOOL_HEAL_PCT: i32 = 33;
 
+/// C# `Spiral.CanEnchant`: the base enchant rule and a Basic card tagged
+/// Strike or Defend.
+#[must_use]
+pub fn spiral_can_enchant(c: &sts2_core::cards::Card) -> bool {
+    use sts2_core::cards::{CardTag, CardType};
+    let basic = sts2_core::lookup_card_rarity_rank().map_or(true, |f| f(c.card_id) == 1);
+    !matches!(c.card_type, CardType::Status | CardType::Curse)
+        && c.enchantments.is_empty()
+        && (c.cost >= 0 || c.is_x_cost())
+        && basic
+        && (c.has_tag(CardTag::Strike) || c.has_tag(CardTag::Defend))
+}
+
+/// C# `SpiralingWhirlpool.ObserveTheSpiral`: `FromDeckForEnchantment(Spiral, 1)`
+/// over `Spiral.CanEnchant`, then `Enchant<Spiral>`. The grid auto-takes at
+/// count <= MinSelect(=1), as Sapphire Seed's Plant (sts2-agent fork: the
+/// engine queued a card reward).
 fn spiraling_whirlpool_observe(state: &mut RunState) -> EventOutcome {
-    // Python enchants a deck card with Spiral. Enchant + card-choice
-    // deferred; queue a card-reward placeholder so the run-loop sees
-    // the intent.
-    queue_card_reward(state);
-    EventOutcome::finished("Queued enchant-with-Spiral reward.")
+    use sts2_core::cards::EnchantmentId;
+    let eligible = state
+        .master_deck
+        .iter()
+        .filter(|c| spiral_can_enchant(c))
+        .count();
+    if state.interactive_card_transform && eligible > 1 {
+        state
+            .pending_deck_enchants
+            .push(sts2_core::PendingDeckEnchant {
+                enchantment: EnchantmentId::Spiral,
+                amount: 1,
+                type_restriction: None,
+                secondary_type: None,
+            });
+        EventOutcome::finished("Pick a card to enchant with Spiral.")
+    } else {
+        if let Some(card) = state.master_deck.iter_mut().find(|c| spiral_can_enchant(c)) {
+            card.enchantments.push((EnchantmentId::Spiral, 1));
+        }
+        EventOutcome::finished("Enchanted a card with Spiral.")
+    }
+}
+
+/// `SpiralingWhirlpool.IsAllowed`: C# `deck.Any(Spiral.CanEnchant)`.
+fn spiraling_whirlpool_allowed(state: &RunState) -> bool {
+    state.master_deck.iter().any(spiral_can_enchant)
 }
 
 /// The Drink heal the option advertises: `SPIRALING_WHIRLPOOL_HEAL_PCT`% of
@@ -565,8 +604,7 @@ const SPIRALING_WHIRLPOOL_OPTIONS: &[EventOptionSpec] = &[
 pub const SPIRALING_WHIRLPOOL: EventSpec = EventSpec {
     id: EventId::SpiralingWhirlpool,
     python_name: "SpiralingWhirlpool",
-    // C# `deck.Any(Spiral.CanEnchant)` — base enchant filter approximation.
-    is_allowed: any_enchantable_deck_card,
+    is_allowed: spiraling_whirlpool_allowed,
     generate_options: spiraling_whirlpool_options,
     options: SPIRALING_WHIRLPOOL_OPTIONS,
 };
@@ -2244,19 +2282,16 @@ mod tests {
         assert_eq!(render(&rs), "Take 12 damage, reroll card.");
     }
 
-    /// Kills `spiraling_whirlpool_observe -> Default::default()` (line 191):
-    /// observe queues a card-reward placeholder AND finishes; the default
-    /// outcome would skip the reward and leave `finished` false.
+    /// Kills `spiraling_whirlpool_observe -> Default::default()`: observe
+    /// finishes; the default outcome would leave `finished` false.
     #[test]
-    fn spiraling_whirlpool_observe_queues_reward_and_finishes() {
+    fn spiraling_whirlpool_observe_queues_no_reward_and_finishes() {
+        // C# `ObserveTheSpiral` enchants (a Spiral pick); no card reward
+        // (sts2-agent fork).
         let mut rs = fresh();
         let outcome = spiraling_whirlpool_observe(&mut rs);
         assert!(outcome.finished);
-        assert_eq!(
-            rs.pending_rewards.len(),
-            1,
-            "observe queues one card-reward placeholder"
-        );
+        assert!(rs.pending_rewards.is_empty());
     }
 
     /// Kills `wongo_featured -> Default::default()`: featured spends 200g AND

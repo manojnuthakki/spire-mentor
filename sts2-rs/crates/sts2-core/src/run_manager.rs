@@ -4295,6 +4295,11 @@ impl RunManager {
             front.is_some_and(|e| e.enchantment != crate::cards::EnchantmentId::Slither);
         let requires_block =
             front.is_some_and(|e| e.enchantment == crate::cards::EnchantmentId::Nimble);
+        // C# `Spiral.CanEnchant`: a Basic card tagged Strike or Defend
+        // (sts2-agent fork).
+        let requires_basic_strike_defend =
+            front.is_some_and(|e| e.enchantment == crate::cards::EnchantmentId::Spiral);
+        let rarity_rank = crate::lookup_card_rarity_rank();
         self.run_state
             .master_deck
             .iter()
@@ -4307,6 +4312,10 @@ impl RunManager {
                     && c.enchantments.is_empty()
                     && (c.cost >= 0 || (allow_x_cost && c.is_x_cost()))
                     && (!requires_block || c.base_block > 0)
+                    && (!requires_basic_strike_defend
+                        || (rarity_rank.map_or(true, |f| f(c.card_id) == 1)
+                            && (c.has_tag(crate::cards::CardTag::Strike)
+                                || c.has_tag(crate::cards::CardTag::Defend))))
                     && restriction
                         .map_or(true, |t| c.card_type == t || secondary == Some(c.card_type))
             })
