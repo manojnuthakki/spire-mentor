@@ -146,12 +146,25 @@ const DOLL_ROOM_STREAM: &str = "DOLL_ROOM";
 
 /// The three dolls in C# `_dolls` declaration order (`DollRoom.cs:41`).
 /// `ChooseRandom` draws `Rng.NextItem(_dolls)` over this order; the
-/// multi-page legs `StableShuffle` it. Each entry is `(relic, option_id)`.
-const DOLL_ROOM_DOLLS: [(RelicId, &str); 3] = [
-    (RelicId::DaughterOfTheWind, "doll_daughter"),
-    (RelicId::MrStruggles, "doll_mr_struggles"),
-    (RelicId::BingBong, "doll_bingbong"),
+/// multi-page legs `StableShuffle` it. Each entry is `(relic, option_id,
+/// text key)`: `OptionFromChoice` keys the option by `relic.Title`'s raw text,
+/// which the host sends as the relic's title key (sts2-agent fork).
+const DOLL_ROOM_DOLLS: [(RelicId, &str, &str); 3] = [
+    (
+        RelicId::DaughterOfTheWind,
+        "doll_daughter",
+        "DAUGHTER_OF_THE_WIND.title",
+    ),
+    (
+        RelicId::MrStruggles,
+        "doll_mr_struggles",
+        "MR_STRUGGLES.title",
+    ),
+    (RelicId::BingBong, "doll_bingbong", "BING_BONG.title"),
 ];
+
+/// Page 0's options (the rest of [`DOLL_ROOM_OPTIONS`] are the dolls).
+const DOLL_ROOM_APPROACHES: [&str; 3] = ["random", "take_time", "examine"];
 
 /// Build `DollRoom`'s own event RNG stream. C# `IsShared == false` (default),
 /// so the seed folds in the single-player player term and `hash("DOLL_ROOM")`
@@ -179,17 +192,17 @@ fn doll_room_random(state: &mut RunState) -> EventOutcome {
 /// Lose `damage` HP, then `_dolls.StableShuffle(Rng).Take(take)` → offer those
 /// dolls on page 1 (NOT finished, so the run-loop stays in `Phase::Event`).
 ///
-/// **Documented approximation:** C# `StableShuffle` sorts by `relic.CompareTo`
-/// before the Fisher-Yates pass; this sorts by [`DOLL_ROOM_DOLLS`] declaration
-/// order (RelicId) instead. The shuffle consumes the same draw count, and the
-/// effect-parity harness only checks the page-1 option COUNT (not the doll
-/// order), so this is faithful for everything currently observable — the exact
-/// sub-menu ordering needs a dedicated multi-page-identity probe to pin.
+/// C# `StableShuffle` sorts by `relic.CompareTo` (`ModelId`: the ordinal order
+/// of the ids, BING_BONG < DAUGHTER_OF_THE_WIND < MR_STRUGGLES) before the
+/// Fisher-Yates pass (sts2-agent fork; it sorted by declaration order).
 fn doll_room_open_pick(state: &mut RunState, damage: i32, take: usize) -> EventOutcome {
     state.lose_hp(damage);
     let mut codes: Vec<i16> = (0..DOLL_ROOM_DOLLS.len() as i16).collect();
     let mut rng = doll_room_rng(state);
-    rng.stable_shuffle(&mut codes);
+    rng.stable_shuffle_by(&mut codes, &|a: i16, b: i16| {
+        let id = |c: i16| DOLL_ROOM_DOLLS[c as usize].0.to_python_name();
+        id(a).cmp(id(b))
+    });
     codes.truncate(take);
     state.event_state.scratch = codes;
     state.event_state.page = 1;
@@ -227,14 +240,10 @@ fn doll_room_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOp
             .scratch
             .iter()
             .map(|&code| {
-                let (relic, option_id) = DOLL_ROOM_DOLLS[code as usize];
+                let (relic, option_id, loc_key) = DOLL_ROOM_DOLLS[code as usize];
                 EventOptionInfo {
                     option_id,
-                    // The game names this row after the doll that landed in
-                    // the slot (`DOLL_ROOM.pages.TAKE.options.TAKE` with a
-                    // `{RelicName}` var), so no static key fits. The relic's
-                    // own title carries the text a player needs.
-                    loc_key: "",
+                    loc_key,
                     vars: Vec::new(),
                     title_vars: Vec::new(),
                     label: format!("{relic:?}"),
@@ -244,7 +253,11 @@ fn doll_room_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOp
             })
             .collect();
     }
+    // Page 0: the three approaches only (the game's `GenerateInitialOptions`).
     super::default_option_info_from_spec(state, spec)
+        .into_iter()
+        .filter(|o| DOLL_ROOM_APPROACHES.contains(&o.option_id))
+        .collect()
 }
 
 const DOLL_ROOM_OPTIONS: &[EventOptionSpec] = &[
@@ -1171,7 +1184,7 @@ mod tests {
         assert_eq!(rs.relics.len(), before + 1, "exactly one doll obtained");
         let granted = *rs.relics.last().unwrap();
         assert!(
-            DOLL_ROOM_DOLLS.iter().any(|(r, _)| *r == granted),
+            DOLL_ROOM_DOLLS.iter().any(|(r, _, _)| *r == granted),
             "granted relic {granted:?} must be one of the three dolls",
         );
         // The roll is a pure function of the run seed.
