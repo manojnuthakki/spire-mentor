@@ -4,18 +4,18 @@
    "act": 1,
    "best_label": "Go for the Eyes",
    "best_win_prob": 1.0,
-   "drop_pct": 33,
+   "drop_pct": 50,
    "floor": 7,
    "idx": 92,
    "is_blunder": true,
    "matched_best": false,
-   "message": "Turn 1: Dualcast instead of Go for the Eyes dropped P(win) 100%→67% (−33 pts)",
+   "message": "Turn 1: Dualcast instead of Go for the Eyes dropped P(win) 100%→50% (−50 pts)",
    "n_actions": 6,
    "node_id": 92,
    "played_label": "Dualcast",
-   "played_win_prob": 0.6667,
-   "player_rank": 1,
-   "regret": 0.3333,
+   "played_win_prob": 0.5,
+   "player_rank": 2,
+   "regret": 0.5,
    "turn": 1,
    "visits": 5
   }
@@ -1188,26 +1188,26 @@
    "act": 1,
    "best_label": "Go for the Eyes",
    "best_win_prob": 1.0,
-   "drop_pct": 33,
+   "drop_pct": 50,
    "floor": 7,
    "idx": 92,
    "is_blunder": true,
    "matched_best": false,
-   "message": "Turn 1: Dualcast instead of Go for the Eyes dropped P(win) 100%→67% (−33 pts)",
+   "message": "Turn 1: Dualcast instead of Go for the Eyes dropped P(win) 100%→50% (−50 pts)",
    "n_actions": 6,
    "node_id": 92,
    "played_label": "Dualcast",
-   "played_win_prob": 0.6667,
-   "player_rank": 1,
-   "regret": 0.3333,
+   "played_win_prob": 0.5,
+   "player_rank": 2,
+   "regret": 0.5,
    "turn": 1,
    "visits": 5
   }
  ],
  "summary": {
   "blunder_count": 1,
-  "cumulative_drop_pct": 33,
+  "cumulative_drop_pct": 50,
   "total_decisions": 62,
-  "worst_drop_pct": 33
+  "worst_drop_pct": 50
  }
 }

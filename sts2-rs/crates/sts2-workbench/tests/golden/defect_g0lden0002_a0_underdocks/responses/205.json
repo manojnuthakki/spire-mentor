@@ -78,46 +78,46 @@
    "floor": 5,
    "idx": 89,
    "scores": {
-    "block": 46.1,
-    "damage": 31.0,
-    "velocity": 2.4,
-    "volume": 15.1
+    "block": 36.4,
+    "damage": 24.7,
+    "velocity": 0.7,
+    "volume": 8.6
    }
   },
   {
    "act": 1,
    "deck_size": 15,
    "floor": 7,
-   "idx": 118,
+   "idx": 119,
    "scores": {
-    "block": 46.1,
-    "damage": 31.0,
-    "velocity": 2.4,
-    "volume": 15.1
+    "block": 36.4,
+    "damage": 24.7,
+    "velocity": 0.7,
+    "volume": 8.6
    }
   },
   {
    "act": 1,
    "deck_size": 16,
    "floor": 7,
-   "idx": 119,
+   "idx": 120,
    "scores": {
-    "block": 49.2,
-    "damage": 30.6,
-    "velocity": 0.0,
-    "volume": 0.0
+    "block": 42.0,
+    "damage": 23.1,
+    "velocity": 24.0,
+    "volume": 28.6
    }
   },
   {
    "act": 1,
    "deck_size": 16,
    "floor": 8,
-   "idx": 122,
+   "idx": 123,
    "scores": {
-    "block": 49.2,
-    "damage": 32.3,
-    "velocity": 0.0,
-    "volume": 0.0
+    "block": 42.0,
+    "damage": 24.9,
+    "velocity": 24.0,
+    "volume": 29.3
    }
   }
  ]

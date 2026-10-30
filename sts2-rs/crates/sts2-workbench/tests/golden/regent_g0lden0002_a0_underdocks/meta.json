@@ -1,17 +1,14 @@
 {
  "coverage": [
   "card_select:put_back",
-  "card_select:remove|upgrade",
-  "card_select:upgrade",
   "combat_card_select",
   "decision:card_reward",
   "decision:card_select",
   "decision:combat_play",
   "decision:event_choice",
+  "decision:game_over",
   "decision:map_select",
-  "decision:rest_site",
   "potion_used",
-  "room_reveal",
   "route:/api/deck/reward-preview",
   "route:/api/deck/trend",
   "route:/api/live/action",
@@ -47,17 +44,16 @@
   "route:/api/timeline",
   "route:/api/wpa-review",
   "seek_fork",
-  "smith",
   "status:404",
   "status:409"
  ],
  "engine": {
-  "src_hash": "e15dff2067dc4736",
+  "src_hash": "ce4ef47e65955a7f",
   "version": "0.0.1"
  },
  "final_act": 1,
- "final_floor": 10,
- "full_responses": 61,
+ "final_floor": 7,
+ "full_responses": 60,
  "full_steps": 0,
  "patches": {
   "assets_base_url": "https://assets.test",
@@ -65,8 +61,8 @@
   "saved_at": "2026-01-01T00:00:00Z"
  },
  "python": "3.13",
- "reached_game_over": false,
- "requests": 216,
+ "reached_game_over": true,
+ "requests": 212,
  "scenario": {
   "act1": "underdocks",
   "ascension": 0,
@@ -249,5 +245,5 @@
   ],
   "seed": "G0LDEN0002"
  },
- "steps_played": 150
+ "steps_played": 146
 }

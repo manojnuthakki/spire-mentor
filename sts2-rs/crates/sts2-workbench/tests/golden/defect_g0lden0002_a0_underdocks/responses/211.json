@@ -1,7 +1,7 @@
 {
  "runs": [
   {
-   "enemy_min_pct": 4.0,
+   "enemy_min_pct": 1.3333,
    "final_floor": 10,
    "final_turn": 4,
    "stem": "20260101_000000_Defect_G0LDEN0002",

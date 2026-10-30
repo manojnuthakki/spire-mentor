@@ -1,12 +1,12 @@
 {
  "details": [],
  "error": null,
- "label": "Choose: Smith",
+ "label": "Map → (1,8)",
  "step": {
   "action_label": "",
   "assets_base": "https://assets.test",
   "chosen_action": null,
-  "decision": "card_select",
+  "decision": "rest_site",
   "idx": 0,
   "meta": {
    "act": 1,
@@ -29,491 +29,24 @@
    "bg_col": 1,
    "bg_row": 8,
    "bg_seed": 206169372,
-   "can_skip": false,
-   "cards": [
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Deal 6 damage.",
-     "description_rich": "Deal 6 damage.",
-     "id": "STRIKE_DEFECT",
-     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-     "index": 0,
-     "name": "Strike",
-     "rarity": "Basic",
-     "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.",
-      "description_rich": "Deal 9 damage.",
-      "id": "STRIKE_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-      "index": 0,
-      "name": "Strike",
-      "rarity": "Basic",
-      "type": "Attack",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Deal 6 damage.",
-     "description_rich": "Deal 6 damage.",
-     "id": "STRIKE_DEFECT",
-     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-     "index": 1,
-     "name": "Strike",
-     "rarity": "Basic",
-     "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.",
-      "description_rich": "Deal 9 damage.",
-      "id": "STRIKE_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-      "index": 1,
-      "name": "Strike",
-      "rarity": "Basic",
-      "type": "Attack",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Deal 6 damage.",
-     "description_rich": "Deal 6 damage.",
-     "id": "STRIKE_DEFECT",
-     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-     "index": 2,
-     "name": "Strike",
-     "rarity": "Basic",
-     "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.",
-      "description_rich": "Deal 9 damage.",
-      "id": "STRIKE_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-      "index": 2,
-      "name": "Strike",
-      "rarity": "Basic",
-      "type": "Attack",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Deal 6 damage.",
-     "description_rich": "Deal 6 damage.",
-     "id": "STRIKE_DEFECT",
-     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-     "index": 3,
-     "name": "Strike",
-     "rarity": "Basic",
-     "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.",
-      "description_rich": "Deal 9 damage.",
-      "id": "STRIKE_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
-      "index": 3,
-      "name": "Strike",
-      "rarity": "Basic",
-      "type": "Attack",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Gain 5 Block.",
-     "description_rich": "Gain 5 Block.",
-     "id": "DEFEND_DEFECT",
-     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-     "index": 4,
-     "name": "Defend",
-     "rarity": "Basic",
-     "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Gain 8 Block.",
-      "description_rich": "Gain 8 Block.",
-      "id": "DEFEND_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-      "index": 4,
-      "name": "Defend",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Gain 5 Block.",
-     "description_rich": "Gain 5 Block.",
-     "id": "DEFEND_DEFECT",
-     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-     "index": 5,
-     "name": "Defend",
-     "rarity": "Basic",
-     "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Gain 8 Block.",
-      "description_rich": "Gain 8 Block.",
-      "id": "DEFEND_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-      "index": 5,
-      "name": "Defend",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Gain 5 Block.",
-     "description_rich": "Gain 5 Block.",
-     "id": "DEFEND_DEFECT",
-     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-     "index": 6,
-     "name": "Defend",
-     "rarity": "Basic",
-     "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Gain 8 Block.",
-      "description_rich": "Gain 8 Block.",
-      "id": "DEFEND_DEFECT",
-      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
-      "index": 6,
-      "name": "Defend",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Evoke your rightmost Orb twice.",
-     "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
-     "id": "DUALCAST",
-     "image": "https://assets.test/card_atlas/defect/dualcast.png",
-     "index": 7,
-     "name": "Dualcast",
-     "rarity": "Basic",
-     "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Evoke your rightmost Orb twice.",
-      "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
-      "id": "DUALCAST",
-      "image": "https://assets.test/card_atlas/defect/dualcast.png",
-      "index": 7,
-      "name": "Dualcast",
-      "rarity": "Basic",
-      "type": "Skill",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 0,
-     "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-     "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
-     "id": "GO_FOR_THE_EYES",
-     "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
-     "index": 8,
-     "name": "Go for the Eyes",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Deal 4 damage.\nIf the enemy intends to attack, apply 2 Weak.",
-      "description_rich": "Deal 4 damage.\nIf the enemy intends to attack, apply 2 Weak.",
-      "id": "GO_FOR_THE_EYES",
-      "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
-      "index": 8,
-      "name": "Go for the Eyes",
-      "rarity": "Common",
-      "type": "Attack",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Gain 4 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
-     "description_rich": "Gain 4 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
-     "id": "LIGHTNING_ROD",
-     "image": "https://assets.test/card_atlas/defect/lightning_rod.png",
-     "index": 9,
-     "name": "Lightning Rod",
-     "rarity": "Common",
-     "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Gain 7 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
-      "description_rich": "Gain 7 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
-      "id": "LIGHTNING_ROD",
-      "image": "https://assets.test/card_atlas/defect/lightning_rod.png",
-      "index": 9,
-      "name": "Lightning Rod",
-      "rarity": "Common",
-      "type": "Skill",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 1,
-     "description": "Deal 6 damage.\nChannel 1 Frost.",
-     "description_rich": "Deal 6 damage.\nChannel 1 Frost.",
-     "id": "COLD_SNAP",
-     "image": "https://assets.test/card_atlas/defect/cold_snap.png",
-     "index": 10,
-     "name": "Cold Snap",
-     "rarity": "Common",
-     "type": "Attack",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 1,
-      "description": "Deal 9 damage.\nChannel 1 Frost.",
-      "description_rich": "Deal 9 damage.\nChannel 1 Frost.",
-      "id": "COLD_SNAP",
-      "image": "https://assets.test/card_atlas/defect/cold_snap.png",
-      "index": 10,
-      "name": "Cold Snap",
-      "rarity": "Common",
-      "type": "Attack",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 0,
-     "description": "Gain 2 Focus this turn.\nExhaust.",
-     "description_rich": "Gain 2 Focus this turn.\n[gold]Exhaust[/gold].",
-     "id": "HOTFIX",
-     "image": "https://assets.test/card_atlas/defect/beta/hotfix.png",
-     "index": 11,
-     "name": "Hotfix",
-     "rarity": "Common",
-     "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Gain 2 Focus this turn.",
-      "description_rich": "Gain 2 Focus this turn.",
-      "id": "HOTFIX",
-      "image": "https://assets.test/card_atlas/defect/beta/hotfix.png",
-      "index": 11,
-      "keyword_delta": "-Exhaust",
-      "name": "Hotfix",
-      "rarity": "Common",
-      "type": "Skill",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 2,
-     "description": "Lose 1 Orb Slot.\nGain 2 Strength.\nGain 2 Dexterity.",
-     "description_rich": "Lose 1 Orb Slot.\nGain 2 Strength.\nGain 2 Dexterity.",
-     "id": "BULK_UP",
-     "image": "https://assets.test/card_atlas/defect/bulk_up.png",
-     "index": 12,
-     "name": "Bulk Up",
-     "rarity": "Uncommon",
-     "type": "Power",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 2,
-      "description": "Lose 1 Orb Slot.\nGain 3 Strength.\nGain 3 Dexterity.",
-      "description_rich": "Lose 1 Orb Slot.\nGain 3 Strength.\nGain 3 Dexterity.",
-      "id": "BULK_UP",
-      "image": "https://assets.test/card_atlas/defect/bulk_up.png",
-      "index": 12,
-      "name": "Bulk Up",
-      "rarity": "Uncommon",
-      "type": "Power",
-      "upgraded": true
-     },
-     "upgraded": false
-    },
-    {
-     "color": "blue",
-     "cost": 0,
-     "description": "Innate.\nGain 10 Block.\nExhaust.",
-     "description_rich": "[gold]Innate[/gold].\nGain 10 Block.\n[gold]Exhaust[/gold].",
-     "id": "BOOT_SEQUENCE",
-     "image": "https://assets.test/card_atlas/defect/boot_sequence.png",
-     "index": 13,
-     "name": "Boot Sequence",
-     "rarity": "Uncommon",
-     "type": "Skill",
-     "upgrade_preview": {
-      "color": "blue",
-      "cost": 0,
-      "description": "Innate.\nGain 13 Block.\nExhaust.",
-      "description_rich": "[gold]Innate[/gold].\nGain 13 Block.\n[gold]Exhaust[/gold].",
-      "id": "BOOT_SEQUENCE",
-      "image": "https://assets.test/card_atlas/defect/boot_sequence.png",
-      "index": 13,
-      "name": "Boot Sequence",
-      "rarity": "Uncommon",
-      "type": "Skill",
-      "upgraded": true
-     },
-     "upgraded": false
-    }
-   ],
-   "context": "upgrade",
-   "decision": "card_select",
+   "decision": "rest_site",
    "floor": 8,
-   "max_select": 1,
-   "min_select": 1,
    "options": [
     {
-     "action": "select_cards",
+     "action": "choose_option",
      "args": {
-      "indices": "0"
+      "option_index": 0
      },
      "enabled": true,
-     "label": "STRIKE_DEFECT.title"
+     "label": "HEAL"
     },
     {
-     "action": "select_cards",
+     "action": "choose_option",
      "args": {
-      "indices": "1"
+      "option_index": 1
      },
      "enabled": true,
-     "label": "STRIKE_DEFECT.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "2"
-     },
-     "enabled": true,
-     "label": "STRIKE_DEFECT.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "3"
-     },
-     "enabled": true,
-     "label": "STRIKE_DEFECT.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "4"
-     },
-     "enabled": true,
-     "label": "DEFEND_DEFECT.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "5"
-     },
-     "enabled": true,
-     "label": "DEFEND_DEFECT.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "6"
-     },
-     "enabled": true,
-     "label": "DEFEND_DEFECT.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "7"
-     },
-     "enabled": true,
-     "label": "DUALCAST.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "8"
-     },
-     "enabled": true,
-     "label": "GO_FOR_THE_EYES.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "9"
-     },
-     "enabled": true,
-     "label": "LIGHTNING_ROD.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "10"
-     },
-     "enabled": true,
-     "label": "COLD_SNAP.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "11"
-     },
-     "enabled": true,
-     "label": "HOTFIX.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "12"
-     },
-     "enabled": true,
-     "label": "BULK_UP.title"
-    },
-    {
-     "action": "select_cards",
-     "args": {
-      "indices": "13"
-     },
-     "enabled": true,
-     "label": "BOOT_SEQUENCE.title"
+     "label": "SMITH"
     }
    ],
    "player": {
@@ -703,42 +236,42 @@
      },
      {
       "color": "blue",
-      "cost": 2,
-      "description": "Lose 1 Orb Slot.\nGain 2 Strength.\nGain 2 Dexterity.",
-      "description_rich": "Lose 1 Orb Slot.\nGain 2 Strength.\nGain 2 Dexterity.",
-      "id": "BULK_UP",
-      "image": "https://assets.test/card_atlas/defect/bulk_up.png",
+      "cost": 1,
+      "description": "Channel 1 Dark.\nTrigger the passive ability of all Dark Orbs.",
+      "description_rich": "[gold]Channel[/gold] 1 [gold]Dark[/gold].\nTrigger the passive ability of all [gold]Dark[/gold] Orbs.",
+      "id": "DARKNESS",
+      "image": "https://assets.test/card_atlas/defect/darkness.png",
       "index": 14,
-      "name": "Bulk Up",
+      "name": "Darkness",
       "rarity": "Uncommon",
-      "type": "Power",
+      "type": "Skill",
       "upgraded": false
      },
      {
       "color": "blue",
-      "cost": 0,
-      "description": "Innate.\nGain 10 Block.\nExhaust.",
-      "description_rich": "[gold]Innate[/gold].\nGain 10 Block.\n[gold]Exhaust[/gold].",
-      "id": "BOOT_SEQUENCE",
-      "image": "https://assets.test/card_atlas/defect/boot_sequence.png",
+      "cost": 1,
+      "description": "Gain 7 Block.\nNext turn, gain 1 Energy.",
+      "description_rich": "Gain 7 Block.\nNext turn, gain 1 Energy.",
+      "id": "CHARGE_BATTERY",
+      "image": "https://assets.test/card_atlas/defect/charge_battery.png",
       "index": 15,
-      "name": "Boot Sequence",
-      "rarity": "Uncommon",
+      "name": "Charge Battery",
+      "rarity": "Common",
       "type": "Skill",
       "upgraded": false
      }
     ],
-    "gold": 130,
+    "gold": 125,
     "hp": 9,
     "max_hp": 75,
     "name": "Defect",
     "potion_slots": 3,
     "potions": [
      {
-      "description": "Apply 3 Weak.",
-      "id": "WEAK_POTION",
-      "image": "https://assets.test/potion_atlas/weak_potion.png",
-      "name": "Weak Potion"
+      "description": "Apply 1 Weak and 1 Vulnerable to ALL enemies.",
+      "id": "POTION_OF_BINDING",
+      "image": "https://assets.test/potion_atlas/potion_of_binding.png",
+      "name": "Potion of Binding"
      }
     ],
     "relics": [
@@ -761,7 +294,21 @@
       "name": "Sword of Stone"
      }
     ]
-   }
+   },
+   "rest_options": [
+    {
+     "index": 0,
+     "is_enabled": true,
+     "name": "Rest",
+     "option_id": "HEAL"
+    },
+    {
+     "index": 1,
+     "is_enabled": true,
+     "name": "Smith",
+     "option_id": "SMITH"
+    }
+   ]
   }
  }
 }

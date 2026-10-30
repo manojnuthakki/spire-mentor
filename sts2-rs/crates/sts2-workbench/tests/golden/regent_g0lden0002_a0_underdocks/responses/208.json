@@ -1,16 +1,12 @@
 {
- "final_turn_histogram": {
-  "1": 1
- },
+ "final_turn_histogram": {},
  "n_losses": 1,
  "n_runs": 1,
- "pattern_tags": {
-  "fast_death": 1
- },
+ "pattern_tags": {},
  "representative_losses": [
   {
    "enemy_min_pct": 5.2632,
-   "final_turn": 1,
+   "final_turn": null,
    "stem": "20260101_000000_Regent_G0LDEN0002",
    "turn1_q": null
   }

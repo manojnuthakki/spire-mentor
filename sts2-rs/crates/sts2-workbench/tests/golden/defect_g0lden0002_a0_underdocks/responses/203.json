@@ -5,64 +5,63 @@
   "samples": 200
  },
  "block": {
-  "per_turn": 13.5,
+  "per_turn": 10.9,
   "scaling_cards": [
    "Lightning Rod",
-   "Bulk Up"
+   "Charge Battery"
   ]
  },
  "composition": {
   "by_rarity": {
    "Basic": 10,
-   "Common": 4,
-   "Uncommon": 2
+   "Common": 5,
+   "Uncommon": 1
   },
   "by_type": {
    "Attack": 6,
-   "Power": 1,
-   "Skill": 9
+   "Skill": 10
   },
   "dead_cards": 0,
   "energy_curve": {
-   "0": 3,
-   "1": 12,
-   "2": 1
+   "0": 2,
+   "1": 14
   },
   "unupgraded_basics": 7
  },
  "damage": {
   "aoe_attacks": [],
   "attack_count": 6,
-  "per_turn": 15.5,
+  "per_turn": 11.5,
   "scaling_cards": [
    "Zap",
-   "Hotfix",
-   "Bulk Up"
+   "Hotfix"
   ],
-  "single_target": 15.5,
-  "vs_group": 15.6
+  "single_target": 11.5,
+  "vs_group": 11.5
  },
  "deck_size": 16,
  "lenses": {
-  "boss": 27.2,
-  "hallway": 29.1,
-  "scaling": 26.1
+  "boss": 30.6,
+  "hallway": 28.4,
+  "scaling": 31.8
  },
  "scores": {
-  "block": 49.0,
-  "damage": 32.2,
-  "velocity": 0.1,
-  "volume": 5.4
+  "block": 42.0,
+  "damage": 25.0,
+  "velocity": 24.9,
+  "volume": 29.7
  },
  "velocity": {
   "bottleneck": "energy",
-  "cards_per_turn": 3.5,
+  "cards_per_turn": 3.8,
   "dilution": 0.94,
-  "draw_limited_turns": 0.0,
-  "energy_limited_turns": 6.5,
-  "engine_cards": 0,
-  "extra_per_turn": 0.0,
-  "tags": {}
+  "draw_limited_turns": 0.1,
+  "energy_limited_turns": 6.0,
+  "engine_cards": 1,
+  "extra_per_turn": 0.3,
+  "tags": {
+   "energy": 1
+  }
  },
  "warnings": [
   {

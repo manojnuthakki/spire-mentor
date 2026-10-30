@@ -1,0 +1,767 @@
+{
+ "details": [],
+ "error": null,
+ "label": "Choose: Smith",
+ "step": {
+  "action_label": "",
+  "assets_base": "https://assets.test",
+  "chosen_action": null,
+  "decision": "card_select",
+  "idx": 0,
+  "meta": {
+   "act": 1,
+   "act_name": "Underdocks",
+   "bg_col": 1,
+   "bg_row": 8,
+   "bg_seed": 206169372,
+   "floor": 8,
+   "step_no": 0,
+   "turn": null
+  },
+  "pv": null,
+  "scores": [],
+  "source": "live",
+  "state": {
+   "act": 1,
+   "act1": "underdocks",
+   "act_name": "Underdocks",
+   "ascension": 0,
+   "bg_col": 1,
+   "bg_row": 8,
+   "bg_seed": 206169372,
+   "can_skip": false,
+   "cards": [
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+     "index": 0,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 9 damage.",
+      "description_rich": "Deal 9 damage.",
+      "id": "STRIKE_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+      "index": 0,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+     "index": 1,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 9 damage.",
+      "description_rich": "Deal 9 damage.",
+      "id": "STRIKE_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+      "index": 1,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+     "index": 2,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 9 damage.",
+      "description_rich": "Deal 9 damage.",
+      "id": "STRIKE_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+      "index": 2,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage.",
+     "description_rich": "Deal 6 damage.",
+     "id": "STRIKE_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+     "index": 3,
+     "name": "Strike",
+     "rarity": "Basic",
+     "type": "Attack",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 9 damage.",
+      "description_rich": "Deal 9 damage.",
+      "id": "STRIKE_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+      "index": 3,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "index": 4,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 8 Block.",
+      "description_rich": "Gain 8 Block.",
+      "id": "DEFEND_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+      "index": 4,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "index": 5,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 8 Block.",
+      "description_rich": "Gain 8 Block.",
+      "id": "DEFEND_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+      "index": 5,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 5 Block.",
+     "description_rich": "Gain 5 Block.",
+     "id": "DEFEND_DEFECT",
+     "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+     "index": 6,
+     "name": "Defend",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 8 Block.",
+      "description_rich": "Gain 8 Block.",
+      "id": "DEFEND_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+      "index": 6,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Evoke your rightmost Orb twice.",
+     "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
+     "id": "DUALCAST",
+     "image": "https://assets.test/card_atlas/defect/dualcast.png",
+     "index": 7,
+     "name": "Dualcast",
+     "rarity": "Basic",
+     "type": "Skill",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 0,
+      "description": "Evoke your rightmost Orb twice.",
+      "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
+      "id": "DUALCAST",
+      "image": "https://assets.test/card_atlas/defect/dualcast.png",
+      "index": 7,
+      "name": "Dualcast",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 0,
+     "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+     "id": "GO_FOR_THE_EYES",
+     "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+     "index": 8,
+     "name": "Go for the Eyes",
+     "rarity": "Common",
+     "type": "Attack",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 0,
+      "description": "Deal 4 damage.\nIf the enemy intends to attack, apply 2 Weak.",
+      "description_rich": "Deal 4 damage.\nIf the enemy intends to attack, apply 2 Weak.",
+      "id": "GO_FOR_THE_EYES",
+      "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+      "index": 8,
+      "name": "Go for the Eyes",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 4 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
+     "description_rich": "Gain 4 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
+     "id": "LIGHTNING_ROD",
+     "image": "https://assets.test/card_atlas/defect/lightning_rod.png",
+     "index": 9,
+     "name": "Lightning Rod",
+     "rarity": "Common",
+     "type": "Skill",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 7 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
+      "description_rich": "Gain 7 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
+      "id": "LIGHTNING_ROD",
+      "image": "https://assets.test/card_atlas/defect/lightning_rod.png",
+      "index": 9,
+      "name": "Lightning Rod",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Deal 6 damage.\nChannel 1 Frost.",
+     "description_rich": "Deal 6 damage.\nChannel 1 Frost.",
+     "id": "COLD_SNAP",
+     "image": "https://assets.test/card_atlas/defect/cold_snap.png",
+     "index": 10,
+     "name": "Cold Snap",
+     "rarity": "Common",
+     "type": "Attack",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 9 damage.\nChannel 1 Frost.",
+      "description_rich": "Deal 9 damage.\nChannel 1 Frost.",
+      "id": "COLD_SNAP",
+      "image": "https://assets.test/card_atlas/defect/cold_snap.png",
+      "index": 10,
+      "name": "Cold Snap",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 0,
+     "description": "Gain 2 Focus this turn.\nExhaust.",
+     "description_rich": "Gain 2 Focus this turn.\n[gold]Exhaust[/gold].",
+     "id": "HOTFIX",
+     "image": "https://assets.test/card_atlas/defect/beta/hotfix.png",
+     "index": 11,
+     "name": "Hotfix",
+     "rarity": "Common",
+     "type": "Skill",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 0,
+      "description": "Gain 2 Focus this turn.",
+      "description_rich": "Gain 2 Focus this turn.",
+      "id": "HOTFIX",
+      "image": "https://assets.test/card_atlas/defect/beta/hotfix.png",
+      "index": 11,
+      "keyword_delta": "-Exhaust",
+      "name": "Hotfix",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Channel 1 Dark.\nTrigger the passive ability of all Dark Orbs.",
+     "description_rich": "[gold]Channel[/gold] 1 [gold]Dark[/gold].\nTrigger the passive ability of all [gold]Dark[/gold] Orbs.",
+     "id": "DARKNESS",
+     "image": "https://assets.test/card_atlas/defect/darkness.png",
+     "index": 12,
+     "name": "Darkness",
+     "rarity": "Uncommon",
+     "type": "Skill",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Channel 1 Dark.\nTrigger the passive ability of all Dark Orbs twice.",
+      "description_rich": "[gold]Channel[/gold] 1 [gold]Dark[/gold].\nTrigger the passive ability of all [gold]Dark[/gold] Orbs twice.",
+      "id": "DARKNESS",
+      "image": "https://assets.test/card_atlas/defect/darkness.png",
+      "index": 12,
+      "name": "Darkness",
+      "rarity": "Uncommon",
+      "type": "Skill",
+      "upgraded": true
+     },
+     "upgraded": false
+    },
+    {
+     "color": "blue",
+     "cost": 1,
+     "description": "Gain 7 Block.\nNext turn, gain 1 Energy.",
+     "description_rich": "Gain 7 Block.\nNext turn, gain 1 Energy.",
+     "id": "CHARGE_BATTERY",
+     "image": "https://assets.test/card_atlas/defect/charge_battery.png",
+     "index": 13,
+     "name": "Charge Battery",
+     "rarity": "Common",
+     "type": "Skill",
+     "upgrade_preview": {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 10 Block.\nNext turn, gain 1 Energy.",
+      "description_rich": "Gain 10 Block.\nNext turn, gain 1 Energy.",
+      "id": "CHARGE_BATTERY",
+      "image": "https://assets.test/card_atlas/defect/charge_battery.png",
+      "index": 13,
+      "name": "Charge Battery",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": true
+     },
+     "upgraded": false
+    }
+   ],
+   "context": "upgrade",
+   "decision": "card_select",
+   "floor": 8,
+   "max_select": 1,
+   "min_select": 1,
+   "options": [
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "0"
+     },
+     "enabled": true,
+     "label": "STRIKE_DEFECT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "1"
+     },
+     "enabled": true,
+     "label": "STRIKE_DEFECT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "2"
+     },
+     "enabled": true,
+     "label": "STRIKE_DEFECT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "3"
+     },
+     "enabled": true,
+     "label": "STRIKE_DEFECT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "4"
+     },
+     "enabled": true,
+     "label": "DEFEND_DEFECT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "5"
+     },
+     "enabled": true,
+     "label": "DEFEND_DEFECT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "6"
+     },
+     "enabled": true,
+     "label": "DEFEND_DEFECT.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "7"
+     },
+     "enabled": true,
+     "label": "DUALCAST.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "8"
+     },
+     "enabled": true,
+     "label": "GO_FOR_THE_EYES.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "9"
+     },
+     "enabled": true,
+     "label": "LIGHTNING_ROD.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "10"
+     },
+     "enabled": true,
+     "label": "COLD_SNAP.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "11"
+     },
+     "enabled": true,
+     "label": "HOTFIX.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "12"
+     },
+     "enabled": true,
+     "label": "DARKNESS.title"
+    },
+    {
+     "action": "select_cards",
+     "args": {
+      "indices": "13"
+     },
+     "enabled": true,
+     "label": "CHARGE_BATTERY.title"
+    }
+   ],
+   "player": {
+    "block": 0,
+    "deck": [
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+      "index": 0,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+      "index": 1,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+      "index": 2,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 6 damage.",
+      "description_rich": "Deal 6 damage.",
+      "id": "STRIKE_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+      "index": 3,
+      "name": "Strike",
+      "rarity": "Basic",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 8 Block.",
+      "description_rich": "Gain 8 Block.",
+      "id": "DEFEND_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+      "index": 4,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": true
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+      "index": 5,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+      "index": 6,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
+      "id": "DEFEND_DEFECT",
+      "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+      "index": 7,
+      "name": "Defend",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 0,
+      "description": "Channel 1 Lightning.",
+      "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
+      "id": "ZAP",
+      "image": "https://assets.test/card_atlas/defect/zap.png",
+      "index": 8,
+      "name": "Zap",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": true
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Evoke your rightmost Orb twice.",
+      "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
+      "id": "DUALCAST",
+      "image": "https://assets.test/card_atlas/defect/dualcast.png",
+      "index": 9,
+      "name": "Dualcast",
+      "rarity": "Basic",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 0,
+      "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+      "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+      "id": "GO_FOR_THE_EYES",
+      "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+      "index": 10,
+      "name": "Go for the Eyes",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 4 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
+      "description_rich": "Gain 4 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
+      "id": "LIGHTNING_ROD",
+      "image": "https://assets.test/card_atlas/defect/lightning_rod.png",
+      "index": 11,
+      "name": "Lightning Rod",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Deal 6 damage.\nChannel 1 Frost.",
+      "description_rich": "Deal 6 damage.\nChannel 1 Frost.",
+      "id": "COLD_SNAP",
+      "image": "https://assets.test/card_atlas/defect/cold_snap.png",
+      "index": 12,
+      "name": "Cold Snap",
+      "rarity": "Common",
+      "type": "Attack",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 0,
+      "description": "Gain 2 Focus this turn.\nExhaust.",
+      "description_rich": "Gain 2 Focus this turn.\n[gold]Exhaust[/gold].",
+      "id": "HOTFIX",
+      "image": "https://assets.test/card_atlas/defect/beta/hotfix.png",
+      "index": 13,
+      "name": "Hotfix",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Channel 1 Dark.\nTrigger the passive ability of all Dark Orbs.",
+      "description_rich": "[gold]Channel[/gold] 1 [gold]Dark[/gold].\nTrigger the passive ability of all [gold]Dark[/gold] Orbs.",
+      "id": "DARKNESS",
+      "image": "https://assets.test/card_atlas/defect/darkness.png",
+      "index": 14,
+      "name": "Darkness",
+      "rarity": "Uncommon",
+      "type": "Skill",
+      "upgraded": false
+     },
+     {
+      "color": "blue",
+      "cost": 1,
+      "description": "Gain 7 Block.\nNext turn, gain 1 Energy.",
+      "description_rich": "Gain 7 Block.\nNext turn, gain 1 Energy.",
+      "id": "CHARGE_BATTERY",
+      "image": "https://assets.test/card_atlas/defect/charge_battery.png",
+      "index": 15,
+      "name": "Charge Battery",
+      "rarity": "Common",
+      "type": "Skill",
+      "upgraded": false
+     }
+    ],
+    "gold": 125,
+    "hp": 9,
+    "max_hp": 75,
+    "name": "Defect",
+    "potion_slots": 3,
+    "potions": [
+     {
+      "description": "Apply 1 Weak and 1 Vulnerable to ALL enemies.",
+      "id": "POTION_OF_BINDING",
+      "image": "https://assets.test/potion_atlas/potion_of_binding.png",
+      "name": "Potion of Binding"
+     }
+    ],
+    "relics": [
+     {
+      "description": "At the start of each combat, Channel 1 Lightning.",
+      "id": "CRACKED_CORE",
+      "image": "https://assets.test/relic_atlas/cracked_core.png",
+      "name": "Cracked Core"
+     },
+     {
+      "description": "Every 3 normal combats, Upgrade a random card in your Deck.",
+      "id": "FISHING_ROD",
+      "image": "https://assets.test/relic_atlas/fishing_rod.png",
+      "name": "Fishing Rod"
+     },
+     {
+      "description": "Transforms into a powerful Relic after defeating 5 Elites.",
+      "id": "SWORD_OF_STONE",
+      "image": "https://assets.test/relic_atlas/sword_of_stone.png",
+      "name": "Sword of Stone"
+     }
+    ]
+   }
+  }
+ }
+}

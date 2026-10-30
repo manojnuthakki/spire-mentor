@@ -2,7 +2,7 @@
  "action_label": "",
  "assets_base": "https://assets.test",
  "chosen_action": null,
- "decision": "card_reward",
+ "decision": "combat_play",
  "idx": 0,
  "meta": {
   "act": 1,
@@ -12,7 +12,7 @@
   "bg_seed": 206169372,
   "floor": 7,
   "step_no": 0,
-  "turn": null
+  "turn": 6
  },
  "pv": null,
  "scores": [],
@@ -25,81 +25,359 @@
   "bg_col": 1,
   "bg_row": 7,
   "bg_seed": 206169372,
-  "can_skip": true,
-  "cards": [
+  "decision": "combat_play",
+  "discard_pile": [
    {
+    "base_cost": 1,
+    "can_play": false,
     "color": "blue",
-    "cost": 0,
-    "description": "Innate.\nGain 10 Block.\nExhaust.",
-    "description_rich": "[gold]Innate[/gold].\nGain 10 Block.\n[gold]Exhaust[/gold].",
-    "id": "BOOT_SEQUENCE",
-    "image": "https://assets.test/card_atlas/defect/boot_sequence.png",
-    "index": 0,
-    "name": "Boot Sequence",
-    "rarity": "Uncommon",
-    "type": "Skill"
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
    },
    {
+    "base_cost": 1,
+    "can_play": false,
     "color": "blue",
-    "cost": 0,
-    "description": "Deal 3 damage.\nTrigger all Lightning against the enemy.",
-    "description_rich": "Deal 3 damage.\nTrigger all Lightning against the enemy.",
-    "id": "TESLA_COIL",
-    "image": "https://assets.test/card_atlas/defect/tesla_coil.png",
-    "index": 1,
-    "name": "Tesla Coil",
-    "rarity": "Uncommon",
-    "type": "Attack"
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
    },
    {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 8 Block.",
+    "description_rich": "Gain 8 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 8
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": true
+   }
+  ],
+  "discard_pile_count": 3,
+  "draw_pile": [
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Channel 1 Dark.\nTrigger the passive ability of all Dark Orbs.",
+    "description_rich": "[gold]Channel[/gold] 1 [gold]Dark[/gold].\nTrigger the passive ability of all [gold]Dark[/gold] Orbs.",
+    "id": "DARKNESS",
+    "image": "https://assets.test/card_atlas/defect/darkness.png",
+    "index": -1,
+    "name": "Darkness",
+    "rarity": "Uncommon",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": -1,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Evoke your rightmost Orb twice.",
+    "description_rich": "[gold]Evoke[/gold] your rightmost Orb twice.",
+    "id": "DUALCAST",
+    "image": "https://assets.test/card_atlas/defect/dualcast.png",
+    "index": -1,
+    "name": "Dualcast",
+    "rarity": "Basic",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 Weak.",
+    "description_rich": "Deal 3 damage.\nIf the enemy intends to attack, apply 1 [gold]Weak[/gold].",
+    "id": "GO_FOR_THE_EYES",
+    "image": "https://assets.test/card_atlas/defect/go_for_the_eyes.png",
+    "index": -1,
+    "name": "Go for the Eyes",
+    "rarity": "Common",
+    "stats": {
+     "damage": 3
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
     "color": "blue",
     "cost": 1,
     "description": "Gain 4 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
     "description_rich": "Gain 4 Block.\nAt the start of the next 2 turns, Channel 1 Lightning.",
     "id": "LIGHTNING_ROD",
     "image": "https://assets.test/card_atlas/defect/lightning_rod.png",
-    "index": 2,
+    "index": -1,
     "name": "Lightning Rod",
     "rarity": "Common",
-    "type": "Skill"
+    "stats": {
+     "block": 4
+    },
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Deal 6 damage.",
+    "description_rich": "Deal 6 damage.",
+    "id": "STRIKE_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/strike_defect.png",
+    "index": -1,
+    "name": "Strike",
+    "rarity": "Basic",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "upgraded": false
+   },
+   {
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Channel 1 Lightning.",
+    "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
+    "id": "ZAP",
+    "image": "https://assets.test/card_atlas/defect/zap.png",
+    "index": -1,
+    "name": "Zap",
+    "rarity": "Basic",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
    }
   ],
-  "decision": "card_reward",
+  "draw_pile_count": 9,
+  "enemies": [
+   {
+    "block": 0,
+    "hp": 1,
+    "image": "https://assets.test/monsters/two_tailed_rat.png",
+    "index": 2,
+    "intents": [
+     {
+      "damage": 1,
+      "intent_image": "https://assets.test/intent_atlas/intent_debuff.png",
+      "type": "Debuff"
+     }
+    ],
+    "kind": "TwoTailedRat",
+    "max_hp": 19,
+    "move_state": "SCREECH",
+    "name": "Two-Tailed Rat",
+    "powers": [],
+    "rig": "https://assets.test/monster_rigs/two_tailed_rat/two_tailed_rat",
+    "rig_bounds_h": 214.0,
+    "rig_bounds_w": 200.0,
+    "rig_scale": 0.33,
+    "uid": 5
+   }
+  ],
+  "energy": 0,
+  "energy_image": "https://assets.test/sprite_fonts/defect_energy_icon.png",
+  "exhaust_pile": [
+   {
+    "base_cost": 0,
+    "can_play": false,
+    "color": "blue",
+    "cost": 0,
+    "description": "Gain 2 Focus this turn.\nExhaust.",
+    "description_rich": "Gain 2 [gold]Focus[/gold] this turn.\n[gold]Exhaust[/gold].",
+    "id": "HOTFIX",
+    "image": "https://assets.test/card_atlas/defect/beta/hotfix.png",
+    "index": -1,
+    "name": "Hotfix",
+    "rarity": "Common",
+    "stats": {},
+    "target_type": "None",
+    "type": "Skill",
+    "upgraded": false
+   }
+  ],
+  "exhaust_pile_count": 1,
   "floor": 7,
-  "options": [
+  "hand": [
    {
-    "action": "select_card_reward",
-    "args": {
-     "card_index": 0
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "description": "Gain 5 Block.",
+    "description_rich": "Gain 5 [gold]Block[/gold].",
+    "id": "DEFEND_DEFECT",
+    "image": "https://assets.test/card_atlas/defect/defend_defect.png",
+    "index": 0,
+    "name": "Defend",
+    "rarity": "Basic",
+    "stats": {
+     "block": 5
     },
-    "enabled": true,
-    "label": "BOOT_SEQUENCE.title"
+    "target_type": "None",
+    "type": "Skill",
+    "unplayable_reason": "cost",
+    "upgraded": false
    },
    {
-    "action": "select_card_reward",
-    "args": {
-     "card_index": 1
+    "base_cost": 1,
+    "can_play": false,
+    "color": "blue",
+    "cost": 1,
+    "damage_preview": {
+     "2": 6
     },
-    "enabled": true,
-    "label": "TESLA_COIL.title"
+    "description": "Deal 6 damage.\nChannel 1 Frost.",
+    "description_rich": "Deal 6 damage.\n[gold]Channel[/gold] 1 [gold]Frost[/gold].",
+    "id": "COLD_SNAP",
+    "image": "https://assets.test/card_atlas/defect/cold_snap.png",
+    "index": 1,
+    "name": "Cold Snap",
+    "rarity": "Common",
+    "stats": {
+     "damage": 6
+    },
+    "target_type": "None",
+    "type": "Attack",
+    "unplayable_reason": "cost",
+    "upgraded": false
+   }
+  ],
+  "max_energy": 3,
+  "options": [],
+  "orb_slots": 3,
+  "orbs": [
+   {
+    "evoke": 8,
+    "image": "https://assets.test/orb_atlas/lightning.png",
+    "index": 0,
+    "name": "LIGHTNING_ORB.title",
+    "passive": 3,
+    "type": "Lightning"
    },
    {
-    "action": "select_card_reward",
-    "args": {
-     "card_index": 2
-    },
-    "enabled": true,
-    "label": "LIGHTNING_ROD.title"
+    "evoke": 5,
+    "image": "https://assets.test/orb_atlas/frost.png",
+    "index": 1,
+    "name": "FROST_ORB.title",
+    "passive": 2,
+    "type": "Frost"
    },
    {
-    "action": "skip_card_reward",
-    "args": {},
-    "enabled": true,
-    "label": "Skip"
+    "evoke": 18,
+    "image": "https://assets.test/orb_atlas/dark.png",
+    "index": 2,
+    "name": "DARK_ORB.title",
+    "passive": 6,
+    "type": "Dark"
    }
   ],
   "player": {
-   "block": 0,
+   "block": 8,
    "deck": [
     {
      "color": "blue",
@@ -207,7 +485,7 @@
     },
     {
      "color": "blue",
-     "cost": 0,
+     "cost": 1,
      "description": "Channel 1 Lightning.",
      "description_rich": "[gold]Channel[/gold] 1 [gold]Lightning[/gold].",
      "id": "ZAP",
@@ -216,7 +494,7 @@
      "name": "Zap",
      "rarity": "Basic",
      "type": "Skill",
-     "upgraded": true
+     "upgraded": false
     },
     {
      "color": "blue",
@@ -285,31 +563,25 @@
     },
     {
      "color": "blue",
-     "cost": 2,
-     "description": "Lose 1 Orb Slot.\nGain 2 Strength.\nGain 2 Dexterity.",
-     "description_rich": "Lose 1 Orb Slot.\nGain 2 Strength.\nGain 2 Dexterity.",
-     "id": "BULK_UP",
-     "image": "https://assets.test/card_atlas/defect/bulk_up.png",
+     "cost": 1,
+     "description": "Channel 1 Dark.\nTrigger the passive ability of all Dark Orbs.",
+     "description_rich": "[gold]Channel[/gold] 1 [gold]Dark[/gold].\nTrigger the passive ability of all [gold]Dark[/gold] Orbs.",
+     "id": "DARKNESS",
+     "image": "https://assets.test/card_atlas/defect/darkness.png",
      "index": 14,
-     "name": "Bulk Up",
+     "name": "Darkness",
      "rarity": "Uncommon",
-     "type": "Power",
+     "type": "Skill",
      "upgraded": false
     }
    ],
-   "gold": 130,
+   "gold": 110,
    "hp": 9,
+   "image": "https://assets.test/character_sprites/defect.png",
    "max_hp": 75,
    "name": "Defect",
    "potion_slots": 3,
-   "potions": [
-    {
-     "description": "Apply 3 Weak.",
-     "id": "WEAK_POTION",
-     "image": "https://assets.test/potion_atlas/weak_potion.png",
-     "name": "Weak Potion"
-    }
-   ],
+   "potions": [],
    "relics": [
     {
      "description": "At the start of each combat, Channel 1 Lightning.",
@@ -329,7 +601,13 @@
      "image": "https://assets.test/relic_atlas/sword_of_stone.png",
      "name": "Sword of Stone"
     }
-   ]
-  }
+   ],
+   "rig": "https://assets.test/character_rigs/defect/defect",
+   "rig_bounds_h": 260.0,
+   "rig_bounds_w": 250.0,
+   "rig_scale": 0.125
+  },
+  "player_powers": [],
+  "round": 6
  }
 }

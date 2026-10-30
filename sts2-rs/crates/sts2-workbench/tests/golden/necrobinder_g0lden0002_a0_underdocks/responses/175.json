@@ -5,7 +5,7 @@
   "samples": 200
  },
  "block": {
-  "per_turn": 9.5,
+  "per_turn": 9.6,
   "scaling_cards": [
    "Bodyguard"
   ]
@@ -18,7 +18,8 @@
   },
   "by_type": {
    "Attack": 7,
-   "Skill": 8
+   "Power": 1,
+   "Skill": 7
   },
   "dead_cards": 0,
   "energy_curve": {
@@ -31,44 +32,48 @@
  "damage": {
   "aoe_attacks": [],
   "attack_count": 7,
-  "per_turn": 13.0,
+  "per_turn": 10.9,
   "scaling_cards": [
    "Unleash",
    "Negative Pulse",
-   "Scourge"
+   "Scourge",
+   "Countdown"
   ],
-  "single_target": 13.1,
-  "vs_group": 12.9
+  "single_target": 11.0,
+  "vs_group": 10.7
  },
  "deck_size": 15,
  "lenses": {
-  "boss": 40.7,
-  "hallway": 35.6,
-  "scaling": 43.5
+  "boss": 20.6,
+  "hallway": 21.9,
+  "scaling": 20.0
  },
  "scores": {
-  "block": 37.9,
-  "damage": 27.7,
-  "velocity": 57.0,
-  "volume": 39.1
+  "block": 38.0,
+  "damage": 23.8,
+  "velocity": 0.0,
+  "volume": 0.0
  },
  "velocity": {
   "bottleneck": "energy",
-  "cards_per_turn": 3.6,
+  "cards_per_turn": 2.7,
   "dilution": 1.0,
-  "draw_limited_turns": 1.6,
-  "energy_limited_turns": 4.9,
-  "engine_cards": 2,
-  "extra_per_turn": 0.8,
+  "draw_limited_turns": 0.0,
+  "energy_limited_turns": 7.0,
+  "engine_cards": 1,
+  "extra_per_turn": 0.0,
   "tags": {
-   "draw": 1,
-   "energy": 1
+   "draw": 1
   }
  },
  "warnings": [
   {
    "severity": "info",
    "text": "No AOE — multi-enemy fights (Gremlins, hallways) will be slow."
+  },
+  {
+   "severity": "info",
+   "text": "Low velocity — few draw/energy cards; you'll often draw the wrong hand."
   },
   {
    "severity": "info",

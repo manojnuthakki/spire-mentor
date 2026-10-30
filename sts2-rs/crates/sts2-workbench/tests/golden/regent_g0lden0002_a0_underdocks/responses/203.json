@@ -1,77 +1,59 @@
 {
- "assumptions": {
-  "energy": 3,
-  "hand": 5,
-  "samples": 200
+ "config": {
+  "c_puct": 2.5,
+  "depth": 200,
+  "draw_widening_c": 2.0,
+  "hidden_info": "beliefdraw",
+  "rollout_policy": "heuristic",
+  "seed": 1,
+  "sims": 48,
+  "threads": 1
  },
- "block": {
-  "per_turn": 9.1,
-  "scaling_cards": [
-   "Glow"
-  ]
- },
- "composition": {
-  "by_rarity": {
-   "Basic": 10,
-   "Common": 4,
-   "Uncommon": 2
-  },
-  "by_type": {
-   "Attack": 7,
-   "Power": 1,
-   "Skill": 8
-  },
-  "dead_cards": 0,
-  "energy_curve": {
-   "0": 3,
-   "1": 13
-  },
-  "unupgraded_basics": 7
- },
- "damage": {
-  "aoe_attacks": [],
-  "attack_count": 7,
-  "per_turn": 16.3,
-  "scaling_cards": [
-   "Crescent Spear",
-   "Black Hole"
-  ],
-  "single_target": 16.4,
-  "vs_group": 16.3
- },
- "deck_size": 16,
- "lenses": {
-  "boss": 37.8,
-  "hallway": 36.1,
-  "scaling": 38.7
- },
- "scores": {
-  "block": 36.6,
-  "damage": 33.5,
-  "velocity": 43.5,
-  "volume": 37.6
- },
- "velocity": {
-  "bottleneck": "energy",
-  "cards_per_turn": 4.4,
-  "dilution": 0.94,
-  "draw_limited_turns": 1.6,
-  "energy_limited_turns": 4.4,
-  "engine_cards": 3,
-  "extra_per_turn": 0.6,
-  "tags": {
-   "draw": 2,
-   "energy": 1
-  }
- },
- "warnings": [
+ "pv": null,
+ "scores": [
   {
-   "severity": "info",
-   "text": "No AOE — multi-enemy fights (Gremlins, hallways) will be slow."
+   "action": "VENERATE.title",
+   "is_best": true,
+   "low_confidence": false,
+   "q": 1.2088,
+   "q_saturated": false,
+   "stable_idx": 3,
+   "target_index": null,
+   "visits": 10,
+   "win_prob": 1.0
   },
   {
-   "severity": "info",
-   "text": "Energy-limited — cards stranded in hand; more energy helps, more draw won't."
+   "action": "DEFEND_REGENT.title",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.2051,
+   "q_saturated": false,
+   "stable_idx": 0,
+   "target_index": null,
+   "visits": 10,
+   "win_prob": 1.0
+  },
+  {
+   "action": "STRIKE_REGENT.title",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.203,
+   "q_saturated": false,
+   "stable_idx": 1,
+   "target_index": null,
+   "visits": 10,
+   "win_prob": 1.0
+  },
+  {
+   "action": "end turn",
+   "is_best": false,
+   "low_confidence": false,
+   "q": 1.1549,
+   "q_saturated": false,
+   "stable_idx": -1,
+   "target_index": null,
+   "visits": 9,
+   "win_prob": 1.0
   }
  ]
 }

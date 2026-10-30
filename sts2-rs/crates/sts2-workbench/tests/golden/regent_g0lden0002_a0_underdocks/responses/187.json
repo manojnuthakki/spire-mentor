@@ -1,20 +1,26 @@
 {
- "details": [],
+ "details": [
+  "You HP 2→0 (−2)",
+  "You Block 3→0",
+  "Two-Tailed Rat HP 17→0  ☠ defeated",
+  "You −Draw Cards Next Turn",
+  "You −Frail"
+ ],
  "error": null,
- "label": "Map → (1,8)",
+ "label": "End turn",
  "step": {
   "action_label": "",
   "assets_base": "https://assets.test",
   "chosen_action": null,
-  "decision": "rest_site",
+  "decision": "game_over",
   "idx": 0,
   "meta": {
    "act": 1,
    "act_name": "Underdocks",
    "bg_col": 1,
-   "bg_row": 8,
+   "bg_row": 7,
    "bg_seed": 206169372,
-   "floor": 8,
+   "floor": 7,
    "step_no": 0,
    "turn": null
   },
@@ -27,28 +33,11 @@
    "act_name": "Underdocks",
    "ascension": 0,
    "bg_col": 1,
-   "bg_row": 8,
+   "bg_row": 7,
    "bg_seed": 206169372,
-   "decision": "rest_site",
-   "floor": 8,
-   "options": [
-    {
-     "action": "choose_option",
-     "args": {
-      "option_index": 0
-     },
-     "enabled": true,
-     "label": "HEAL"
-    },
-    {
-     "action": "choose_option",
-     "args": {
-      "option_index": 1
-     },
-     "enabled": true,
-     "label": "SMITH"
-    }
-   ],
+   "decision": "game_over",
+   "floor": 7,
+   "options": [],
    "player": {
     "block": 0,
     "deck": [
@@ -120,15 +109,15 @@
      {
       "color": "orange",
       "cost": 1,
-      "description": "Gain 8 Block.",
-      "description_rich": "Gain 8 Block.",
+      "description": "Gain 5 Block.",
+      "description_rich": "Gain 5 Block.",
       "id": "DEFEND_REGENT",
       "image": "https://assets.test/card_atlas/regent/defend_regent.png",
       "index": 5,
       "name": "Defend",
       "rarity": "Basic",
       "type": "Skill",
-      "upgraded": true
+      "upgraded": false
      },
      {
       "color": "orange",
@@ -239,44 +228,23 @@
      {
       "color": "orange",
       "cost": 1,
-      "description": "Whenever you spend or gain ★, deal 3 damage to ALL enemies.",
-      "description_rich": "Whenever you spend or gain ★, deal 3 damage to ALL enemies.",
-      "id": "BLACK_HOLE",
-      "image": "https://assets.test/card_atlas/regent/black_hole.png",
+      "description": "Next turn,\ngain Energy and Stars.\nRetain your Hand this turn.",
+      "description_rich": "Next turn,\ngain Energy and Stars.\n[gold]Retain[/gold] your [gold]Hand[/gold] this turn.",
+      "id": "CONVERGENCE",
+      "image": "https://assets.test/card_atlas/regent/convergence.png",
       "index": 14,
-      "name": "Black Hole",
+      "name": "Convergence",
       "rarity": "Uncommon",
-      "type": "Power",
-      "upgraded": false
-     },
-     {
-      "color": "orange",
-      "cost": 0,
-      "description": "Gain Energy.",
-      "description_rich": "Gain Energy.",
-      "id": "ALIGNMENT",
-      "image": "https://assets.test/card_atlas/regent/alignment.png",
-      "index": 15,
-      "name": "Alignment",
-      "rarity": "Uncommon",
-      "star_cost": 3,
       "type": "Skill",
       "upgraded": false
      }
     ],
-    "gold": 110,
-    "hp": 8,
+    "gold": 90,
+    "hp": 0,
     "max_hp": 75,
     "name": "Regent",
     "potion_slots": 3,
-    "potions": [
-     {
-      "description": "Apply 3 Weak.",
-      "id": "WEAK_POTION",
-      "image": "https://assets.test/potion_atlas/weak_potion.png",
-      "name": "Weak Potion"
-     }
-    ],
+    "potions": [],
     "relics": [
      {
       "description": "At the start of each combat, gain 3 Stars.",
@@ -298,20 +266,7 @@
      }
     ]
    },
-   "rest_options": [
-    {
-     "index": 0,
-     "is_enabled": true,
-     "name": "Rest",
-     "option_id": "HEAL"
-    },
-    {
-     "index": 1,
-     "is_enabled": true,
-     "name": "Smith",
-     "option_id": "SMITH"
-    }
-   ]
+   "victory": false
   }
  }
 }
