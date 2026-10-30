@@ -914,6 +914,12 @@ fn transfer_thievery_gold_as_heist(
                 .collect()
         })
         .unwrap_or_default();
+    // C# `SurprisePower.AfterDeath`: `MarkGoldStolen` on the GremlinMercNormal
+    // encounter when the moved total is above 0 (sts2-agent fork). This hook
+    // runs only for the merc, which only that encounter spawns.
+    if stolen.iter().sum::<i32>() > 0 {
+        state.gold_was_stolen = true;
+    }
     for amount in stolen {
         // C# `PowerCmd.Apply` early-returns on `amount == 0m` (PowerCmd.cs:103).
         if amount > 0 {

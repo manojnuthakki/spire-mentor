@@ -6052,6 +6052,7 @@ mod tests {
             is_over: true,
             player_won: true,
             escaped_creatures: 1,
+            escaped_monsters: vec![sts2_core::MonsterKind::ThievingHopper],
             ..CombatState::default()
         };
         fled.player.current_hp = 40;
@@ -6061,6 +6062,7 @@ mod tests {
         let mut killed = fled.clone();
         killed.reclaim_swipe_on_death(thief);
         killed.escaped_creatures = 0;
+        killed.escaped_monsters.clear();
 
         let v_fled = terminal_state_value_with(&fled, &cfg, &leaf);
         let v_killed = terminal_state_value_with(&killed, &cfg, &leaf);
@@ -6309,6 +6311,8 @@ mod tests {
                 swipe_stolen: Vec::new(),
                 escaped_creatures: 0,
                 heist_recovered_gold: 0,
+                escaped_monsters: Vec::new(),
+                gold_was_stolen: false,
                 room_extra_rewards: Vec::new(),
                 deck_card_uids: Vec::new(),
                 event_combat_timed_out: false,
@@ -6589,6 +6593,8 @@ mod tests {
             swipe_stolen: Vec::new(),
             escaped_creatures: 0,
             heist_recovered_gold: 0,
+            escaped_monsters: Vec::new(),
+            gold_was_stolen: false,
             room_extra_rewards: Vec::new(),
             deck_card_uids: Vec::new(),
             event_combat_timed_out: false,
@@ -6945,6 +6951,8 @@ mod tests {
                 swipe_stolen: Vec::new(),
                 escaped_creatures: 0,
                 heist_recovered_gold: 0,
+                escaped_monsters: Vec::new(),
+                gold_was_stolen: false,
                 room_extra_rewards: Vec::new(),
                 deck_card_uids: Vec::new(),
                 event_combat_timed_out: false,
@@ -7138,6 +7146,8 @@ mod tests {
             swipe_stolen: Vec::new(),
             escaped_creatures: 0,
             heist_recovered_gold: 0,
+            escaped_monsters: Vec::new(),
+            gold_was_stolen: false,
             room_extra_rewards: Vec::new(),
             deck_card_uids: Vec::new(),
             event_combat_timed_out: false,
@@ -7312,6 +7322,8 @@ mod tests {
             swipe_stolen: Vec::new(),
             escaped_creatures: 0,
             heist_recovered_gold: 0,
+            escaped_monsters: Vec::new(),
+            gold_was_stolen: false,
             room_extra_rewards: Vec::new(),
             deck_card_uids: Vec::new(),
             event_combat_timed_out: false,
@@ -10197,6 +10209,8 @@ mod tests {
             swipe_stolen: Vec::new(),
             escaped_creatures: 0,
             heist_recovered_gold: 0,
+            escaped_monsters: Vec::new(),
+            gold_was_stolen: false,
             room_extra_rewards: Vec::new(),
             deck_card_uids: Vec::new(),
             event_combat_timed_out: false,

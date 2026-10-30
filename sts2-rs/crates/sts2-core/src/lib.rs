@@ -3824,6 +3824,18 @@ pub struct CombatState {
     /// won combat — the reward screen a lost combat never shows. GH #604.
     pub heist_recovered_gold: i32,
 
+    /// The kind of each enemy that FLED this combat, in flee order (C#
+    /// `CombatState.EscapedCreatures`, which
+    /// `GremlinMercNormal.CalculateGoldProportion` searches for a FatGremlin).
+    /// Empty (no allocation) in almost every fight. sts2-agent fork.
+    pub escaped_monsters: Vec<MonsterKind>,
+
+    /// C# `GremlinMercNormal.GoldWasStolen`: set when the dying GremlinMerc's
+    /// `SurprisePower.AfterDeath` moved more than 0 stolen gold onto the
+    /// FatGremlin as Heist. Read by `exit_combat`'s gold proportion.
+    /// sts2-agent fork.
+    pub gold_was_stolen: bool,
+
     /// The combat room's extra rewards in the order the fight added them (C#
     /// `CombatRoom.AddExtraReward`, one entry per call): a killed Heist
     /// carrier's gold, a killed thief's card, The Hunt's card reward. The
@@ -4067,6 +4079,8 @@ impl Default for CombatState {
             swipe_stolen: Vec::new(),
             escaped_creatures: 0,
             heist_recovered_gold: 0,
+            escaped_monsters: Vec::new(),
+            gold_was_stolen: false,
             room_extra_rewards: Vec::new(),
             deck_card_uids: Vec::new(),
             event_combat_timed_out: false,

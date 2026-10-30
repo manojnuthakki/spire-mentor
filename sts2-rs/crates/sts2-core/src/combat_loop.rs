@@ -4319,11 +4319,17 @@ fn perform_intent(
                 .find(|c| c.id == enemy_uid.0 && c.current_hp > 0)
             {
                 c.current_hp = 0;
+                let species = c.species;
                 // Bead `sts2-rs-RP15`: count the flee for the combat gold-reward
                 // proportion (C# `CombatState.EscapedCreatures`; the reward is
                 // scaled by `1 - escaped/total` at `exit_combat`). Guarded on the
                 // `current_hp > 0` find so a creature can't be double-counted.
                 state.escaped_creatures += 1;
+                // Which monster fled (sts2-agent fork): GremlinMercNormal's
+                // gold proportion asks whether a FatGremlin escaped.
+                if let Some(kind) = species {
+                    state.escaped_monsters.push(kind);
+                }
             }
         }
         Some(Intent::MultiAttack { damage, hits }) => {

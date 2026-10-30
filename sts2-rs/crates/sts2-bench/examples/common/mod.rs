@@ -374,6 +374,8 @@ pub fn build_ironclad_state_with_deck(
         swipe_stolen: Vec::new(),
         escaped_creatures: 0,
         heist_recovered_gold: 0,
+        escaped_monsters: Vec::new(),
+        gold_was_stolen: false,
         room_extra_rewards: Vec::new(),
         deck_card_uids: Vec::new(),
         event_combat_timed_out: false,

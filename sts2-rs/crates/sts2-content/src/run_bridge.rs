@@ -621,22 +621,25 @@ pub fn exit_combat(rs: &mut RunState, combat: &CombatState) {
     // (`apply_combat_gold_and_potion` → `roll_encounter_gold`) reads this.
     //
     // v0.107.1 GremlinMercNormal override (bead `…wb8lk.12`):
-    // `GremlinMercNormal.CalculateGoldProportion` (`GremlinMercNormal.cs:50-68`)
-    // replaces the base `1 - escaped/total` for that ONE encounter — 1.0 if no
-    // FatGremlin escaped, 0.5 if a FatGremlin escaped WITHOUT stealing (was 0%
-    // under the base formula), 0.0 if it escaped WITH stolen gold. STILL NOT
-    // wired here, but the reason has narrowed: bead
-    // `sts2-rs-surprise-death-spawn` ported `SurprisePower.AfterDeath`
-    // (`monsters::act1_underdocks::surprise_after_death_spawn`), so the
-    // SneakyGremlin + FatGremlin now spawn and the FatGremlin's `Intent::Escape`
-    // can fire — the `fat_gremlin_escaped` branch is REACHABLE from here on.
-    // What is still missing is a per-creature escape record (the engine only
-    // counts `combat.escaped_creatures`), which is what the 0.5-vs-0.0 split
-    // keys off; `ThieveryPower.Steal` accumulation IS ported now (GH #368.4,
-    // and GH #604 wired its `HeistPower` gold-back below).
-    // Follow-up; the base formula below is what actually runs.
+    // `GremlinMercNormal.CalculateGoldProportion` replaces the base
+    // `1 - escaped/total` for that ONE encounter — 1.0 if no FatGremlin
+    // escaped, 0.5 if a FatGremlin escaped without stolen gold, 0.0 if it
+    // escaped with it (`gremlin_merc_gold_proportion`). The encounter is the
+    // only one with a GremlinMerc (its corpse stays in `creatures`); the
+    // escape record is `combat.escaped_monsters`, the theft
+    // `combat.gold_was_stolen` (set by `SurprisePower.AfterDeath`'s Heist
+    // transfer). sts2-agent fork.
+    let merc_encounter = combat
+        .creatures
+        .iter()
+        .any(|c| c.species == Some(MonsterKind::GremlinMerc));
     let total_monsters = combat.enemy_uids.len();
-    rs.last_combat_gold_proportion = if total_monsters == 0 {
+    rs.last_combat_gold_proportion = if merc_encounter {
+        gremlin_merc_gold_proportion(
+            combat.escaped_monsters.contains(&MonsterKind::FatGremlin),
+            combat.gold_was_stolen,
+        )
+    } else if total_monsters == 0 {
         1.0
     } else {
         1.0 - f64::from(combat.escaped_creatures) / total_monsters as f64
@@ -975,13 +978,8 @@ fn python_name(kind: MonsterKind) -> &'static str {
 ///   formula previously gave 0% here).
 /// - FatGremlin escaped WITH stolen gold ⇒ `0.0`.
 ///
-/// Captured as a pure helper so the v0.107.1 value is documented and tested.
-/// It is NOT yet wired into [`after_combat`]'s proportion calc. The death-spawn
-/// half of the trigger IS now modeled (`SurprisePower.AfterDeath` →
-/// `monsters::act1_underdocks::surprise_after_death_spawn`, bead
-/// `sts2-rs-surprise-death-spawn`), so a FatGremlin can spawn and flee; what is
-/// still missing is a per-creature escape record and the `ThieveryPower.Steal`
-/// accumulation that `MarkGoldStolen` keys off. Bead `…wb8lk.12`.
+/// [`exit_combat`] uses it for that encounter, from `CombatState`'s
+/// `escaped_monsters` and `gold_was_stolen` (sts2-agent fork). Bead `…wb8lk.12`.
 #[must_use]
 pub fn gremlin_merc_gold_proportion(fat_gremlin_escaped: bool, gold_was_stolen: bool) -> f64 {
     if !fat_gremlin_escaped {
