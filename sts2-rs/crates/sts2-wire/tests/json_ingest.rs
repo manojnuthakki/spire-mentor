@@ -139,7 +139,7 @@ fn a_cards_replay_count_comes_across() {
 
 /// Keyword Sly granted for the combat (MasterPlanner) stays on the card in
 /// every pile: a draw-pile card flagged `sly` comes back Sly, and is emitted
-/// `sly` there; `sly_turn` (Hand Trick) stays hand-only.
+/// `sly` there; `sly_turn` (Hand Trick) is emitted in every pile too (sts2-agent fork).
 #[test]
 fn granted_sly_comes_across_in_every_pile() {
     let mut value: serde_json::Value = serde_json::from_str(&fixture()).unwrap();

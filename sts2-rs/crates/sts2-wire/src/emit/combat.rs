@@ -150,8 +150,10 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
     // override: a granted Retain (Snap, Choices Paradox) round-trips, and an
     // engine-vs-C# Retain-registry divergence shows as a flag difference.
     //
-    // The single-turn grants (`sly_turn`, `retain_turn`) are emitted only for
-    // cards IN HAND, where they exist. Keyword `sly` (intrinsic, or
+    // The single-turn grants (`sly_turn`, `retain_turn`) are emitted in every
+    // pile too (sts2-agent fork): C# `IsSlyThisTurn` / `ShouldRetainThisTurn`
+    // stay on the card wherever it goes until `EndOfTurnCleanup`, and the
+    // Headless host writes them for every card. Keyword `sly` (intrinsic, or
     // MasterPlanner's combat-long `AddKeyword`) is emitted in every pile: the
     // grant stays on the card wherever it goes (`MasterPlannerPower.cs`), and
     // the parse restores it from every pile, so a rebuild keeps a Sly Defend
@@ -200,15 +202,13 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
         if sly_keyword {
             flags.push("sly");
         }
-        if state.player.hand.contains(&card.uid) {
-            if !sly_keyword && state.player.sly_this_turn.contains(&card.uid) {
-                flags.push("sly_turn");
-            }
-            if !sts2_core::card_effects::card_retain_inst(card)
-                && state.player.retain_this_turn.contains(&card.uid)
-            {
-                flags.push("retain_turn");
-            }
+        if !sly_keyword && state.player.sly_this_turn.contains(&card.uid) {
+            flags.push("sly_turn");
+        }
+        if !sts2_core::card_effects::card_retain_inst(card)
+            && state.player.retain_this_turn.contains(&card.uid)
+        {
+            flags.push("retain_turn");
         }
         if !flags.is_empty() {
             set(&mut d, "flags", flags);

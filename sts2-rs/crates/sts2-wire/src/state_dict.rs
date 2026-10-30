@@ -3374,8 +3374,9 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
     // the draw pile (length + index) and the enemy roster, so a carried uid
     // would point at a different card or none.
     //
-    // The single-turn grants are HAND-SCOPED: they exist only in hand (C#
-    // clears them at end of turn). Keyword Sly from MasterPlanner lasts the
+    // The single-turn Retain grant is read from hand only (the engine's
+    // `retain_this_turn` annotates hand cards); the single-turn Sly from every
+    // pile (C# keeps both on the card until the turn's end). Keyword Sly from MasterPlanner lasts the
     // combat and stays on the card in every pile (`MasterPlannerPower.cs`):
     // a rebuild that kept it only for hand cards lost it on a Sly card in the
     // draw pile, which then didn't auto-play when discarded after the draw
@@ -3388,6 +3389,13 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
     ];
     for (uids, cards) in other_piles {
         for (&uid, pc) in uids.iter().zip(cards.iter()) {
+            // This turn's Hand Trick Sly stays on the card in every pile until
+            // the turn's end (C# `IsSlyThisTurn`), as the emit shows it
+            // (sts2-agent fork). `retain_turn` stays hand-only here: the
+            // engine's `retain_this_turn` annotates hand cards.
+            if pc.flags.iter().any(|f| f == "sly_turn") {
+                state.player.sly_this_turn.push(uid);
+            }
             if pc.flags.iter().any(|f| f == "sly")
                 && !state
                     .cards

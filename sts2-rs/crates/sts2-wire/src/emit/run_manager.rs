@@ -479,7 +479,7 @@ pub fn effective_master_deck_indices(rm: &RunManager) -> Vec<usize> {
 /// `base_damage`, `base_block`, `type` (title-cased; `Quest` for the game's
 /// Quest cards), the instance's keyword
 /// `flags` (`eternal`, `exhaust`, `ethereal`, `unplayable`, `innate`,
-/// `retain`), its first enchantment, its affliction and its own
+/// `retain`, `sly`), its first enchantment, its affliction and its own
 /// `replay_count`, each only when present. `eternal` is the removability gate
 /// the removal and transform offers read (C# `CardModel.IsRemovable`).
 #[must_use]
@@ -516,6 +516,10 @@ pub fn card_value(card: &sts2_core::cards::Card) -> Value {
     }
     if ce::card_retain_inst(card) {
         flags.push("retain");
+    }
+    // The Sly keyword (Ricochet, Abrasive), as the combat wire names it.
+    if ce::card_sly(card.card_id) {
+        flags.push("sly");
     }
     if !flags.is_empty() {
         set(&mut d, "flags", flags);
