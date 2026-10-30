@@ -2082,6 +2082,17 @@ impl RunManager {
             crate::runstate::RoomType::Monster
             | crate::runstate::RoomType::Elite
             | crate::runstate::RoomType::Boss => self.enter_combat_phase(resolved),
+            other => self.set_up_room(other),
+        }
+    }
+
+    /// Set up a non-combat room just entered (its `enter_room` done): the
+    /// shop's inventory, the rest site, the treasure chest, the event phase.
+    /// Shared by the map move and the harness's [`Self::force_enter_room`]
+    /// so the two can't drift apart. A combat room type is refused (each
+    /// caller builds its own fight).
+    fn set_up_room(&mut self, room_type: crate::runstate::RoomType) -> ActionResult {
+        match room_type {
             crate::runstate::RoomType::Shop => {
                 // Bead sts2-rs-if6ry (W3): build the active inventory
                 // via the content callback. When unwired (legacy thin-
@@ -2104,7 +2115,10 @@ impl RunManager {
                 self.phase = Phase::Event;
                 ActionResult::Advanced
             }
-            crate::runstate::RoomType::Unknown => ActionResult::InvalidForPhase,
+            crate::runstate::RoomType::Monster
+            | crate::runstate::RoomType::Elite
+            | crate::runstate::RoomType::Boss
+            | crate::runstate::RoomType::Unknown => ActionResult::InvalidForPhase,
         }
     }
 
@@ -5050,23 +5064,9 @@ impl RunManager {
                 self.phase = Phase::Combat;
                 ActionResult::Advanced
             }
-            ForcedRoom::Shop => {
+            ForcedRoom::Shop | ForcedRoom::RestSite | ForcedRoom::Treasure => {
                 self.run_state.enter_room(new_room);
-                self.shop_inventory = self
-                    .callbacks
-                    .generate_shop_inventory
-                    .map(|f| f(&mut self.run_state));
-                self.phase = Phase::Shop;
-                ActionResult::Advanced
-            }
-            ForcedRoom::RestSite => {
-                self.run_state.enter_room(new_room);
-                self.enter_rest_site();
-                ActionResult::Advanced
-            }
-            ForcedRoom::Treasure => {
-                self.run_state.enter_room(new_room);
-                self.resolve_treasure_room()
+                self.set_up_room(room_type)
             }
         }
     }
