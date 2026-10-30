@@ -443,7 +443,8 @@ fn self_help_book_skip(_state: &mut RunState) -> EventOutcome {
 
 /// C# `GenerateInitialOptions`: with at least one enchantable type the
 /// page always shows the three READ options in fixed order, locking
-/// (null handler ⇒ `enabled: false`) the ones with no eligible card;
+/// (null handler ⇒ `enabled: false`, under the option's `_LOCKED` text key)
+/// the ones with no eligible card;
 /// with none it collapses to the single NO_OPTIONS skip.
 fn self_help_book_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
     use sts2_core::cards::{CardType, EnchantmentId};
@@ -464,7 +465,11 @@ fn self_help_book_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptio
     vec![
         EventOptionInfo {
             option_id: "read_back",
-            loc_key: "SELF_HELP_BOOK.pages.INITIAL.options.READ_THE_BACK",
+            loc_key: if attack {
+                "SELF_HELP_BOOK.pages.INITIAL.options.READ_THE_BACK"
+            } else {
+                "SELF_HELP_BOOK.pages.INITIAL.options.READ_THE_BACK_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: "Read the Back".to_string(),
@@ -473,7 +478,11 @@ fn self_help_book_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptio
         },
         EventOptionInfo {
             option_id: "read_passage",
-            loc_key: "SELF_HELP_BOOK.pages.INITIAL.options.READ_PASSAGE",
+            loc_key: if skill {
+                "SELF_HELP_BOOK.pages.INITIAL.options.READ_PASSAGE"
+            } else {
+                "SELF_HELP_BOOK.pages.INITIAL.options.READ_PASSAGE_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: "Read a Passage".to_string(),
@@ -482,7 +491,11 @@ fn self_help_book_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptio
         },
         EventOptionInfo {
             option_id: "read_entire",
-            loc_key: "SELF_HELP_BOOK.pages.INITIAL.options.READ_ENTIRE_BOOK",
+            loc_key: if power {
+                "SELF_HELP_BOOK.pages.INITIAL.options.READ_ENTIRE_BOOK"
+            } else {
+                "SELF_HELP_BOOK.pages.INITIAL.options.READ_ENTIRE_BOOK_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: "Read Entire Book".to_string(),

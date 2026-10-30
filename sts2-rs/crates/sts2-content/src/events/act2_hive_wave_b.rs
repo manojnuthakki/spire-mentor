@@ -1100,7 +1100,11 @@ fn waterlogged_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionIn
         },
         EventOptionInfo {
             option_id: "tentacle_quill",
-            loc_key: "WATERLOGGED_SCRIPTORIUM.pages.INITIAL.options.TENTACLE_QUILL",
+            loc_key: if gold >= WATERLOGGED_QUILL_COST {
+                "WATERLOGGED_SCRIPTORIUM.pages.INITIAL.options.TENTACLE_QUILL"
+            } else {
+                "WATERLOGGED_SCRIPTORIUM.pages.INITIAL.options.TENTACLE_QUILL_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: if gold >= WATERLOGGED_QUILL_COST {
@@ -1113,7 +1117,11 @@ fn waterlogged_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionIn
         },
         EventOptionInfo {
             option_id: "prickly_sponge",
-            loc_key: "WATERLOGGED_SCRIPTORIUM.pages.INITIAL.options.PRICKLY_SPONGE",
+            loc_key: if gold >= WATERLOGGED_SPONGE_COST {
+                "WATERLOGGED_SCRIPTORIUM.pages.INITIAL.options.PRICKLY_SPONGE"
+            } else {
+                "WATERLOGGED_SCRIPTORIUM.pages.INITIAL.options.PRICKLY_SPONGE_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: if gold >= WATERLOGGED_SPONGE_COST {
@@ -1315,7 +1323,11 @@ fn wongo_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
     vec![
         EventOptionInfo {
             option_id: "bargain_bin",
-            loc_key: "WELCOME_TO_WONGOS.pages.INITIAL.options.BARGAIN_BIN",
+            loc_key: if gold >= WONGO_BARGAIN_COST {
+                "WELCOME_TO_WONGOS.pages.INITIAL.options.BARGAIN_BIN"
+            } else {
+                "WELCOME_TO_WONGOS.pages.INITIAL.options.BARGAIN_BIN_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: if gold >= WONGO_BARGAIN_COST {
@@ -1328,7 +1340,11 @@ fn wongo_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
         },
         EventOptionInfo {
             option_id: "featured",
-            loc_key: "WELCOME_TO_WONGOS.pages.INITIAL.options.FEATURED_ITEM",
+            loc_key: if gold >= WONGO_FEATURED_COST {
+                "WELCOME_TO_WONGOS.pages.INITIAL.options.FEATURED_ITEM"
+            } else {
+                "WELCOME_TO_WONGOS.pages.INITIAL.options.FEATURED_ITEM_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: if gold >= WONGO_FEATURED_COST {
@@ -1341,7 +1357,11 @@ fn wongo_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
         },
         EventOptionInfo {
             option_id: "mystery",
-            loc_key: "WELCOME_TO_WONGOS.pages.INITIAL.options.MYSTERY_BOX",
+            loc_key: if gold >= WONGO_MYSTERY_COST {
+                "WELCOME_TO_WONGOS.pages.INITIAL.options.MYSTERY_BOX"
+            } else {
+                "WELCOME_TO_WONGOS.pages.INITIAL.options.MYSTERY_BOX_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: if gold >= WONGO_MYSTERY_COST {

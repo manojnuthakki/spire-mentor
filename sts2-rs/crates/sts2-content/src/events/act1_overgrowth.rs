@@ -332,7 +332,11 @@ fn tea_master_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<Event
     vec![
         EventOptionInfo {
             option_id: "bone_tea",
-            loc_key: "TEA_MASTER.pages.INITIAL.options.BONE_TEA",
+            loc_key: if gold >= TEA_MASTER_BONE_COST {
+                "TEA_MASTER.pages.INITIAL.options.BONE_TEA"
+            } else {
+                "TEA_MASTER.pages.INITIAL.options.BONE_TEA_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: if gold >= TEA_MASTER_BONE_COST {
@@ -345,7 +349,11 @@ fn tea_master_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<Event
         },
         EventOptionInfo {
             option_id: "ember_tea",
-            loc_key: "TEA_MASTER.pages.INITIAL.options.EMBER_TEA",
+            loc_key: if gold >= TEA_MASTER_EMBER_COST {
+                "TEA_MASTER.pages.INITIAL.options.EMBER_TEA"
+            } else {
+                "TEA_MASTER.pages.INITIAL.options.EMBER_TEA_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: if gold >= TEA_MASTER_EMBER_COST {

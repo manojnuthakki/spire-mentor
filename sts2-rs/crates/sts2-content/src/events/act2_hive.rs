@@ -48,7 +48,7 @@ use super::{
 /// midpoint 75 until `6ynt.4.rng` lands.
 pub const CRYSTAL_SPHERE_PAY_COST: i32 = 75;
 
-fn crystal_sphere_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
+fn crystal_sphere_generate_options(_state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
     let cost = CRYSTAL_SPHERE_PAY_COST;
     vec![
         EventOptionInfo {
@@ -58,7 +58,9 @@ fn crystal_sphere_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<E
             title_vars: Vec::new(),
             label: format!("Uncover Future ({cost}g)"),
             description: "3 Prophesize picks.".to_string(),
-            enabled: state.gold >= cost,
+            // C# `CrystalSphere` never locks it: `IsAllowed` admits the event
+            // only at 100+ gold, above any rolled cost (51-99) (sts2-agent fork).
+            enabled: true,
         },
         EventOptionInfo {
             option_id: "debt",
@@ -73,7 +75,8 @@ fn crystal_sphere_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<E
 }
 
 fn crystal_sphere_pay(state: &mut RunState) -> EventOutcome {
-    state.gold = state.gold.saturating_sub(CRYSTAL_SPHERE_PAY_COST);
+    // C# `PlayerCmd.LoseGold` floors the gold at 0.
+    state.gold = (state.gold - CRYSTAL_SPHERE_PAY_COST).max(0);
     EventOutcome::finished(format!(
         "Paid {CRYSTAL_SPHERE_PAY_COST}g — 3 Prophesize picks deferred to 6ynt.4.prophesize."
     ))
@@ -844,7 +847,11 @@ fn luminous_choir_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<E
         },
         EventOptionInfo {
             option_id: "tribute",
-            loc_key: "LUMINOUS_CHOIR.pages.INITIAL.options.OFFER_TRIBUTE",
+            loc_key: if state.gold >= cost {
+                "LUMINOUS_CHOIR.pages.INITIAL.options.OFFER_TRIBUTE"
+            } else {
+                "LUMINOUS_CHOIR.pages.INITIAL.options.OFFER_TRIBUTE_LOCKED"
+            },
             vars: Vec::new(),
             title_vars: Vec::new(),
             label: if state.gold >= cost {
@@ -1369,13 +1376,17 @@ mod tests {
         assert!(rs.master_deck.iter().any(|c| c.card_id == CardId::Debt));
     }
 
+    /// The game never locks Uncover Future (the event needs 100+ gold to
+    /// appear); paid without the gold, the loss floors at 0 (sts2-agent fork).
     #[test]
-    fn crystal_sphere_options_disable_pay_when_broke() {
-        let rs = rs_with_gold(0);
+    fn crystal_sphere_options_never_lock_pay() {
+        let mut rs = rs_with_gold(0);
         let opts = (CRYSTAL_SPHERE.generate_options)(&rs, &CRYSTAL_SPHERE);
         assert_eq!(opts.len(), 2);
-        assert!(!opts[0].enabled);
+        assert!(opts[0].enabled);
         assert!(opts[1].enabled);
+        let _ = (CRYSTAL_SPHERE.options[0].handler)(&mut rs);
+        assert_eq!(rs.gold, 0);
     }
 
     // ── DollRoom ───────────────────────────────────────────────────
