@@ -673,12 +673,57 @@ fn stone_lift(state: &mut RunState) -> EventOutcome {
     }
 }
 
+/// `StoneOfAllTime`'s `PushVigorousAmount`: the Vigorous stacks Push gives.
+pub const STONE_PUSH_VIGOROUS: i32 = 8;
+
+/// C# `Vigorous.CanEnchant`: the base enchant rule (not Status/Curse, not
+/// already enchanted, playable) and `CanEnchantCardType` = Attack. The same
+/// pool `RunManager::enchant_eligible_deck_indices` lists for a Vigorous pick
+/// restricted to Attacks.
+fn vigorous_can_enchant(c: &sts2_core::cards::Card) -> bool {
+    use sts2_core::cards::CardType;
+    c.card_type == CardType::Attack && c.enchantments.is_empty() && (c.cost >= 0 || c.is_x_cost())
+}
+
 fn stone_push(state: &mut RunState) -> EventOutcome {
+    // C# `StoneOfAllTime.Push`: `CreatureCmd.Damage(6, Unblockable)` FIRST,
+    // then `FromDeckForEnchantment(Vigorous, 8)` pick-1 over
+    // `Vigorous.CanEnchant` → `CardCmd.Enchant(Vigorous, card, 8)`. The grid
+    // auto-takes at count <= MinSelect(=1), as Sapphire Seed's Plant. The
+    // trailing `base.Rng.NextInt(100)` draws from the event's private stream,
+    // which nothing reads after the event, so it isn't modelled.
+    use sts2_core::cards::{CardType, EnchantmentId};
     let lost = state.lose_hp(STONE_PUSH_DAMAGE);
-    // Python enchants a deck card with Vigorous +8. Enchant deferred.
-    EventOutcome::finished(format!(
-        "Took {lost} damage — Vigorous +8 enchant deferred."
-    ))
+    let eligible = state
+        .master_deck
+        .iter()
+        .filter(|c| vigorous_can_enchant(c))
+        .count();
+    if state.interactive_card_transform && eligible > 1 {
+        state
+            .pending_deck_enchants
+            .push(sts2_core::PendingDeckEnchant {
+                enchantment: EnchantmentId::Vigorous,
+                amount: STONE_PUSH_VIGOROUS,
+                type_restriction: Some(CardType::Attack),
+                secondary_type: None,
+            });
+        EventOutcome::finished(format!(
+            "Took {lost} damage. Pick a card to enchant with Vigorous {STONE_PUSH_VIGOROUS}."
+        ))
+    } else {
+        if let Some(card) = state
+            .master_deck
+            .iter_mut()
+            .find(|c| vigorous_can_enchant(c))
+        {
+            card.enchantments
+                .push((EnchantmentId::Vigorous, STONE_PUSH_VIGOROUS));
+        }
+        EventOutcome::finished(format!(
+            "Took {lost} damage, enchanted a card with Vigorous {STONE_PUSH_VIGOROUS}."
+        ))
+    }
 }
 
 const STONE_OF_ALL_TIME_OPTIONS: &[EventOptionSpec] = &[
@@ -715,7 +760,10 @@ const STONE_OF_ALL_TIME_OPTIONS: &[EventOptionSpec] = &[
         default_description: "Take 6 damage, enchant a card with Vigorous +8.",
         default_vars: &[
             ("PushHpLoss", EventVarSpec::Int(STONE_PUSH_DAMAGE as i64)),
-            ("PushVigorousAmount", EventVarSpec::Int(8)),
+            (
+                "PushVigorousAmount",
+                EventVarSpec::Int(STONE_PUSH_VIGOROUS as i64),
+            ),
         ],
         vars_fn: None,
         title_vars_fn: None,
