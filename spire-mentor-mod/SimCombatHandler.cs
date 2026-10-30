@@ -73,7 +73,7 @@ public class SimCombatHandler : IRoomHandler, IHandler
             await WaitHelper.Until(
                 () => IsPlayerInPlayPhase(player) || !CombatManager.Instance.IsInProgress,
                 ct, PlayPhaseWait, $"Player turn {turn} never reached the play phase");
-            if (!CombatManager.Instance.IsInProgress)
+            if (IsOver(player))
                 break;
 
             SimAutoSlayer.CurrentWatchdog?.Reset($"Combat turn {turn}");
@@ -83,7 +83,7 @@ public class SimCombatHandler : IRoomHandler, IHandler
 
             // Only reachable at the per-turn action cap: the agent never said
             // end_turn, but the turn has to finish somehow.
-            if (!agentEndedTurn && IsPlayerInPlayPhase(player) && CombatManager.Instance.IsInProgress)
+            if (!agentEndedTurn && MayAsk(player))
             {
                 Logger.Log($"[SimCombat] Turn {turn}: {ActionCapPerTurn}-action cap reached, forcing end turn");
                 PlayerCmd.EndTurn(player, canBackOut: false);
@@ -98,32 +98,39 @@ public class SimCombatHandler : IRoomHandler, IHandler
 
     /// <summary>
     /// Asks the agent for actions until it ends the turn, the action cap is
-    /// hit, or the player drops out of the play phase. Returns whether the
+    /// hit, the player drops out of the play phase, or the fight is over (ended,
+    /// ending, the player dead: a death mid-play leaves the phase at Play), checked
+    /// again after each settle wait (<see cref="SimCombatTurn"/>). Returns whether the
     /// agent itself ended the turn. Rejected / errored replies still count as
     /// an action so a misbehaving agent cannot spin the turn forever.
     /// </summary>
-    private async Task<bool> RunTurnDecisionsAsync(Player player, int turn, CancellationToken ct)
-    {
-        int actionsTaken = 0;
-        while (actionsTaken < ActionCapPerTurn && IsPlayerInPlayPhase(player))
-        {
-            ct.ThrowIfCancellationRequested();
+    private Task<bool> RunTurnDecisionsAsync(Player player, int turn, CancellationToken ct) =>
+        SimCombatTurn.RunAsync(
+            () => MayAsk(player),
+            () => AwaitSettledAsync(player, ct),
+            async () =>
+            {
+                (string stateJson, long stateId) = SerializeCombatState(player);
+                string reply = await SimAgentGate.RequestActionAsync(stateJson, ct, "combat_action");
+                bool endedTurn = await ExecuteAgentAction(reply, player, stateId, ct);
+                await Task.Delay(FrameSettleMs, ct);
+                return endedTurn;
+            },
+            taken =>
+            {
+                if (taken > 0 && taken % WatchdogRefreshEveryActions == 0)
+                    SimAutoSlayer.CurrentWatchdog?.Reset($"Combat turn {turn}, played {taken} cards");
+            },
+            ActionCapPerTurn, ct);
 
-            if (actionsTaken > 0 && actionsTaken % WatchdogRefreshEveryActions == 0)
-                SimAutoSlayer.CurrentWatchdog?.Reset($"Combat turn {turn}, played {actionsTaken} cards");
+    /// <summary>Whether the agent may be asked for a play (<see cref="SimCombatTurn"/>): the play phase, the fight going on.</summary>
+    private static bool MayAsk(Player player) =>
+        SimCombatTurn.MayAsk(IsPlayerInPlayPhase(player), CombatManager.Instance.IsInProgress,
+            CombatManager.Instance.IsEnding, player.Creature.IsDead);
 
-            await AwaitSettledAsync(player, ct);
-            (string stateJson, long stateId) = SerializeCombatState(player);
-            string reply = await SimAgentGate.RequestActionAsync(stateJson, ct, "combat_action");
-            bool endedTurn = await ExecuteAgentAction(reply, player, stateId, ct);
-
-            await Task.Delay(FrameSettleMs, ct);
-            if (endedTurn)
-                return true;
-            actionsTaken++;
-        }
-        return false;
-    }
+    /// <summary>Whether the fight is over for the handler: ended, ending, or the player dead (<see cref="SimCombatTurn"/>).</summary>
+    private static bool IsOver(Player player) =>
+        SimCombatTurn.Over(CombatManager.Instance.IsInProgress, CombatManager.Instance.IsEnding, player.Creature.IsDead);
 
     private static bool IsPlayerInPlayPhase(Player player) =>
         player.PlayerCombatState?.Phase == PlayerTurnPhase.Play;
