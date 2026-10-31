@@ -353,9 +353,7 @@ pub fn install_pool() {
     // `owner.offer_relic_rewards(3, rarities=...)`. The relic-rewards
     // portion uses `rs.offer_relic_rewards(RelicId::CallingBell, 3)`
     // sentinel — umbrella sts2-rs-01o resolves the rarity tiers at
-    // flush time. The CurseOfTheBell card-add clause is deferred to
-    // umbrella sts2-rs-01o pending run-side deck mutation surface
-    // (same gating as NeowsTorment / PaelsHorn).
+    // flush time. CurseOfTheBell is added to the deck first, as C# does.
     register_after_obtained(
         RelicId::CallingBell,
         listener_calling_bell as AfterObtainedRunFn,
@@ -2553,13 +2551,15 @@ fn listener_small_capsule(rs: &mut RunState) -> EffectResult {
 /// `shop_event.py::CallingBell.after_obtained`: `owner.offer_relic_rewards(
 /// 3, rarities=(COMMON, UNCOMMON, RARE))`). The RelicId acts as the
 /// sentinel placeholder; umbrella sts2-rs-01o resolves rarity tiers
-/// at flush time. The CurseOfTheBell card-add clause is deferred —
-/// same gating as NeowsTorment / PaelsHorn pending run-side deck
-/// mutation surface. Bead `sts2-rs-u4wv`.
+/// at flush time. Bead `sts2-rs-u4wv`. C# `CallingBell.AfterObtained`
+/// adds Curse of the Bell to the deck first
+/// (`CardPileCmd.AddCurseToDeck<CurseOfTheBell>`, like CursedPearl's
+/// Greed), then offers the relics (sts2-agent fork, calling-bell-curse).
 fn listener_calling_bell(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::CallingBell) {
         return EffectResult::NotImplemented;
     }
+    push_deck_card(rs, sts2_core::cards::CardId::CurseOfTheBell);
     // Python pin: `offer_relic_rewards(3, rarities=(COMMON, UNCOMMON, RARE))`.
     let rarities = [
         Some(RelicRarity::Common),
@@ -10379,8 +10379,8 @@ mod tests {
         );
     }
 
-    /// `CallingBell` — combat dispatch is a no-op by design. Future
-    /// body-fill adds CurseOfTheBell to deck and queues 3 relic
+    /// `CallingBell` — combat dispatch is a no-op by design. Its
+    /// after_obtained adds CurseOfTheBell to deck and queues 3 relic
     /// rewards at obtain (count pinned by [`CALLING_BELL_RELICS`]).
     #[test]
     fn calling_bell_combat_dispatch_is_noop() {
