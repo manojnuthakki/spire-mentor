@@ -1256,7 +1256,7 @@ fn the_lantern_key_keep_key(state: &mut RunState) -> EventOutcome {
 }
 
 /// `Fight` (page 1): C# `EnterCombatWithoutExitingEvent<MysteriousKnightEvent
-/// Encounter>` with a `SpecialCardReward(LanternKey)` and
+/// Encounter>` with a `SpecialCardReward(CreateCard<LanternKey>)` and
 /// `shouldResumeAfterCombat: false`.
 ///
 /// Bead `sts2-rs-ck9z6` (GH #166): enters a real `Phase::Combat` against
@@ -1269,9 +1269,10 @@ fn the_lantern_key_fight(state: &mut RunState) -> EventOutcome {
     state.event_combat = Some(EventCombatRequest::no_resume(
         EventEncounter::MysteriousKnight,
         EventId::TheLanternKey,
-        vec![Reward::Card(CardReward::from_options(vec![
-            CardId::LanternKey,
-        ]))],
+        card_pod_from_id(CardId::LanternKey, false)
+            .map(sts2_core::OfferedReward::SpecialCard)
+            .into_iter()
+            .collect(),
     ));
     EventOutcome {
         finished: false,
@@ -3424,7 +3425,10 @@ mod tests {
             sts2_core::events::EventEncounter::MysteriousKnight
         );
         assert_eq!(req.victory_rewards.len(), 1);
-        assert!(matches!(req.victory_rewards[0], Reward::Card(_)));
+        assert!(matches!(
+            req.victory_rewards[0],
+            sts2_core::OfferedReward::SpecialCard(c) if c.card_id == CardId::LanternKey
+        ));
     }
 
     #[test]

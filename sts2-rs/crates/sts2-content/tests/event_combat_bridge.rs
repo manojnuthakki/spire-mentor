@@ -164,10 +164,11 @@ fn lantern_key_fight_stages_card_reward_no_resume() {
     let req = rs.event_combat.as_ref().expect("combat staged");
     assert!(!req.resume, "TheLanternKey does not resume");
     assert_eq!(req.encounter, EventEncounter::MysteriousKnight);
-    assert_eq!(req.victory_rewards.len(), 1, "LanternKey card reward");
+    assert_eq!(req.victory_rewards.len(), 1, "LanternKey special card");
     assert!(matches!(
         req.victory_rewards[0],
-        sts2_core::runstate::Reward::Card(_)
+        sts2_core::runstate::OfferedReward::SpecialCard(c)
+            if c.card_id == sts2_core::cards::CardId::LanternKey
     ));
 }
 

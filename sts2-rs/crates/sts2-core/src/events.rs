@@ -913,6 +913,18 @@ impl EventEncounter {
     pub const fn gives_rewards(&self) -> bool {
         !matches!(self, Self::BattlewornDummy(_))
     }
+
+    /// The encounter's own gold bounds when it overrides C#
+    /// `EncounterModel.Min/MaxGoldReward` (`FakeMerchantEventEncounter`: 300,
+    /// with no Poverty scaling), else `None` (its room type's). Every event
+    /// encounter's room type is Monster. sts2-agent fork.
+    #[must_use]
+    pub const fn gold_reward_bounds(&self) -> Option<(i32, i32)> {
+        match self {
+            Self::FakeMerchant => Some((300, 300)),
+            _ => None,
+        }
+    }
 }
 
 /// A request, raised by an event-option handler, to enter a real
@@ -942,7 +954,9 @@ pub struct EventCombatRequest {
     /// Extra rewards granted ONLY on a clean victory when `resume` is
     /// `false` (C# `extraRewards` added via `CombatRoom.AddExtraReward`):
     /// TheLanternKey's LanternKey card, FakeMerchant's FakeMerchantsRug.
-    pub victory_rewards: Vec<crate::runstate::Reward>,
+    /// Under [`crate::RunState::interactive_rewards`] they join the fight
+    /// room's own rewards (sts2-agent fork).
+    pub victory_rewards: Vec<crate::runstate::OfferedReward>,
 }
 
 impl EventCombatRequest {
@@ -965,7 +979,7 @@ impl EventCombatRequest {
     pub fn no_resume(
         encounter: EventEncounter,
         parent_event: EventId,
-        victory_rewards: Vec<crate::runstate::Reward>,
+        victory_rewards: Vec<crate::runstate::OfferedReward>,
     ) -> Self {
         Self {
             encounter,

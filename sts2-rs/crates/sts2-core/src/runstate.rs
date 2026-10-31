@@ -1131,6 +1131,12 @@ pub struct RunState {
     /// `sts2-rs-RP15`.
     pub last_combat_gold_proportion: f64,
 
+    /// The won fight's encounter gold bounds when its encounter overrides
+    /// C# `EncounterModel.Min/MaxGoldReward` (an event fight's,
+    /// [`crate::events::EventEncounter::gold_reward_bounds`]), set only while
+    /// its room's rewards roll; `None` uses the room type's. sts2-agent fork.
+    pub encounter_gold_bounds: Option<(i32, i32)>,
+
     /// The Ancient-rarity card `DustyTome` will add when obtained, chosen at
     /// the Darv-event option-generation moment (`Phase::BossRelic` entry) by
     /// `DustyTome.SetupForPlayer` — `player.PlayerRng.Rewards.NextItem(items)`,
@@ -1989,6 +1995,7 @@ impl Default for RunState {
             relics: Vec::new(),
             last_obtained_relic: None,
             last_combat_gold_proportion: 1.0,
+            encounter_gold_bounds: None,
             dusty_tome_setup_card: None,
             current_room: None,
             // Python pin `sts2-rl-agent@01c094d:sts2_env/run/run_state.py:38-40`.
@@ -4649,6 +4656,11 @@ impl RunState {
         if self.ascension_level >= POVERTY_ASCENSION_LEVEL {
             low_f = (low_f * POVERTY_ASCENSION_GOLD_MULTIPLIER).trunc();
             high_f = (high_f * POVERTY_ASCENSION_GOLD_MULTIPLIER).trunc();
+        }
+        // An encounter's own bounds replace the getter whole, Poverty
+        // included (C# `FakeMerchantEventEncounter.Min/MaxGoldReward => 300`).
+        if let Some((lo, hi)) = self.encounter_gold_bounds {
+            (low_f, high_f) = (f64::from(lo), f64::from(hi));
         }
         // Only Monster rooms scale by `GoldProportion` (C# Elite/Boss arms use
         // raw bounds — see the method doc-comment).

@@ -17,7 +17,7 @@ use sts2_core::events::{EventEncounter, EventId};
 use sts2_core::monsters::MonsterKind;
 use sts2_core::potions::{CharacterId, PotionKind};
 use sts2_core::run_manager::{ActionResult, ForcedRoom, Phase, RunAction, RunManager};
-use sts2_core::runstate::Reward;
+use sts2_core::runstate::OfferedReward;
 use sts2_core::RelicId;
 
 fn seed_3_at_the_fake_merchant(
@@ -172,7 +172,7 @@ fn foul_potion_thrown_at_the_fake_merchant_starts_its_fight() {
         .victory_rewards
         .iter()
         .map(|r| match r {
-            Reward::Relic(rr) => rr.relic_id,
+            OfferedReward::Relic(rr) => rr.relic_id,
             other => panic!("non-relic extra reward: {other:?}"),
         })
         .collect();

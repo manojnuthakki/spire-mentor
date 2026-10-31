@@ -2267,18 +2267,18 @@ impl RunManager {
     /// after, with the rug and every still-stocked relic (in the inventory's
     /// order) as the fight's extra rewards. sts2-agent fork (S18).
     fn throw_foul_potion_at_fake_merchant(&mut self) -> ActionResult {
-        use crate::runstate::{RelicReward, Reward};
+        use crate::runstate::{OfferedReward, RelicReward};
         let inv = self
             .shop_inventory
             .take()
             .expect("the fake merchant's shop");
-        let mut rewards = vec![Reward::Relic(RelicReward::new(
+        let mut rewards = vec![OfferedReward::Relic(RelicReward::new(
             crate::relics::RelicId::FakeMerchantsRug,
         ))];
         rewards.extend(inv.relics.iter().filter_map(|e| {
             e.relic_id
                 .filter(|_| crate::shop::is_shop_entry_available(e.price))
-                .map(|id| Reward::Relic(RelicReward::new(id)))
+                .map(|id| OfferedReward::Relic(RelicReward::new(id)))
         }));
         self.run_state.event_combat = Some(crate::events::EventCombatRequest::no_resume(
             crate::events::EventEncounter::FakeMerchant,
@@ -2715,6 +2715,12 @@ impl RunManager {
         // chain. A player death already short-circuited to `Phase::RunOver`
         // above, so this is reached only on a WON (incl. timed-out) fight.
         if let Some(req) = self.run_state.event_combat.take() {
+            // sts2-agent fork: a fight that doesn't resume its event is a
+            // combat room of its own; under the rewards screen its room's
+            // rewards are offered with the event's extras.
+            if !req.resume && req.encounter.gives_rewards() && self.run_state.interactive_rewards {
+                return self.open_event_fight_room_rewards(req);
+            }
             // sts2-agent fork: an event fight has no room rewards screen here;
             // its extra rewards are offered as a set after the event resumes,
             // unless its encounter offers no rewards (Battleworn Dummy's room
@@ -2873,6 +2879,31 @@ impl RunManager {
                 self.run_state.drain_relic_rewards_directly();
             }
         }
+        self.open_reward_screen(roll);
+        ActionResult::Advanced
+    }
+
+    /// A won event fight that doesn't resume its event (C#
+    /// `EnterCombatWithoutExitingEvent(..., shouldResumeAfterCombat: false)`):
+    /// a `CombatRoom` of its encounter's room type (Monster for every event
+    /// encounter) whose `OfferRoomEndRewards` → `RewardsSet.WithRewardsFromRoom`
+    /// gives the room's own rewards (gold at the encounter's bounds, the
+    /// potion roll, `CardReward(ForRoom(Monster))`, the relic hooks') and then
+    /// its extra rewards: the event's, added when the room was made, before
+    /// those the fight added. The event ends with the room; leaving the
+    /// rewards goes to the map. sts2-agent fork (`event-fight-room-rewards`).
+    fn open_event_fight_room_rewards(
+        &mut self,
+        req: crate::events::EventCombatRequest,
+    ) -> ActionResult {
+        let _ = self.run_state.exit_event_room();
+        let mut extras = req.victory_rewards;
+        extras.append(&mut self.run_state.room_extra_rewards);
+        self.run_state.room_extra_rewards = extras;
+        self.run_state.encounter_gold_bounds = req.encounter.gold_reward_bounds();
+        let roll = self.begin_room_rewards(crate::runstate::RoomType::Monster);
+        self.run_state.encounter_gold_bounds = None;
+        self.enter_card_reward_phase();
         self.open_reward_screen(roll);
         ActionResult::Advanced
     }
@@ -5114,11 +5145,27 @@ impl RunManager {
             // the PickRelicReward/SkipRelic surface), everything else
             // (TheLanternKey's card) onto `pending_rewards`.
             for reward in &req.victory_rewards {
+                use crate::runstate::{OfferedReward, Reward};
                 match reward {
-                    crate::runstate::Reward::Relic(rr) => {
+                    OfferedReward::Relic(rr) => {
                         self.run_state.offer_relic_rewards(rr.relic_id, 1);
                     }
-                    other => self.run_state.pending_rewards.push(other.clone()),
+                    OfferedReward::SpecialCard(card) => {
+                        self.run_state.pending_rewards.push(Reward::Card(
+                            crate::runstate::CardReward::from_options(vec![card.card_id]),
+                        ));
+                    }
+                    OfferedReward::Gold(amount) => {
+                        self.run_state
+                            .pending_rewards
+                            .push(Reward::Gold { amount: *amount });
+                    }
+                    // No event fight adds these as extras.
+                    OfferedReward::Potion(_)
+                    | OfferedReward::RandomRelic { .. }
+                    | OfferedReward::Card { .. }
+                    | OfferedReward::RoomCard
+                    | OfferedReward::RemoveCard => {}
                 }
             }
         }
@@ -6581,7 +6628,7 @@ mod tests {
 
     /// sts2-agent fork: an event fight whose encounter offers no rewards
     /// (Battleworn Dummy) offers none of its extras either; another event
-    /// fight's extras are offered as a set.
+    /// fight's extras are on its room's rewards screen (no custom set).
     #[test]
     fn an_event_fight_offers_its_extras_only_if_its_encounter_gives_rewards() {
         use crate::events::{BattlewornDummySetting, EventCombatRequest, EventEncounter, EventId};
@@ -6601,6 +6648,7 @@ mod tests {
                 EventCombatRequest::resuming(encounter, EventId::BattlewornDummy)
             });
             rm.run_state.room_extra_rewards = vec![OfferedReward::RemoveCard];
+            rm.callbacks.roll_combat_gold_and_potion = Some(|_, _| RoomRewardRoll::default());
             rm.combat = Some(CombatState {
                 player_won: true,
                 ..Default::default()
@@ -6608,8 +6656,10 @@ mod tests {
             rm.phase = Phase::Combat;
             let _ = rm.exit_combat_and_transition();
             assert!(rm.run_state.room_extra_rewards.is_empty());
+            assert!(rm.run_state.offered_reward_sets.is_empty());
             assert_eq!(
-                !rm.run_state.offered_reward_sets.is_empty(),
+                rm.reward_screen()
+                    .is_some_and(|r| r.contains(&ScreenReward::RemoveCard)),
                 offered,
                 "{encounter:?}"
             );
@@ -11428,7 +11478,7 @@ mod tests {
         rs.event_combat = Some(EventCombatRequest::no_resume(
             EventEncounter::MysteriousKnight,
             EventId::TheLanternKey,
-            vec![crate::runstate::Reward::Gold { amount: 0 }],
+            vec![crate::runstate::OfferedReward::Gold(0)],
         ));
         true
     }
