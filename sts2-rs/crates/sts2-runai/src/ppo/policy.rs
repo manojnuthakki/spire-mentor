@@ -240,9 +240,11 @@ fn effective_master_deck_indices(rm: &RunManager) -> Vec<usize> {
     let Some(combat) = rm.combat.as_ref() else {
         return all.collect();
     };
-    // sts2-agent fork: each stolen card by its deck link
-    // (`CombatState::unreclaimed_stolen_deck_indices`), not its combat state.
-    let stolen = combat.unreclaimed_stolen_deck_indices(&rm.run_state.master_deck);
+    // sts2-agent fork: each stolen card by its deck link, not its combat
+    // state; a dead thief's card stays out until its special card reward is
+    // claimed (`CombatState::deck_view_stolen_indices`, thief-deck-view).
+    let stolen = combat
+        .deck_view_stolen_indices(&rm.run_state.master_deck, rm.run_state.interactive_rewards);
     all.filter(|i| !stolen.contains(i)).collect()
 }
 

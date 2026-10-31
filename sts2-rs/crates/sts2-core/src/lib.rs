@@ -7767,6 +7767,39 @@ impl CombatState {
         taken
     }
 
+    /// The master-deck indices a mid-combat deck view leaves out: every card a
+    /// thief still holds ([`Self::unreclaimed_stolen_deck_indices`]) and, when
+    /// a killed thief's card comes back as a special card reward
+    /// (`special_card_rewards`: the run's interactive rewards), the cards of
+    /// thieves already dead. C# `SwipePower.BeforeDeath` only registers the
+    /// card with the run (`RunState.AddCard`) and offers it as a
+    /// `SpecialCardReward`; the card is in the deck again only once that
+    /// reward is claimed (`CardPileCmd.Add`). sts2-agent fork (thief-deck-view).
+    #[must_use]
+    pub fn deck_view_stolen_indices(
+        &self,
+        master_deck: &[Card],
+        special_card_rewards: bool,
+    ) -> Vec<usize> {
+        let mut taken: Vec<usize> = Vec::new();
+        for stolen in self
+            .swipe_stolen
+            .iter()
+            .filter(|s| !s.reclaimed || special_card_rewards)
+        {
+            if let Some(i) = resolve_stolen_deck_index(
+                master_deck,
+                stolen.deck_index,
+                stolen.card_id,
+                stolen.upgraded,
+                &taken,
+            ) {
+                taken.push(i);
+            }
+        }
+        taken
+    }
+
     /// [`Self::record_swipe_steal`] for the combat card `uid`, keeping its
     /// master-deck index so the steal (and a return) pairs with the permanent
     /// card even after a combat-only change such as an Armaments upgrade.
