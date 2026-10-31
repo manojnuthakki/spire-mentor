@@ -381,6 +381,9 @@ public partial class RunSimulator
         if (card.Enchantment == null) return;
         dict["enchantment_id"] = card.Enchantment.Id.Entry;
         try { dict["enchantment_amount"] = card.Enchantment.Amount; } catch { }
+        // Its status (Normal, Disabled): Swift, Glam, Vigorous and Sown disable themselves once
+        // used, and NCard.SetEnchantmentStatus greys a Disabled enchantment's tab.
+        dict["enchantment_status"] = card.Enchantment.Status.ToString();
     }
 
     /// <summary>
