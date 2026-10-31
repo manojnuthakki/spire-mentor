@@ -142,3 +142,24 @@ fn white_star_adds_nothing_in_a_monster_room_and_prayer_wheel_nothing_in_an_elit
     assert_eq!(cards(&elite).len(), 1);
     assert_eq!(relics(&elite).len(), 1);
 }
+
+/// The hooks run in the order the relics are held (C# `Hook.ModifyRewards`
+/// over `RunState.IterateHookListeners`: the player's relics in order), so the
+/// first held hook's reward rolls first (`hook-read-order`).
+#[test]
+fn the_hooks_rewards_roll_in_the_order_the_relics_are_held() {
+    let white = fight("BYGONE_EFFIGY_ELITE", &[RelicId::WhiteStar]);
+    let black = fight("BYGONE_EFFIGY_ELITE", &[RelicId::BlackStar]);
+    let white_first = fight(
+        "BYGONE_EFFIGY_ELITE",
+        &[RelicId::WhiteStar, RelicId::BlackStar],
+    );
+    let black_first = fight(
+        "BYGONE_EFFIGY_ELITE",
+        &[RelicId::BlackStar, RelicId::WhiteStar],
+    );
+    // White Star held first: its card rolls right after the room's rewards.
+    assert_eq!(cards(&white_first)[1], cards(&white)[1]);
+    // Black Star held first: its relic rolls right after the room's rewards.
+    assert_eq!(relics(&black_first)[1], relics(&black)[1]);
+}

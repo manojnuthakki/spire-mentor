@@ -1250,7 +1250,18 @@ pub fn dispatch_modify_rewards(
     if is_empty_modify_rewards() {
         return EffectResult::NotImplemented;
     }
-    let listeners = listeners_modify_rewards();
+    // C# `Hook.ModifyRewards` walks `RunState.IterateHookListeners`: the
+    // player's relics in the order they are held, so a hook held earlier adds
+    // (and its reward rolls) first. A listener for a relic not held (a
+    // test's) runs after, in id order. sts2-agent fork (`hook-read-order`).
+    let mut listeners = listeners_modify_rewards();
+    listeners.sort_by_key(|(id, _)| {
+        run_state
+            .relics
+            .iter()
+            .position(|r| r == id)
+            .unwrap_or(usize::MAX)
+    });
     let mut any_resolved = false;
     for (_id, f) in listeners {
         if f(run_state, rewards, room_type) == EffectResult::Resolved {
