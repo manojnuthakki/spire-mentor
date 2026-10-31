@@ -1624,7 +1624,12 @@ impl RunManager {
                         && self.card_reward_bundles.is_none()
                         && self.run_state.relic_rewards.is_empty()
                     {
-                        let open_slot = self.has_open_potion_slot();
+                        // A potion claim needs a free slot, unless the run vetoes the
+                        // potion (Sozu): C# `PotionCmd.TryToProcure` checks
+                        // `ShouldProcurePotion` before the belt, and `PotionReward.OnSelect`
+                        // takes a `NotAllowed` reward with nothing obtained (`take_action`).
+                        let open_slot = self.has_open_potion_slot()
+                            || crate::run_effects::would_veto_procure_potion(&self.run_state);
                         let mut v: Vec<RunAction> = set
                             .rewards
                             .iter()
