@@ -1074,6 +1074,44 @@ impl PyCombatState {
     /// card's block: 89 of the 123 `$.player.block` records on the v14 sweep
     /// carried Vambrace, against an 11% base rate. Pass the relics the wire
     /// left at `None`; the ones it did disclose keep reality's value.
+    /// Set the run's dice in place: the streams of `run_seed` (C#
+    /// `RunRngSet.Seed`, a u32, as `$.rng.run_seed`), each named in
+    /// `counters` fast-forwarded to its read count (as `$.rng.counters`; the
+    /// rest at zero), exactly as `state_from_dict` builds them from a wire's
+    /// `rng` block. Nothing else changes: a card parked mid-resolution (a
+    /// selection's answer pending, `has_pending_play`) stays parked, so a
+    /// clone of such a state can be answered again under other dice, which a
+    /// dump can't carry. The search-side legacy stream is left as it is. An
+    /// unknown stream name raises `ValueError` and leaves the state
+    /// unchanged. sts2-agent fork (`selection-answer-replay`).
+    #[pyo3(signature = (run_seed, counters = None))]
+    fn set_rng(
+        &mut self,
+        run_seed: i64,
+        counters: Option<std::collections::HashMap<String, i64>>,
+    ) -> PyResult<()> {
+        let seed = u32::try_from(run_seed).map_err(|_| {
+            pyo3::exceptions::PyValueError::new_err("set_rng: run_seed must be a u32")
+        })?;
+        let mut rng =
+            sts2_core::run_rng_set::RunRngSet::new(i32::from_ne_bytes(seed.to_ne_bytes()));
+        for (name, n) in counters.unwrap_or_default() {
+            let n = u32::try_from(n).map_err(|_| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "set_rng: counter {name} must be a u32"
+                ))
+            })?;
+            let Some(stream) = rng.stream_mut(&name) else {
+                return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                    "set_rng: {name} is not a stream this engine has"
+                )));
+            };
+            stream.fast_forward_counter(n);
+        }
+        self.inner.run_rng = rng;
+        Ok(())
+    }
+
     #[pyo3(signature = (carried, enemy_slots = None, carry_rng = true, carry_relic_counters = None, carry_power_counters = None))]
     fn transplant_hidden(
         &mut self,
@@ -5192,5 +5230,192 @@ kind = "VANTOM"
             .unwrap_err();
             assert!(err.contains("upgrade suffix"), "id {bad:?} got: {err}");
         }
+    }
+}
+
+/// `CombatState.set_rng`: a state parked inside a card's resolution (a
+/// selection's answer pending) can't go through a dump, so the mirror retakes
+/// it from a clone with the run's dice set in place (sts2-agent fork,
+/// `selection-answer-replay`).
+#[cfg(test)]
+mod set_rng_tests {
+    use super::*;
+
+    /// Ironclad with Burning Pact, a Strike and a Defend in hand, an empty
+    /// draw pile and six distinct cards in the discard pile, on the run's
+    /// dice `run_seed`: Burning Pact's draw after its exhaust pick reshuffles.
+    fn parked_burning_pact(py: Python<'_>) -> PyCombatState {
+        let card = |id: &str, idx: i32| -> Bound<'_, PyDict> {
+            let d = PyDict::new(py);
+            d.set_item("id", id).unwrap();
+            d.set_item("stable_idx", idx).unwrap();
+            d.set_item("kind", "card").unwrap();
+            d.set_item("upgraded", false).unwrap();
+            d
+        };
+        let hand = PyList::empty(py);
+        hand.append(card("BURNING_PACT", 1)).unwrap();
+        hand.append(card("STRIKE_IRONCLAD", 2)).unwrap();
+        hand.append(card("DEFEND_IRONCLAD", 3)).unwrap();
+        let discard = PyList::empty(py);
+        for (i, id) in [
+            "BASH",
+            "ANGER",
+            "INFLAME",
+            "SHRUG_IT_OFF",
+            "POMMEL_STRIKE",
+            "TWIN_STRIKE",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            discard.append(card(id, 4 + i as i32)).unwrap();
+        }
+        let deck = PyDict::new(py);
+        deck.set_item("draw_pile", PyList::empty(py)).unwrap();
+        deck.set_item("discard_pile", discard).unwrap();
+        deck.set_item("hand", hand).unwrap();
+        deck.set_item("exhaust_pile", PyList::empty(py)).unwrap();
+
+        let player = PyDict::new(py);
+        player.set_item("class", "ironclad").unwrap();
+        player.set_item("hp", 60).unwrap();
+        player.set_item("max_hp", 80).unwrap();
+        player.set_item("block", 0).unwrap();
+        player.set_item("energy", 3).unwrap();
+        player.set_item("max_energy", 3).unwrap();
+        player.set_item("energy_regen_per_turn", 3).unwrap();
+        player.set_item("relics", PyList::empty(py)).unwrap();
+        player.set_item("powers", PyList::empty(py)).unwrap();
+        player.set_item("potions", PyList::empty(py)).unwrap();
+
+        let nibbit = PyDict::new(py);
+        nibbit.set_item("kind", "Nibbit").unwrap();
+        nibbit.set_item("uid", 1_i64).unwrap();
+        nibbit.set_item("hp", 40).unwrap();
+        nibbit.set_item("max_hp", 48).unwrap();
+        nibbit.set_item("block", 0).unwrap();
+        nibbit.set_item("powers", PyList::empty(py)).unwrap();
+        nibbit.set_item("intents", PyList::empty(py)).unwrap();
+        nibbit
+            .set_item("intent_history", PyList::empty(py))
+            .unwrap();
+        nibbit.set_item("is_dead", false).unwrap();
+        nibbit.set_item("is_escaped", false).unwrap();
+        let enc = PyList::empty(py);
+        enc.append(nibbit).unwrap();
+
+        let counters = PyDict::new(py);
+        counters.set_item("shuffle", 3).unwrap();
+        counters.set_item("monster_ai", 2).unwrap();
+        let rng = PyDict::new(py);
+        rng.set_item("run_seed", 12345_i64).unwrap();
+        rng.set_item("counters", counters).unwrap();
+
+        let d = PyDict::new(py);
+        d.set_item("wire_version", 1).unwrap();
+        d.set_item("phase", "PlayerPlayPhase").unwrap();
+        d.set_item("round", 1).unwrap();
+        d.set_item("side", "Player").unwrap();
+        d.set_item("is_elite", false).unwrap();
+        d.set_item("turn", 1).unwrap();
+        d.set_item("combat_id", 0_i64).unwrap();
+        d.set_item("player", player).unwrap();
+        d.set_item("deck", deck).unwrap();
+        d.set_item("encounter", enc).unwrap();
+        d.set_item("rng", rng).unwrap();
+        let mut state = state_from_dict_py(&d).expect("fixture must parse");
+
+        let play = PyDict::new(py);
+        play.set_item("action", "play").unwrap();
+        play.set_item("card_index", 0).unwrap();
+        play.set_item("target_index", py.None()).unwrap();
+        assert_eq!(state.apply_step(play.as_any()).unwrap(), "pending_choice");
+        assert!(state.has_pending_play(), "Burning Pact is parked");
+        state
+    }
+
+    /// Answer the exhaust pick (the Strike) and return the hand's ids.
+    fn answer(py: Python<'_>, state: &mut PyCombatState) -> Vec<sts2_core::cards::CardId> {
+        let choose = PyDict::new(py);
+        choose.set_item("action", "choose").unwrap();
+        choose.set_item("index", 0).unwrap();
+        assert_eq!(state.apply_step(choose.as_any()).unwrap(), "advanced");
+        assert!(!state.has_pending_play(), "the resolution finished");
+        state
+            .inner
+            .player
+            .hand
+            .iter()
+            .map(|&uid| {
+                sts2_core::card_by_uid(&state.inner.cards, uid)
+                    .expect("a card in hand")
+                    .card_id
+            })
+            .collect()
+    }
+
+    fn counters(state: &PyCombatState) -> std::collections::HashMap<String, i64> {
+        let v = sts2_wire::emit::combat::run_rng_counters(&state.inner);
+        v.as_object()
+            .unwrap()
+            .iter()
+            .map(|(k, n)| (k.clone(), n.as_i64().unwrap()))
+            .collect()
+    }
+
+    /// The same dice set on a clone draw what the parked state draws; the
+    /// shuffle stream moved on draws otherwise, the resolution intact.
+    #[test]
+    fn set_rng_replays_a_parked_resolution_under_other_dice() {
+        Python::with_gil(|py| {
+            let pre = parked_burning_pact(py);
+            let seed = i64::from(u32::from_ne_bytes(pre.inner.run_rng.seed.to_ne_bytes()));
+            let at = counters(&pre);
+            assert_eq!(at["shuffle"], 3);
+
+            let mut game = pre.clone();
+            let drawn = answer(py, &mut game);
+            assert_eq!(drawn.len(), 3, "Defend and the two drawn");
+
+            // The same dice: the same draw.
+            let mut same = pre.clone();
+            same.set_rng(seed, Some(at.clone())).unwrap();
+            assert_eq!(counters(&same), at);
+            assert!(same.has_pending_play(), "the resolution stays parked");
+            assert_eq!(answer(py, &mut same), drawn);
+
+            // The shuffle stream moved on: another reshuffle, another hand
+            // for some step of it; the other streams where they were.
+            let mut differs = false;
+            for n in 1..=5 {
+                let mut other = pre.clone();
+                let mut moved = at.clone();
+                *moved.get_mut("shuffle").unwrap() += n;
+                other.set_rng(seed, Some(moved.clone())).unwrap();
+                assert_eq!(counters(&other), moved);
+                assert!(other.has_pending_play());
+                differs |= answer(py, &mut other) != drawn;
+            }
+            assert!(differs, "another shuffle draws another hand");
+
+            // Another run seed, the counters kept: the streams are that seed's.
+            let mut reseeded = pre.clone();
+            reseeded.set_rng(seed + 1, Some(at.clone())).unwrap();
+            assert_ne!(reseeded.inner.run_rng, pre.inner.run_rng);
+            assert_eq!(counters(&reseeded), at);
+
+            // Without counters every stream starts at zero (as `state_from_dict`).
+            let mut fresh = pre.clone();
+            fresh.set_rng(seed, None).unwrap();
+            assert_eq!(fresh.inner.run_rng.shuffle.counter(), 0);
+
+            // An unknown stream is refused, the state left as it was.
+            let mut bad = pre.clone();
+            let mut wrong = at.clone();
+            wrong.insert("not_a_stream".to_owned(), 1);
+            assert!(bad.set_rng(seed, Some(wrong)).is_err());
+            assert_eq!(bad.inner.run_rng, pre.inner.run_rng);
+        });
     }
 }
