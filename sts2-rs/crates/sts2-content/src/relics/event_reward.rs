@@ -1807,12 +1807,35 @@ fn listener_fresnel_lens_card_reward(rs: &mut RunState, cards: &mut Vec<Card>) -
 /// `FresnelLens::modify_card_being_added_to_deck` — the added card
 /// gets `Nimble(2)` (`shop_event.py:1553-1555`). Ownership-gated.
 /// Bead `sts2-rs-9wx7`.
+///
+/// C# `FresnelLens.TryModifyCardBeingAddedToDeck` enchants only when
+/// `Nimble.CanEnchant(card)` (sts2-agent fork, calling-bell-curse F6): see
+/// [`nimble_can_enchant_card_being_added`].
 fn listener_fresnel_lens_deck_add(rs: &mut RunState, card: &mut Card) -> EffectResult {
     if !run_owns(rs, RelicId::FresnelLens) {
         return EffectResult::NotImplemented;
     }
+    if !nimble_can_enchant_card_being_added(card) {
+        return EffectResult::NotImplemented;
+    }
     card.add_enchantment(EnchantmentId::Nimble, FRESNEL_LENS_NIMBLE);
     EffectResult::Resolved
+}
+
+/// C# `Nimble.CanEnchant(card)` for a card being added to the deck:
+/// `EnchantmentModel.CanEnchant` refuses a Status, Curse or Quest card
+/// (`(uint)(type - 4) <= 2u`) and any card that already has an enchantment
+/// (Nimble is not `IsStackable`); its Unplayable check applies only to a card
+/// already in the Deck pile, and a card being added has no pile yet
+/// (`CardPileCmd.Add`, `oldPile == null`). `Nimble` adds `card.GainsBlock`,
+/// proxied by `base_block > 0` as in `enchant_eligible_deck_indices`.
+fn nimble_can_enchant_card_being_added(card: &Card) -> bool {
+    !matches!(
+        card.card_type,
+        sts2_core::cards::CardType::Status | sts2_core::cards::CardType::Curse
+    ) && !card.card_id.is_quest()
+        && card.enchantments.is_empty()
+        && card.base_block > 0
 }
 
 /// `FresnelLens::modify_merchant_card_creation_results` — every
@@ -3917,7 +3940,8 @@ mod tests {
     }
 
     /// `FresnelLens::modify_card_being_added_to_deck` enchants the
-    /// added card with `Nimble(2)`.
+    /// added card with `Nimble(2)` when `Nimble.CanEnchant` allows it (a card
+    /// that gains block): a Defend does, a Strike does not.
     #[test]
     fn listener_fresnel_lens_enchants_deck_add() {
         use sts2_core::cards::{CardType as CT, EnchantmentId, TargetType};
@@ -3927,6 +3951,19 @@ mod tests {
         rs.relics.push(RelicId::FresnelLens);
         let mut card = Card {
             uid: CardUid(std::num::NonZeroU32::new(42).unwrap()),
+            card_id: sts2_core::cards::CardId::DefendIronclad,
+            cost: 1,
+            card_type: CT::Skill,
+            target_type: TargetType::Self_,
+            upgraded: false,
+            base_damage: 0,
+            base_block: 5,
+            ..Card::pod_defaults()
+        };
+        rs.modify_card_being_added_to_deck(&mut card);
+        assert_eq!(card.enchantment(EnchantmentId::Nimble), 2);
+        let mut strike = Card {
+            uid: CardUid(std::num::NonZeroU32::new(43).unwrap()),
             card_id: sts2_core::cards::CardId::StrikeIronclad,
             cost: 1,
             card_type: CT::Attack,
@@ -3936,8 +3973,8 @@ mod tests {
             base_block: 0,
             ..Card::pod_defaults()
         };
-        rs.modify_card_being_added_to_deck(&mut card);
-        assert_eq!(card.enchantment(EnchantmentId::Nimble), 2);
+        rs.modify_card_being_added_to_deck(&mut strike);
+        assert_eq!(strike.enchantment(EnchantmentId::Nimble), 0);
     }
 
     /// `FresnelLens::modify_card_reward_options_late` enchants every

@@ -2860,7 +2860,13 @@ fn push_deck_card_raw(rs: &mut RunState, card_id: sts2_core::cards::CardId) {
     rs.master_deck.push(deck_card_pod(card_id));
 }
 
+/// The card as `RunState.CreateCard<T>` makes it: the card factory's
+/// un-upgraded build (the one `Card::upgrade` takes its delta against), else
+/// the deck spec's fields.
 fn deck_card_pod(card_id: sts2_core::cards::CardId) -> sts2_core::cards::Card {
+    if let Some(card) = crate::cards::spec_index::card_pod_from_id(card_id, false) {
+        return card;
+    }
     let mut card = sts2_core::cards::Card::pod_defaults();
     card.card_id = card_id;
     if let Some(spec) = crate::names::deck_card_spec_pool()
@@ -4196,7 +4202,15 @@ fn listener_preserved_fog(rs: &mut RunState) -> EffectResult {
         return EffectResult::NotImplemented;
     }
     rs.remove_cards_from_deck(PRESERVED_FOG_CARDS);
-    push_deck_card(rs, sts2_core::cards::CardId::Folly);
+    if rs.interactive_card_removal && rs.pending_deck_removals > 0 {
+        // C# awaits the removal pick before `AddCurseToDeck<Folly>`: the curse
+        // (and its deck-add hooks) lands when the batch drains
+        // (calling-bell-curse F8).
+        rs.pending_post_removal_relic_cards
+            .push(deck_card_pod(sts2_core::cards::CardId::Folly));
+    } else {
+        push_deck_card(rs, sts2_core::cards::CardId::Folly);
+    }
     EffectResult::Resolved
 }
 

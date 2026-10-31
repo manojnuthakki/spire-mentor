@@ -285,13 +285,13 @@ fn upgrade_cards_of_type(cards: &mut [Card], ct: CardType) -> bool {
     any
 }
 
+/// The deck-add arm: C# `{Frozen,Molten,Toxic}Egg.TryModifyCardBeingAddedToDeck`
+/// gates on `card.Type` and `card.IsUpgradable`, then `CardCmd.Upgrade` on a
+/// clone — the card's whole `OnUpgrade` (cost, numbers, keywords), which
+/// [`Card::upgrade`] applies through the registered card factory, keeping the
+/// instance's state (sts2-agent fork, calling-bell-curse F7).
 fn upgrade_card_of_type(card: &mut Card, ct: CardType) -> bool {
-    if card.card_type == ct && !card.upgraded {
-        card.upgraded = true;
-        true
-    } else {
-        false
-    }
+    card.card_type == ct && card.is_upgradable() && card.upgrade()
 }
 
 fn run_owns_rare(rs: &RunState, id: RelicId) -> bool {

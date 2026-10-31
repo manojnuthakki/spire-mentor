@@ -1521,6 +1521,19 @@ pub struct RunState {
     /// `sts2-rs-1hiht` (M5 event decision-granularity).
     pub pending_post_removal_hp_loss: i32,
 
+    /// Cards a relic adds to the deck AFTER the current batch of interactive
+    /// [`Self::pending_deck_removals`] fully drains, through the game's deck
+    /// add (`Hook.ModifyCardBeingAddedToDeck`, then the deck-add listeners,
+    /// [`crate::relic_effects::AddSource::RelicGain`]). Models C#
+    /// `PreservedFog.AfterObtained`, which awaits its `FromDeckForRemoval`
+    /// removals and only then `AddCurseToDeck<Folly>`; unlike
+    /// [`Self::pending_post_removal_cards`] (appended raw), these run the
+    /// deck-add hooks when they land (Lucky Fysh's gold, Darkstone Periapt's
+    /// max HP). Drained by
+    /// [`crate::run_manager::RunManager::do_remove_deck_card_at`]
+    /// (sts2-agent fork, calling-bell-curse F8).
+    pub pending_post_removal_relic_cards: Vec<crate::cards::Card>,
+
     /// Cards to append to [`Self::master_deck`] only AFTER every interactive
     /// deck pick a relic-grant batch queued (upgrades, removals, transforms,
     /// enchants) AND any card/relic-reward offering it opened have fully
@@ -2067,6 +2080,7 @@ impl Default for RunState {
             pending_deck_removals: 0,
             pending_post_removal_cards: Vec::new(),
             pending_post_removal_hp_loss: 0,
+            pending_post_removal_relic_cards: Vec::new(),
             pending_post_pick_cards: Vec::new(),
             pending_neows_bones_curses: 0,
             pending_post_pick_relic_grants: Vec::new(),

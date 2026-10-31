@@ -4541,6 +4541,20 @@ impl RunManager {
                 let cards = std::mem::take(&mut self.run_state.pending_post_removal_cards);
                 self.run_state.master_deck.extend(cards);
             }
+            // A relic's "remove-then-add" card (PreservedFog → Folly) lands
+            // now, through the deck-add hooks (calling-bell-curse F8).
+            let relic_cards = std::mem::take(&mut self.run_state.pending_post_removal_relic_cards);
+            for mut card in relic_cards {
+                self.run_state.modify_card_being_added_to_deck(&mut card);
+                let ctx = crate::run_effects::CardAddedRunCtx {
+                    card_id: card.card_id,
+                    card_type: card.card_type,
+                    source: crate::relic_effects::AddSource::RelicGain,
+                };
+                self.run_state.master_deck.push(card);
+                let _ =
+                    crate::run_effects::dispatch_on_card_added_to_deck(&mut self.run_state, &ctx);
+            }
             // Apply any HP damage a "remove-then-damage" relic deferred
             // (PrecariousShears → Damage(16)). C# suspends on the removal pick
             // and damages only after it returns, so the HP drop must land here,
