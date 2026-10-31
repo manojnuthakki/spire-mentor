@@ -16,7 +16,8 @@
 // alternatives (Skip, REROLL, SACRIFICE), and a card-removal reward through the
 // ordinary card selection. A potion reward with a full belt is listed as unavailable
 // (`belt_full`) and stays on the screen, as in the game; discarding a potion makes it
-// claimable. `proceed` skips whatever is left (Reward.OnSkipped), as leaving the
+// claimable. One the run forbids (Sozu) is claimable, belt full or not, and claiming it
+// obtains nothing, as in the game. `proceed` skips whatever is left (Reward.OnSkipped), as leaving the
 // screen does. With agent mode off none of this runs.
 //
 // Rewards offered by events and relics (RewardsCmd.OfferCustom, and sets like Neow's
@@ -31,6 +32,7 @@
 // and by a shop purchase or Lord's Parasol (RunSimulator.Shop.cs).
 
 using MegaCrit.Sts2.Core.Entities.Players;
+using MegaCrit.Sts2.Core.Hooks;
 using MegaCrit.Sts2.Core.Rewards;
 using MegaCrit.Sts2.Core.Rooms;
 using MegaCrit.Sts2.Core.Runs;
@@ -202,8 +204,12 @@ public partial class RunSimulator
                 d["name"] = potion.Potion == null ? null : _loc.Potion(potion.Potion.Id.Entry);
                 d["description"] = potion.Potion == null ? null : _loc.Bilingual("potions", potion.Potion.Id.Entry + ".description");
                 // The game refuses the claim (PotionProcureFailureReason.TooFull) and keeps
-                // the reward on the screen.
-                if (!player.HasOpenPotionSlots)
+                // the reward on the screen. A potion a hook forbids (Sozu) fails first, in
+                // PotionCmd.TryToProcure (Hook.ShouldProcurePotion before the belt): NotAllowed,
+                // which PotionReward.OnSelect takes as claimed with nothing obtained, full belt
+                // or not, so the reward stays claimable.
+                if (!player.HasOpenPotionSlots && potion.Potion != null
+                    && Hook.ShouldProcurePotion(_runState!, player.Creature?.CombatState, potion.Potion, player))
                 {
                     d["available"] = false;
                     d["reason"] = "belt_full";
