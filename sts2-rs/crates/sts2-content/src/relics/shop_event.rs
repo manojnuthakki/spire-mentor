@@ -1545,10 +1545,8 @@ fn listener_jewelry_box(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::JewelryBox) {
         return EffectResult::NotImplemented;
     }
-    let mut card = sts2_core::cards::Card::pod_defaults();
-    card.card_id = sts2_core::cards::CardId::Apotheosis;
-    card.upgraded = false;
-    rs.master_deck.push(card);
+    // C# `CardPileCmd.Add(card, PileType.Deck)`: the deck-add hooks run.
+    push_deck_card(rs, sts2_core::cards::CardId::Apotheosis);
     EffectResult::Resolved
 }
 
@@ -1562,10 +1560,8 @@ fn listener_tanxs_whistle(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::TanxsWhistle) {
         return EffectResult::NotImplemented;
     }
-    let mut card = sts2_core::cards::Card::pod_defaults();
-    card.card_id = sts2_core::cards::CardId::Whistle;
-    card.upgraded = false;
-    rs.master_deck.push(card);
+    // C# `CardPileCmd.Add(card, PileType.Deck)`: the deck-add hooks run.
+    push_deck_card(rs, sts2_core::cards::CardId::Whistle);
     EffectResult::Resolved
 }
 
@@ -2837,7 +2833,34 @@ fn listener_scroll_boxes(rs: &mut RunState) -> EffectResult {
 /// (spec lookup added so curses correctly receive `CardType::Curse`
 /// and downstream gates like RoyalStamp's `card_type in {Attack,
 /// Skill}` filter work).
+///
+/// Every production caller is a relic's `AfterObtained` that goes through
+/// C# `CardPileCmd.Add(card, PileType.Deck)` (directly or via
+/// `AddCurseToDeck`), which runs `Hook.ModifyCardBeingAddedToDeck` before
+/// the add and `Hook.AfterCardChangedPiles` after it (CardPileCmd.cs). So
+/// the add runs the run-side `modify_card_being_added_to_deck` channel
+/// (egg relics), then pushes, then dispatches `on_card_added_to_deck`
+/// (LuckyFysh's gold, DarkstonePeriapt's max HP on a curse), as
+/// LargeCapsule's add does. Item calling-bell-curse (F5 step 4 review).
 fn push_deck_card(rs: &mut RunState, card_id: sts2_core::cards::CardId) {
+    let mut card = deck_card_pod(card_id);
+    rs.modify_card_being_added_to_deck(&mut card);
+    let ctx = sts2_core::run_effects::CardAddedRunCtx {
+        card_id: card.card_id,
+        card_type: card.card_type,
+        source: sts2_core::relic_effects::AddSource::RelicGain,
+    };
+    rs.master_deck.push(card);
+    let _ = sts2_core::run_effects::dispatch_on_card_added_to_deck(rs, &ctx);
+}
+
+/// Test setup only: append the card without the deck-add hooks.
+#[cfg(test)]
+fn push_deck_card_raw(rs: &mut RunState, card_id: sts2_core::cards::CardId) {
+    rs.master_deck.push(deck_card_pod(card_id));
+}
+
+fn deck_card_pod(card_id: sts2_core::cards::CardId) -> sts2_core::cards::Card {
     let mut card = sts2_core::cards::Card::pod_defaults();
     card.card_id = card_id;
     if let Some(spec) = crate::names::deck_card_spec_pool()
@@ -2850,7 +2873,7 @@ fn push_deck_card(rs: &mut RunState, card_id: sts2_core::cards::CardId) {
         card.base_block = spec.base_block;
         card.target_type = spec.target_type;
     }
-    rs.master_deck.push(card);
+    card
 }
 
 /// Enchant up to `max_count` eligible cards in `rs.master_deck` with
@@ -8274,7 +8297,7 @@ mod tests {
         let mut rs = RunState::new();
         // Five attacks: only the first three should be enchanted.
         for _ in 0..5 {
-            push_deck_card(&mut rs, sts2_core::cards::CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, sts2_core::cards::CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::GnarledHammer);
         rs.last_obtained_relic = Some(RelicId::GnarledHammer);
@@ -8299,7 +8322,7 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, sts2_core::cards::CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, sts2_core::cards::CardId::StrikeIronclad);
         let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
         assert_eq!(rs.master_deck[0].enchantment(EnchantmentId::Sharp), 0);
     }
@@ -8313,9 +8336,9 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         for _ in 0..5 {
-            push_deck_card(&mut rs, CardId::DefendIronclad);
+            push_deck_card_raw(&mut rs, CardId::DefendIronclad);
         }
         rs.relics.push(RelicId::GnarledHammer);
         rs.last_obtained_relic = Some(RelicId::GnarledHammer);
@@ -8474,10 +8497,10 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..3 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         for _ in 0..2 {
-            push_deck_card(&mut rs, CardId::DefendIronclad);
+            push_deck_card_raw(&mut rs, CardId::DefendIronclad);
         }
         rs.relics.push(RelicId::GnarledHammer);
         rs.defer_followup_rewards = true;
@@ -8529,7 +8552,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..5 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::Kifuda);
         rs.defer_followup_rewards = true;
@@ -8565,7 +8588,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..3 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::PunchDagger);
         rs.defer_followup_rewards = true;
@@ -8601,7 +8624,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..5 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::BeautifulBracelet);
         rs.defer_followup_rewards = true;
@@ -8636,7 +8659,7 @@ mod tests {
         use sts2_core::runstate::{Reward, RunState};
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         rs.relics.push(RelicId::RoyalStamp);
         rs.defer_followup_rewards = true;
         rs.last_obtained_relic = Some(RelicId::RoyalStamp);
@@ -8672,7 +8695,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..5 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::Kifuda);
         rs.last_obtained_relic = Some(RelicId::Kifuda);
@@ -8694,7 +8717,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..3 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::PunchDagger);
         rs.last_obtained_relic = Some(RelicId::PunchDagger);
@@ -8717,7 +8740,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..4 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::BeautifulBracelet);
         rs.last_obtained_relic = Some(RelicId::BeautifulBracelet);
@@ -8739,8 +8762,8 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
-        push_deck_card(&mut rs, CardId::DefendIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::DefendIronclad);
         rs.relics.push(RelicId::RoyalStamp);
         rs.last_obtained_relic = Some(RelicId::RoyalStamp);
         let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
@@ -8765,8 +8788,8 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad); // Attack
-        push_deck_card(&mut rs, CardId::DefendIronclad); // Skill
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad); // Attack
+        push_deck_card_raw(&mut rs, CardId::DefendIronclad); // Skill
         rs.interactive_card_transform = true;
         rs.relics.push(RelicId::RoyalStamp);
         rs.last_obtained_relic = Some(RelicId::RoyalStamp);
@@ -8797,7 +8820,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..(GNARLED_HAMMER_CARDS + 2) {
-            push_deck_card(&mut rs, CardId::StrikeIronclad); // Attack — Sharp-eligible
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad); // Attack — Sharp-eligible
         }
         rs.interactive_card_transform = true;
         rs.relics.push(RelicId::GnarledHammer);
@@ -8825,7 +8848,7 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad); // sole eligible card
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad); // sole eligible card
         rs.interactive_card_transform = true;
         rs.relics.push(RelicId::RoyalStamp);
         rs.last_obtained_relic = Some(RelicId::RoyalStamp);
@@ -8851,7 +8874,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..10 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::BiiigHug);
         let before_len = rs.master_deck.len();
@@ -8869,7 +8892,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..5 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         let before_len = rs.master_deck.len();
         let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
@@ -9008,9 +9031,9 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
-        push_deck_card(&mut rs, CardId::DefendIronclad);
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::DefendIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         rs.relics.push(RelicId::ElectricShrymp);
         rs.last_obtained_relic = Some(RelicId::ElectricShrymp);
         let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
@@ -9136,9 +9159,9 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
-        push_deck_card(&mut rs, CardId::DefendIronclad);
-        push_deck_card(&mut rs, CardId::Bash);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::DefendIronclad);
+        push_deck_card_raw(&mut rs, CardId::Bash);
         let n = rs.master_deck.len();
         rs.relics.push(RelicId::PaelsClaw);
         rs.last_obtained_relic = Some(RelicId::PaelsClaw);
@@ -9159,7 +9182,7 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         let res = listener_paels_claw(&mut rs);
         assert!(matches!(res, EffectResult::NotImplemented));
         assert_eq!(rs.master_deck[0].enchantment(EnchantmentId::Goopy), 0);
@@ -9260,7 +9283,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..3 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         rs.relics.push(RelicId::PaelsGrowth);
         rs.last_obtained_relic = Some(RelicId::PaelsGrowth);
@@ -9281,7 +9304,7 @@ mod tests {
         use sts2_core::runstate::RunState;
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         let res = listener_paels_growth(&mut rs);
         assert!(matches!(res, EffectResult::NotImplemented));
         assert_eq!(rs.master_deck[0].enchantment(EnchantmentId::Clone), 0);
@@ -9336,7 +9359,7 @@ mod tests {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         for _ in 0..5 {
-            push_deck_card(&mut rs, CardId::StrikeIronclad);
+            push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         }
         let cost_before = rs.master_deck[0].cost;
         rs.relics.push(RelicId::TriBoomerang);
@@ -12606,7 +12629,7 @@ mod tests {
 
         // max_count == 0, non-empty deck → nothing enchanted.
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         let applied = enchant_eligible_deck_cards(&mut rs, EnchantmentId::Sharp, 3, 0);
         assert_eq!(applied, 0, "max_count == 0 must enchant nothing");
         assert_eq!(
@@ -12631,7 +12654,7 @@ mod tests {
         use sts2_core::runstate::RunState;
 
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         let applied = enchant_eligible_deck_cards(&mut rs, EnchantmentId::Sharp, 3, 3);
         assert_eq!(
             applied, 1,
@@ -12654,7 +12677,7 @@ mod tests {
         use sts2_core::runstate::RunState;
 
         let mut rs = RunState::new();
-        push_deck_card(&mut rs, CardId::StrikeIronclad);
+        push_deck_card_raw(&mut rs, CardId::StrikeIronclad);
         let ids = enchantable_candidate_card_ids(&rs, EnchantmentId::Sharp);
         assert_eq!(
             ids,

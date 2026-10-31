@@ -61,3 +61,57 @@ fn calling_bell_adds_curse_of_the_bell_then_offers_three_relics() {
         .count();
     assert_eq!(relics, 3, "three relic rewards offered");
 }
+
+/// The curse goes through the game's deck add (CardPileCmd.Add to the Deck):
+/// held relics' deck-add effects run before the bell's relics are offered.
+/// Lucky Fysh: +15 gold a card added; Darkstone Periapt: +6 max HP a curse.
+#[test]
+fn calling_bell_curse_runs_the_deck_add_hooks_before_its_relics() {
+    let mut rm = on_the_map();
+    rm.run_state.interactive_rewards = true;
+    rm.run_state.relics.push(RelicId::LuckyFysh);
+    rm.run_state.relics.push(RelicId::DarkstonePeriapt);
+    let (gold, max_hp) = (rm.run_state.gold, rm.run_state.max_hp);
+    rm.run_state.offer_custom_rewards(
+        vec![OfferedReward::Relic(RelicReward::new(RelicId::CallingBell))],
+        true,
+    );
+    rm.take_action(RunAction::ProceedRewards);
+    rm.take_action(RunAction::ClaimReward { idx: 0 });
+    assert_eq!(curses(&rm), 1);
+    // The bell's set is open and nothing in it is claimed yet.
+    assert!(rm.reward_screen().is_some(), "the bell's set is open");
+    assert_eq!(rm.run_state.gold - gold, 15, "Lucky Fysh's gold");
+    assert_eq!(
+        rm.run_state.max_hp - max_hp,
+        6,
+        "Darkstone Periapt's max HP"
+    );
+}
+
+/// Another relic adding its curse the same way: Cursed Pearl's Greed
+/// (AddCurseToDeck<Greed>, then 333 gold) with Lucky Fysh held.
+#[test]
+fn cursed_pearl_greed_runs_the_deck_add_hooks() {
+    let mut rm = on_the_map();
+    rm.run_state.interactive_rewards = true;
+    rm.run_state.relics.push(RelicId::LuckyFysh);
+    let gold = rm.run_state.gold;
+    rm.run_state.offer_custom_rewards(
+        vec![OfferedReward::Relic(RelicReward::new(RelicId::CursedPearl))],
+        true,
+    );
+    rm.take_action(RunAction::ProceedRewards);
+    rm.take_action(RunAction::ClaimReward { idx: 0 });
+    assert!(rm.run_state.relics.contains(&RelicId::CursedPearl));
+    assert!(rm
+        .run_state
+        .master_deck
+        .iter()
+        .any(|c| c.card_id == CardId::Greed));
+    assert_eq!(
+        rm.run_state.gold - gold,
+        15 + 333,
+        "Lucky Fysh's 15 and the pearl's 333"
+    );
+}
