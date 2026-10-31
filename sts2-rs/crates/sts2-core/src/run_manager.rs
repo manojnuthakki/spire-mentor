@@ -273,6 +273,14 @@ pub enum RunAction {
     /// otherwise. Only offered under
     /// [`crate::runstate::RunState::interactive_potions`]. sts2-agent fork.
     DiscardPotion { slot: usize },
+    /// Shop: Lord's Parasol, paused before a potion purchase with a full
+    /// belt ([`RunManager::lords_parasol_pause`]), goes on with that purchase.
+    /// The game's `PurchaseEverything` awaits `Cmd.Wait(0.25f)` after each
+    /// purchase with the belt usable; the pause is that window, offered (as
+    /// the Headless host's agent mode does, its `parasol_continue` decision)
+    /// only under [`crate::runstate::RunState::interactive_potions`].
+    /// sts2-agent fork (lords-parasol-pause).
+    LordsParasolContinue,
     /// Catch-all for not-yet-modeled actions. Routes to
     /// [`ActionResult::NotImplemented`].
     Unhandled,
@@ -896,6 +904,13 @@ pub struct RunManager {
     /// The open card removal is Lord's Parasol's (free, not cancelable): once
     /// a card is removed the shop's removal is used. sts2-agent fork.
     lords_parasol_removal: bool,
+    /// Lord's Parasol waits before the potion entry `lords_parasol_next`
+    /// with a full belt, until [`RunAction::LordsParasolContinue`].
+    /// sts2-agent fork (lords-parasol-pause).
+    lords_parasol_paused: bool,
+    /// The pause was answered: the entry it waited before is bought without
+    /// pausing again. sts2-agent fork (lords-parasol-pause).
+    lords_parasol_resumed: bool,
 }
 
 impl RunManager {
@@ -1065,6 +1080,8 @@ impl RunManager {
             purchases_after_reward_sets: Vec::new(),
             lords_parasol_next: None,
             lords_parasol_removal: false,
+            lords_parasol_paused: false,
+            lords_parasol_resumed: false,
         }
     }
 
@@ -1648,6 +1665,11 @@ impl RunManager {
             Phase::BossRelic => (0..self.boss_relic_options.len())
                 .map(|idx| RunAction::PickBossRelic { idx })
                 .collect(),
+            Phase::Shop if self.lords_parasol_paused => {
+                // Lord's Parasol's pause: only its answer (and the belt's
+                // actions). sts2-agent fork (lords-parasol-pause).
+                vec![RunAction::LordsParasolContinue]
+            }
             Phase::Shop => {
                 // Bead sts2-rs-if6ry (W3): when an inventory is wired,
                 // emit one action per affordable, in-stock item plus
@@ -1904,6 +1926,15 @@ impl RunManager {
                 return self.do_drink_potion_out_of_combat(potion_slot);
             }
             _ => {}
+        }
+        if self.lords_parasol_paused {
+            // Only the pause's answer (the belt's actions were taken above).
+            if self.phase != Phase::Shop || action != RunAction::LordsParasolContinue {
+                return ActionResult::InvalidForPhase;
+            }
+            self.lords_parasol_paused = false;
+            self.lords_parasol_resumed = true;
+            return ActionResult::Advanced;
         }
         match (self.phase, action) {
             (Phase::MapChoice, RunAction::Move { col }) => self.do_map_move(col),
@@ -2189,6 +2220,8 @@ impl RunManager {
                 // C# `LordsParasol.AfterRoomEntered`: in a `MerchantRoom` its
                 // owner buys everything. sts2-agent fork (lords-parasol-purchase).
                 self.lords_parasol_removal = false;
+                self.lords_parasol_paused = false;
+                self.lords_parasol_resumed = false;
                 self.lords_parasol_next = (self.shop_inventory.is_some()
                     && self
                         .run_state
@@ -4112,9 +4145,11 @@ impl RunManager {
                 || !self.reward_sets.is_empty()
                 || !self.run_state.offered_reward_sets.is_empty()
                 || self.run_state.pending_choice.is_some()
+                || self.lords_parasol_paused
             {
                 return;
             }
+            let open_slot = self.has_open_potion_slot();
             let Some(inv) = self.shop_inventory.as_mut() else {
                 self.lords_parasol_next = None;
                 return;
@@ -4146,6 +4181,22 @@ impl RunManager {
                 }
             } else if next < potions {
                 let idx = next - relics;
+                // The window the game's wait between purchases leaves, taken
+                // before a stocked potion with a full belt (the Headless
+                // host's `parasol_continue`): a potion drunk or discarded
+                // there makes room for it. lords-parasol-pause.
+                let stocked = inv.potions[idx].potion_kind.is_some()
+                    && crate::shop::is_shop_entry_available(inv.potions[idx].price);
+                if stocked
+                    && !open_slot
+                    && !self.lords_parasol_resumed
+                    && self.run_state.interactive_potions
+                {
+                    self.lords_parasol_next = Some(next);
+                    self.lords_parasol_paused = true;
+                    return;
+                }
+                self.lords_parasol_resumed = false;
                 if crate::shop::buy_potion_entry(&mut self.run_state, inv, idx, true)
                     == crate::shop::ShopPurchaseOutcome::Bought
                 {
@@ -4179,6 +4230,21 @@ impl RunManager {
                 self.settle_reward_sets();
             }
         }
+    }
+
+    /// The potion Lord's Parasol is paused before (a full belt, under
+    /// [`RunState::interactive_potions`]), or `None` when it isn't paused.
+    /// Answered by [`RunAction::LordsParasolContinue`]; the belt's drinks and
+    /// discards are offered meanwhile. sts2-agent fork (lords-parasol-pause).
+    #[must_use]
+    pub fn lords_parasol_pause(&self) -> Option<crate::potions::PotionKind> {
+        if !self.lords_parasol_paused {
+            return None;
+        }
+        let inv = self.shop_inventory.as_ref()?;
+        let relics = inv.cards.len() + inv.colorless_cards.len() + inv.relics.len();
+        let idx = self.lords_parasol_next?.checked_sub(relics)?;
+        inv.potions.get(idx)?.potion_kind
     }
 
     /// Lord's Parasol's card removal is done (C# `DoMerchantCardRemoval`:
@@ -5456,6 +5522,8 @@ impl RunManager {
         self.purchases_after_reward_sets.clear();
         self.lords_parasol_next = None;
         self.lords_parasol_removal = false;
+        self.lords_parasol_paused = false;
+        self.lords_parasol_resumed = false;
         self.run_state.pending_rewards.clear();
         self.run_state.relic_rewards.clear();
         self.run_state.offered_reward_sets.clear();

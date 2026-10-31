@@ -137,6 +137,10 @@ pub fn run_action_to_value(a: &RunAction) -> Value {
             set(&mut d, "action", "discard_potion");
             set(&mut d, "slot", *slot);
         }
+        // sts2-agent fork (lords-parasol-pause).
+        RunAction::LordsParasolContinue => {
+            set(&mut d, "action", "lords_parasol_continue");
+        }
         _ => {
             set(&mut d, "action", "unknown");
         }
@@ -296,6 +300,7 @@ pub fn run_action_from_value(v: &Value) -> Result<RunAction, EmitError> {
         "discard_potion" => RunAction::DiscardPotion {
             slot: req_usize(d, "slot")?,
         },
+        "lords_parasol_continue" => RunAction::LordsParasolContinue,
         other => {
             return Err(EmitError::new(format!("unknown action kind {other:?}")));
         }
@@ -401,6 +406,7 @@ mod tests {
                 discard_slot: Some(1),
             },
             RunAction::PotionSwap { discard_slot: None },
+            RunAction::LordsParasolContinue,
             RunAction::Unhandled,
         ]
     }

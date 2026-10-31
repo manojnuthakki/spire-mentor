@@ -132,6 +132,9 @@ fn entering_a_shop_buys_everything_then_opens_the_removal() {
 #[test]
 fn a_full_belt_leaves_the_potions_stocked() {
     let mut rm = seed_3_with_the_parasol(&[PotionKind::FirePotion; 3]);
+    // Without the belt's actions there is no pause before each potion
+    // (lords-parasol-pause: tests/lords_parasol_pause.rs).
+    rm.run_state.interactive_potions = false;
     assert_eq!(
         rm.force_enter_room(ForcedRoom::Shop),
         ActionResult::Advanced

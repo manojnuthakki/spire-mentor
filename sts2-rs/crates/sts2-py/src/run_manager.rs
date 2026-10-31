@@ -541,6 +541,13 @@ impl PyRunManager {
         self.inner.reward_set_depth()
     }
 
+    /// The potion Lord's Parasol is paused before with a full belt (its
+    /// `PotionKind` name, as `potions()` gives them), or `None`; answered by
+    /// `lords_parasol_continue` (sts2-agent fork, lords-parasol-pause).
+    fn lords_parasol_pause(&self) -> Option<String> {
+        self.inner.lords_parasol_pause().map(|k| format!("{k:?}"))
+    }
+
     #[getter]
     fn pending_potion_swap(&self) -> Option<String> {
         self.inner
