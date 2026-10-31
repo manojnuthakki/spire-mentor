@@ -5977,8 +5977,23 @@ impl RunManager {
     /// done, its reward or deck pick included; back on the map it is free.
     /// No drink or discard is offered while it is. sts2-agent fork.
     #[must_use]
-    pub const fn potions_locked(&self) -> bool {
-        self.run_state.potions_locked && !matches!(self.phase, Phase::MapChoice | Phase::RunOver)
+    pub fn potions_locked(&self) -> bool {
+        // A deck pick the event's option queued (Stone of All Time's Push
+        // enchant) runs in the game inside the option, before
+        // `OnEventFinished` lifts the lock; the engine is already at its map
+        // phase with the pick pending (sts2-agent fork).
+        let rs = &self.run_state;
+        let event_pick_open = rs.pending_deck_removals != 0
+            || rs.pending_deck_upgrades != 0
+            || !rs.pending_deck_transforms.is_empty()
+            || !rs.pending_deck_enchants.is_empty()
+            || !rs.pending_card_selects.is_empty();
+        rs.potions_locked
+            && match self.phase {
+                Phase::RunOver => false,
+                Phase::MapChoice => event_pick_open,
+                _ => true,
+            }
     }
 
     /// Whether the open choose screen may be skipped: `false` for a pick the

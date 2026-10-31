@@ -102,3 +102,32 @@ fn push_with_one_attack_enchants_it_without_a_pick() {
         [(CardId::DefendIronclad, 0), (CardId::Bash, 8)]
     );
 }
+
+/// The game's Stone of All Time locks the belt from `BeforeEventStarted` to
+/// `OnEventFinished`, and Push's enchant pick (`CardSelectCmd.FromDeckForEnchantment`)
+/// runs inside the option, before the event finishes: the belt stays locked
+/// during the pick (scenario stone_of_all_time_locked_selection). The engine is
+/// at its map phase with the pick pending, where `potions_locked` read false.
+#[test]
+fn the_belt_stays_locked_during_pushs_pick() {
+    let mut rm = at_the_stone(
+        "3",
+        &[
+            CardId::StrikeIronclad,
+            CardId::DefendIronclad,
+            CardId::Bash,
+            CardId::Inflame,
+        ],
+    );
+    assert!(rm.potions_locked());
+    assert_eq!(
+        rm.take_action(RunAction::EventChoice { idx: 1 }),
+        ActionResult::Advanced
+    );
+    assert!(rm.potions_locked(), "locked during the enchant pick");
+    assert_eq!(
+        rm.take_action(RunAction::EnchantDeckCard { idx: 1 }),
+        ActionResult::Advanced
+    );
+    assert!(!rm.potions_locked(), "the event is over");
+}
