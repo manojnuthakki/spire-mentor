@@ -497,7 +497,8 @@ fn listener_prayer_wheel(
     if room_type != RoomType::Monster {
         return EffectResult::NotImplemented;
     }
-    rewards.push(Reward::Card(CardReward::empty()));
+    // C# `CardReward(CardCreationOptions.ForRoom(player, RoomType.Monster), 3)`.
+    rewards.push(Reward::Card(CardReward::for_room(RoomType::Monster)));
     EffectResult::Resolved
 }
 
@@ -519,7 +520,8 @@ fn listener_white_star(
     if room_type != RoomType::Elite {
         return EffectResult::NotImplemented;
     }
-    rewards.push(Reward::Card(CardReward::empty()));
+    // C# `CardReward(CardCreationOptions.ForRoom(Owner, RoomType.Boss), 3)`.
+    rewards.push(Reward::Card(CardReward::for_room(RoomType::Boss)));
     EffectResult::Resolved
 }
 

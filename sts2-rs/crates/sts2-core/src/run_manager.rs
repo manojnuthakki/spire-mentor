@@ -413,6 +413,12 @@ pub struct ContentCallbacks {
     /// Generate the 3-card option list for a normal card reward. The
     /// callback resolves character pool + rarity rolls.
     pub generate_card_reward_options: Option<fn(rs: &mut RunState) -> Vec<crate::cards::CardId>>,
+    /// The same combat (`Encounter`) roller over a given room type's odds (C#
+    /// `CardCreationOptions.ForRoom(player, room_type)`), for a reward hook's
+    /// card reward (Prayer Wheel's Monster, White Star's Boss). sts2-agent fork.
+    pub generate_room_type_card_reward_options: Option<
+        fn(rs: &mut RunState, room_type: crate::runstate::RoomType) -> Vec<crate::cards::CardId>,
+    >,
     /// Generate the card option list for a NON-combat (`CardCreationSource.Other`)
     /// card reward — Lost Coffer / Orrery / event card grants drained from
     /// `pending_rewards`. Unlike [`Self::generate_card_reward_options`] (the
@@ -640,6 +646,10 @@ impl core::fmt::Debug for ContentCallbacks {
                 &self.generate_card_reward_options.is_some(),
             )
             .field(
+                "generate_room_type_card_reward_options",
+                &self.generate_room_type_card_reward_options.is_some(),
+            )
+            .field(
                 "generate_noncombat_card_reward_options",
                 &self.generate_noncombat_card_reward_options.is_some(),
             )
@@ -709,6 +719,13 @@ pub struct RoomRewardRoll {
     /// extras, as `RewardsSet.GenerateWithoutOffering` does. Under the rewards
     /// screen only; the auto path folds them into `gold`.
     pub hook_gold: Vec<i32>,
+    /// The other rewards the reward hooks add (C# `Hook.ModifyRewards`: Prayer
+    /// Wheel's and White Star's card rewards, Black Star's, Lava Rock's and
+    /// Wongo's relic rewards), in the hooks' order, unrolled: the screen rolls
+    /// them after the room's own rewards and its extras, as
+    /// `RewardsSet.GenerateWithoutOffering` populates them. Under the rewards
+    /// screen only. sts2-agent fork (`reward-hooks`).
+    pub hook_rewards: Vec<crate::runstate::OfferedReward>,
     pub potion: Option<crate::potions::PotionKind>,
 }
 
@@ -2962,6 +2979,15 @@ impl RunManager {
                 screen.push(reward);
             }
         }
+        // The hooks' rewards, populated after every reward already in the set
+        // (C# `GenerateWithoutOffering`: `Populate` over the room's rewards and
+        // extras, then `Hook.ModifyRewards`, then `Populate` over the added
+        // ones in list order).
+        for added in roll.hook_rewards {
+            if let Some(reward) = self.roll_offered_reward(added) {
+                screen.push(reward);
+            }
+        }
         // A hook's reward is populated only if it isn't already (C#
         // `GenerateWithoutOffering`: `if (!item.IsPopulated) item.Populate()`);
         // a fixed `GoldReward(amount)` is, so it reads nothing.
@@ -3043,6 +3069,19 @@ impl RunManager {
             OfferedReward::RoomCard => {
                 let roller = self.callbacks.generate_card_reward_options?;
                 let options = roller(&mut self.run_state);
+                let upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                if options.is_empty() {
+                    return None;
+                }
+                ScreenReward::Card {
+                    options,
+                    upgraded,
+                    hooked: true,
+                }
+            }
+            OfferedReward::RoomTypeCard(room_type) => {
+                let roller = self.callbacks.generate_room_type_card_reward_options?;
+                let options = roller(&mut self.run_state, room_type);
                 let upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
                 if options.is_empty() {
                     return None;
@@ -5165,6 +5204,7 @@ impl RunManager {
                     | OfferedReward::RandomRelic { .. }
                     | OfferedReward::Card { .. }
                     | OfferedReward::RoomCard
+                    | OfferedReward::RoomTypeCard(_)
                     | OfferedReward::RemoveCard => {}
                 }
             }

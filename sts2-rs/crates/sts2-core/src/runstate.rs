@@ -277,6 +277,11 @@ pub struct CardReward {
     /// Eye, Trial, Sea Glass): its cards roll no upgrade and draw no upgrade
     /// float. sts2-agent fork.
     pub no_upgrade_roll: bool,
+    /// C# `CardCreationOptions.ForRoom(room)` on an empty reward's options (a
+    /// reward hook's: Prayer Wheel's Monster, White Star's Boss): rolled on
+    /// the combat (`Encounter`) roller with that room type's rarity odds.
+    /// `None` for the other sources. sts2-agent fork.
+    pub for_room: Option<RoomType>,
 }
 
 impl CardReward {
@@ -287,6 +292,7 @@ impl CardReward {
         Self {
             options: Vec::new(),
             no_upgrade_roll: false,
+            for_room: None,
         }
     }
 
@@ -297,6 +303,18 @@ impl CardReward {
         Self {
             options: Vec::new(),
             no_upgrade_roll: true,
+            for_room: None,
+        }
+    }
+
+    /// Construct an empty `CardReward` over C#
+    /// `CardCreationOptions.ForRoom(room)`. sts2-agent fork.
+    #[must_use]
+    pub fn for_room(room: RoomType) -> Self {
+        Self {
+            options: Vec::new(),
+            no_upgrade_roll: false,
+            for_room: Some(room),
         }
     }
 
@@ -306,6 +324,7 @@ impl CardReward {
         Self {
             options,
             no_upgrade_roll: false,
+            for_room: None,
         }
     }
 }
@@ -770,6 +789,10 @@ pub enum OfferedReward {
     /// `CardReward(ForRoom(room))` added to a combat room (The Hunt): rolled
     /// with the room's own card-reward roller.
     RoomCard,
+    /// `CardReward(ForRoom(room_type))` for a given room type (a reward
+    /// hook's: Prayer Wheel's Monster, White Star's Boss): the combat roller
+    /// with that room type's odds. sts2-agent fork.
+    RoomTypeCard(RoomType),
     /// `SpecialCardReward(card)`: this card, added to the deck when claimed.
     SpecialCard(Card),
     /// `CardRemovalReward`: one deck removal when claimed.

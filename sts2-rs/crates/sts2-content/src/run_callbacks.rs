@@ -56,6 +56,7 @@ pub fn ironclad_content_callbacks() -> ContentCallbacks {
         build_combat_for_encounter: Some(build_combat_for_encounter),
         abandon_combat: Some(crate::run_bridge::abandon_combat),
         generate_card_reward_options: Some(generate_card_reward_options),
+        generate_room_type_card_reward_options: Some(generate_room_type_card_reward_options),
         generate_noncombat_card_reward_options: Some(
             crate::cards::spec_index::roll_noncombat_card_reward_options,
         ),
@@ -525,14 +526,28 @@ fn roll_combat_gold_and_potion(
         .into_iter()
         .next();
     }
-    out.hook_gold.extend(
-        rs.offer_rewards(room_type, Vec::new())
-            .iter()
-            .filter_map(|r| match r {
-                sts2_core::runstate::Reward::Gold { amount } if *amount > 0 => Some(*amount),
-                _ => None,
+    // The reward hooks (C# `Hook.ModifyRewards`), their rewards rolled by the
+    // screen after the room's own and its extras. Every relic reward a hook
+    // adds is a `RelicReward(player)` (Black Star, Lava Rock, Wongo's ticket).
+    for reward in rs.offer_rewards(room_type, Vec::new()) {
+        use sts2_core::runstate::{OfferedReward, Reward};
+        match reward {
+            Reward::Gold { amount } if amount > 0 => out.hook_gold.push(amount),
+            Reward::Card(card) => out.hook_rewards.push(match card.for_room {
+                Some(room) => OfferedReward::RoomTypeCard(room),
+                None => OfferedReward::Card {
+                    options: None,
+                    upgraded: Vec::new(),
+                    no_upgrade_roll: card.no_upgrade_roll,
+                },
             }),
-    );
+            Reward::Relic(_) => out.hook_rewards.push(OfferedReward::RandomRelic {
+                rarity: None,
+                is_wax: false,
+            }),
+            _ => {}
+        }
+    }
     out
 }
 
@@ -1299,6 +1314,17 @@ pub fn new_ironclad_run_manager_with_deck_and_hp(
 /// follow-up will upgrade the dispatch to carry the full `Card`
 /// POD). Bead `sts2-rs-81xxo`.
 pub fn generate_card_reward_options(rs: &mut RunState) -> Vec<CardId> {
+    let room_type = rs.current_room.map(|r| r.room_type);
+    generate_room_type_card_reward_options(rs, room_type.unwrap_or(RoomType::Monster))
+}
+
+/// [`generate_card_reward_options`] over a given room type's odds (C#
+/// `CardCreationOptions.ForRoom(player, room_type)`): a reward hook's card
+/// reward (Prayer Wheel's Monster, White Star's Boss). sts2-agent fork.
+pub fn generate_room_type_card_reward_options(
+    rs: &mut RunState,
+    room_type: RoomType,
+) -> Vec<CardId> {
     let character = rs.character_id;
     // Card-reward rarity odds are room-type-scoped. Mirrors C#
     // `CardCreationOptions.ForRoom` (`CardCreationOptions.cs:48-75`):
@@ -1307,9 +1333,9 @@ pub fn generate_card_reward_options(rs: &mut RunState) -> Vec<CardId> {
     // rolled "regular" odds, so elite kills under-weighted rares and
     // boss kills offered mostly-common cards instead of the expected 3
     // rares (GH #25).
-    let context = match rs.current_room.map(|r| r.room_type) {
-        Some(RoomType::Elite) => "elite",
-        Some(RoomType::Boss) => "boss",
+    let context = match room_type {
+        RoomType::Elite => "elite",
+        RoomType::Boss => "boss",
         _ => "regular",
     };
     let opts = CardRewardGenerationOptions {
