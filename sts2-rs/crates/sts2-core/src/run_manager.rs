@@ -5213,10 +5213,19 @@ impl RunManager {
                             .pending_rewards
                             .push(Reward::Gold { amount: *amount });
                     }
+                    // Punch Off's `RelicReward(player)` and
+                    // `PotionReward(player)` (sts2-agent fork).
+                    OfferedReward::RandomRelic { rarity, is_wax } => {
+                        self.run_state
+                            .offer_random_relic_rewards_wax(1, &[*rarity], *is_wax);
+                    }
+                    OfferedReward::Potion(kind) => {
+                        self.run_state.pending_rewards.push(Reward::Potion(
+                            crate::runstate::PotionReward { potion_kind: *kind },
+                        ));
+                    }
                     // No event fight adds these as extras.
-                    OfferedReward::Potion(_)
-                    | OfferedReward::RandomRelic { .. }
-                    | OfferedReward::Card { .. }
+                    OfferedReward::Card { .. }
                     | OfferedReward::RoomCard
                     | OfferedReward::RoomTypeCard(_)
                     | OfferedReward::RemoveCard => {}

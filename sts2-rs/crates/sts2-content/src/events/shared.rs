@@ -14,7 +14,7 @@ use sts2_core::{
 use super::{
     always_allowed, amalgamator_allowed, any_enchantable_deck_card, byrdonis_nest_allowed,
     default_option_info_from_spec, option_title_vars, option_vars, punch_off_allowed,
-    EventOptionSpec, EventSpec,
+    two_page_option_info, EventOptionSpec, EventSpec,
 };
 
 // ── LostWisp ─────────────────────────────────────────────────────────
@@ -1167,12 +1167,39 @@ fn dense_vegetation_rest(state: &mut RunState) -> EventOutcome {
     // (`Hook.ModifyRestSiteHealRewards` -> Tiny Mailbox potions etc.). Route
     // through `rest_site_heal`, which fires `after_rest_site_heal` AND grants
     // the offered rewards — the prior bare `heal()` skipped both, so a mimicked
-    // rest with Tiny Mailbox gained no potion (sts2-rs-RP23). The second page
-    // (FIGHT `DenseVegetationEventEncounter` without exiting) is still deferred
-    // (no event-combat bridge).
+    // rest with Tiny Mailbox gained no potion (sts2-rs-RP23). Then
+    // `SetEventState` opens the REST page with its one option, FIGHT
+    // (sts2-agent fork, `event-fight-unbridged`).
     let base = state.max_hp * DENSE_VEGETATION_HEAL_PCT_NUM / DENSE_VEGETATION_HEAL_PCT_DEN;
     let healed = state.rest_site_heal(base);
-    EventOutcome::finished(format!("Healed {healed} HP (fight combat-setup deferred)."))
+    state.event_state.page = 1;
+    EventOutcome {
+        finished: false,
+        description: format!("Healed {healed} HP. Something stirs in the vegetation."),
+        effects: Vec::new(),
+    }
+}
+
+/// REST page's FIGHT: C# `EnterCombatWithoutExitingEvent<DenseVegetation
+/// EventEncounter>([], shouldResumeAfterCombat: false)` — a Monster room's
+/// fight with no extras; the event ends with it. sts2-agent fork
+/// (`event-fight-unbridged`).
+fn dense_vegetation_fight(state: &mut RunState) -> EventOutcome {
+    state.event_combat = Some(EventCombatRequest::no_resume(
+        EventEncounter::DenseVegetation,
+        EventId::DenseVegetation,
+        Vec::new(),
+    ));
+    EventOutcome {
+        finished: false,
+        description: "Wrigglers burst from the vegetation. Fight!".to_string(),
+        effects: Vec::new(),
+    }
+}
+
+/// Page 0: TRUDGE_ON, REST; page 1 (after REST): FIGHT.
+fn dense_vegetation_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    two_page_option_info(state, spec, 2)
 }
 
 const DENSE_VEGETATION_OPTIONS: &[EventOptionSpec] = &[
@@ -1199,6 +1226,17 @@ const DENSE_VEGETATION_OPTIONS: &[EventOptionSpec] = &[
         title_vars_fn: None,
         handler: dense_vegetation_rest,
     },
+    // ── page 1 (REST): the Fight follow-up ──
+    EventOptionSpec {
+        option_id: "fight",
+        loc_key: "DENSE_VEGETATION.pages.REST.options.FIGHT",
+        default_label: "Fight",
+        default_description: "Fight the Wrigglers.",
+        default_vars: &[],
+        vars_fn: None,
+        title_vars_fn: None,
+        handler: dense_vegetation_fight,
+    },
 ];
 
 /// `DenseVegetation` spec. Pin: `shared.py:803`.
@@ -1206,7 +1244,7 @@ pub const DENSE_VEGETATION: EventSpec = EventSpec {
     id: EventId::DenseVegetation,
     python_name: "DenseVegetation",
     is_allowed: always_allowed,
-    generate_options: default_option_info_from_spec,
+    generate_options: dense_vegetation_generate_options,
     options: DENSE_VEGETATION_OPTIONS,
 };
 
@@ -1743,36 +1781,45 @@ fn punchoff_nab(state: &mut RunState) -> EventOutcome {
 }
 
 fn punchoff_take_them(state: &mut RunState) -> EventOutcome {
-    // C# `PunchOff.TakeThem`/`Fight` (`PunchOff.cs:121-137`): enters a combat
-    // whose rewards are `RelicReward` + `PotionReward` — there is NO card
-    // reward. The old `Reward::Card(empty)` fabricated a 3-card choice the game
-    // never offers AND omitted the potion. Grant relic + potion; the combat
-    // sub-page itself stays deferred (`6ynt.4.combat-setup`). Bead
-    // `sts2-rs-RP27`. (Placeholder `Astrolabe` relic id is a separate stand-in.)
-    if state.interactive_rewards {
-        // The fight's rewards, `[RelicReward(player), PotionReward(player)]`,
-        // rolled in that order (the fight itself is still deferred).
-        state.offer_custom_rewards(
-            vec![
-                sts2_core::OfferedReward::RandomRelic {
-                    rarity: None,
-                    is_wax: false,
-                },
-                sts2_core::OfferedReward::Potion(None),
-            ],
-            true,
-        );
-        return EventOutcome::finished(
-            "Fought constructs and earned a relic + potion (combat deferred).",
-        );
+    // C# `PunchOff.TakeThem` (`PunchOff.cs`): stops the punching and
+    // `SetEventState`s the I_CAN_TAKE_THEM page with its one option, FIGHT;
+    // nothing is granted here (sts2-agent fork, `event-fight-unbridged`).
+    state.event_state.page = 1;
+    EventOutcome {
+        finished: false,
+        description: "The constructs turn to face you.".to_string(),
+        effects: Vec::new(),
     }
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::Astrolabe)));
-    state
-        .pending_rewards
-        .push(Reward::Potion(PotionReward::empty()));
-    EventOutcome::finished("Fought constructs and earned a relic + potion (combat deferred).")
+}
+
+/// I_CAN_TAKE_THEM page's FIGHT: C# `PunchOff.Fight` →
+/// `EnterCombatWithoutExitingEvent<PunchOffEventEncounter>([RelicReward,
+/// PotionReward], shouldResumeAfterCombat: false)` — the event's combat
+/// layout fought as a Monster room, its rewards the room's plus a relic and a
+/// potion (no card beyond the room's). sts2-agent fork
+/// (`event-fight-unbridged`).
+fn punchoff_fight(state: &mut RunState) -> EventOutcome {
+    state.event_combat = Some(EventCombatRequest::no_resume(
+        EventEncounter::PunchOff,
+        EventId::PunchOff,
+        vec![
+            sts2_core::OfferedReward::RandomRelic {
+                rarity: None,
+                is_wax: false,
+            },
+            sts2_core::OfferedReward::Potion(None),
+        ],
+    ));
+    EventOutcome {
+        finished: false,
+        description: "Fight the constructs!".to_string(),
+        effects: Vec::new(),
+    }
+}
+
+/// Page 0: NAB, I_CAN_TAKE_THEM; page 1 (after I_CAN_TAKE_THEM): FIGHT.
+fn punchoff_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    two_page_option_info(state, spec, 2)
 }
 
 const PUNCHOFF_OPTIONS: &[EventOptionSpec] = &[
@@ -1796,6 +1843,17 @@ const PUNCHOFF_OPTIONS: &[EventOptionSpec] = &[
         title_vars_fn: None,
         handler: punchoff_take_them,
     },
+    // ── page 1 (I_CAN_TAKE_THEM): the Fight follow-up ──
+    EventOptionSpec {
+        option_id: "fight",
+        loc_key: "PUNCH_OFF.pages.I_CAN_TAKE_THEM.options.FIGHT",
+        default_label: "Fight",
+        default_description: "Fight the constructs for a relic + potion.",
+        default_vars: &[],
+        vars_fn: None,
+        title_vars_fn: None,
+        handler: punchoff_fight,
+    },
 ];
 
 /// `PunchOff` spec. Pin: `shared.py:1268`. `is_allowed`: C#
@@ -1804,7 +1862,7 @@ pub const PUNCH_OFF: EventSpec = EventSpec {
     id: EventId::PunchOff,
     python_name: "PunchOff",
     is_allowed: punch_off_allowed,
-    generate_options: default_option_info_from_spec,
+    generate_options: punchoff_generate_options,
     options: PUNCHOFF_OPTIONS,
 };
 
@@ -2369,7 +2427,7 @@ mod tests {
                 &DENSE_VEGETATION,
                 EventId::DenseVegetation,
                 "DenseVegetation",
-                &["trudge_on", "rest"],
+                &["trudge_on", "rest", "fight"],
             ),
             (
                 &DOORS_OF_LIGHT_AND_DARK,
@@ -2423,7 +2481,7 @@ mod tests {
                 &PUNCH_OFF,
                 EventId::PunchOff,
                 "PunchOff",
-                &["nab", "take_them"],
+                &["nab", "take_them", "fight"],
             ),
         ];
         assert_eq!(cases.len(), 19, "wave A is 19 events");
@@ -2460,6 +2518,18 @@ mod tests {
                     assert!(
                         !outcome.finished,
                         "{name}/{}: presents the next page",
+                        opt.option_id
+                    );
+                } else if matches!(
+                    (*id, opt.option_id),
+                    (EventId::DenseVegetation, "rest" | "fight")
+                        | (EventId::PunchOff, "take_them" | "fight")
+                ) {
+                    // Rest / I_CAN_TAKE_THEM open the one-option FIGHT page;
+                    // FIGHT stages the no-resume fight (sts2-agent fork).
+                    assert!(
+                        !outcome.finished,
+                        "{name}/{}: a page or a fight",
                         opt.option_id
                     );
                 } else if *id == EventId::ColossalFlower && opt.option_id == "reach_deeper" {
@@ -2672,27 +2742,33 @@ mod tests {
 
     #[test]
     fn punchoff_take_them_grants_relic_and_potion_not_a_card() {
+        // C# TakeThem only opens the I_CAN_TAKE_THEM page; its FIGHT stages
+        // the fight whose extras are a relic and a potion, no card.
         let mut rs = RunState::new();
         let before = rs.master_deck.len();
-        (PUNCH_OFF.options[1].handler)(&mut rs);
+        let outcome = (PUNCH_OFF.options[1].handler)(&mut rs);
+        assert!(!outcome.finished);
+        assert_eq!(rs.event_state.page, 1);
+        assert!(rs.pending_rewards.is_empty());
+        let page1 = (PUNCH_OFF.generate_options)(&rs, &PUNCH_OFF);
+        assert_eq!(page1.len(), 1);
+        assert_eq!(page1[0].option_id, "fight");
+        let outcome = (PUNCH_OFF.options[2].handler)(&mut rs);
+        assert!(!outcome.finished);
         assert_eq!(rs.master_deck.len(), before, "take_them adds no card");
-        assert!(
-            rs.pending_rewards
-                .iter()
-                .any(|r| matches!(r, Reward::Relic(_))),
-            "relic reward present"
-        );
-        assert!(
-            rs.pending_rewards
-                .iter()
-                .any(|r| matches!(r, Reward::Potion(_))),
-            "potion reward present (not a card)"
-        );
-        assert!(
-            rs.pending_rewards
-                .iter()
-                .all(|r| !matches!(r, Reward::Card(_))),
-            "no phantom card reward"
+        let req = rs.event_combat.as_ref().expect("the fight staged");
+        assert!(!req.resume);
+        assert_eq!(req.encounter, EventEncounter::PunchOff);
+        assert_eq!(
+            req.victory_rewards,
+            vec![
+                sts2_core::OfferedReward::RandomRelic {
+                    rarity: None,
+                    is_wax: false
+                },
+                sts2_core::OfferedReward::Potion(None),
+            ],
+            "a relic and a potion, no card"
         );
     }
 
@@ -2863,7 +2939,9 @@ mod tests {
         rs.max_hp = 80;
         rs.current_hp = 1;
         let outcome = dense_vegetation_rest(&mut rs);
-        assert!(outcome.finished);
+        // C# Rest opens the REST page (FIGHT); the event goes on.
+        assert!(!outcome.finished);
+        assert_eq!(rs.event_state.page, 1);
         // 24 HP healed: 1 -> 25. The `+`/`*` mutants overshoot (>=79 healed),
         // the `/`/`%` mutants undershoot (<=2 healed); all differ from 24.
         assert_eq!(rs.current_hp, 25, "healed exactly 30% of max HP");

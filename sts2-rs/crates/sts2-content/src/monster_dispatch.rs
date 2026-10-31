@@ -135,6 +135,13 @@ pub enum MonsterSpawnArgs {
     DenseVegetationWriggler {
         slot: crate::monsters::shared::DenseVegetationWrigglerSlot,
     },
+    /// A `Wriggler` with C#'s `StartStunned` set explicitly: `true` opens on
+    /// SPAWNED_MOVE (an Infested spawn), `false` on its slot's move
+    /// (`DenseVegetationEventEncounter`). sts2-agent fork.
+    Wriggler {
+        slot: crate::monsters::shared::DenseVegetationWrigglerSlot,
+        start_stunned: bool,
+    },
     /// `PunchConstruct`'s `starts_with_fast_punch` flag selects the opener
     /// (READY/Defend if false; FAST_PUNCH if true). v0.107.1 renamed the
     /// C# `StartsWithStrongPunch` → `StartsWithFastPunch` (decomp
@@ -274,6 +281,14 @@ pub fn build_ai_with_ascension(
             MonsterSpawnArgs::DenseVegetationWriggler { slot } => {
                 crate::monsters::shared::create_infested_wriggler_ai(slot)
             }
+            MonsterSpawnArgs::Wriggler {
+                slot,
+                start_stunned: true,
+            } => crate::monsters::shared::create_infested_wriggler_ai(slot),
+            MonsterSpawnArgs::Wriggler {
+                slot,
+                start_stunned: false,
+            } => create_dense_vegetation_wriggler_ai(slot),
             _ => create_wriggler_ai(),
         },
         // ── Act 2 (sts2-rs-6ynt.10) ── factories live in

@@ -550,7 +550,10 @@ pub fn resume_event_after_combat_callback(
         EventEncounter::BattlewornDummy(setting) => {
             super::shared::battleworn_dummy_resume(state, *setting, clean_victory);
         }
-        EventEncounter::MysteriousKnight | EventEncounter::FakeMerchant => {}
+        EventEncounter::MysteriousKnight
+        | EventEncounter::FakeMerchant
+        | EventEncounter::PunchOff
+        | EventEncounter::DenseVegetation => {}
     }
 }
 

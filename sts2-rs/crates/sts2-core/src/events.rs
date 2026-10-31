@@ -903,6 +903,13 @@ pub enum EventEncounter {
     MysteriousKnight,
     /// `FakeMerchantEventEncounter` (FakeMerchant "throw foul potion").
     FakeMerchant,
+    /// `PunchOffEventEncounter` (PunchOff "Fight"): the event's combat
+    /// layout, two Punch Constructs. sts2-agent fork.
+    PunchOff,
+    /// `DenseVegetationEventEncounter` (DenseVegetation "Fight" after
+    /// Rest): four Wrigglers in slots wriggler1..4, not stunned.
+    /// sts2-agent fork.
+    DenseVegetation,
 }
 
 impl EventEncounter {

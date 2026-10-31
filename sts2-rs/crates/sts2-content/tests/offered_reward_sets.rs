@@ -332,11 +332,9 @@ fn the_events_offer_their_rewards_as_one_set() {
             relic.clone()
         ]
     );
-    assert_eq!(offered(EventId::PunchOff, "nab"), vec![relic.clone()]);
-    assert_eq!(
-        offered(EventId::PunchOff, "take_them"),
-        vec![relic, O::Potion(None)]
-    );
+    // Punch Off's fight (take_them, then fight) offers its relic and potion
+    // with the fight room's rewards (tests/event_fight_unbridged.rs).
+    assert_eq!(offered(EventId::PunchOff, "nab"), vec![relic]);
     assert_eq!(
         offered(EventId::ColorfulPhilosophers, "pool_1").len(),
         3,

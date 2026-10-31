@@ -384,6 +384,35 @@ pub fn default_option_info_from_spec(state: &RunState, spec: &EventSpec) -> Vec<
         .collect()
 }
 
+/// The options of a two-page event whose static list holds page 0's first
+/// `page0_len` options, then the follow-up page's (opened by setting
+/// `event_state.page = 1`, C# `SetEventState`): the current page's, built as
+/// [`default_option_info_from_spec`] builds them. sts2-agent fork.
+#[must_use]
+pub fn two_page_option_info(
+    state: &RunState,
+    spec: &EventSpec,
+    page0_len: usize,
+) -> Vec<EventOptionInfo> {
+    let (page0, page1) = spec.options.split_at(page0_len.min(spec.options.len()));
+    let page = if state.event_state.page == 0 {
+        page0
+    } else {
+        page1
+    };
+    page.iter()
+        .map(|opt| EventOptionInfo {
+            option_id: opt.option_id,
+            label: opt.default_label.to_string(),
+            description: opt.default_description.to_string(),
+            enabled: true,
+            loc_key: opt.loc_key,
+            vars: option_vars(state, opt),
+            title_vars: option_title_vars(state, opt),
+        })
+        .collect()
+}
+
 // ── EventOptionSpec / EventSpec ───────────────────────────────────────
 
 /// Static per-choice template. One entry per option_id; the

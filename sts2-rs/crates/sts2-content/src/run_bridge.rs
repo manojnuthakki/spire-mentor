@@ -126,6 +126,8 @@ pub fn build_event_combat(
         }
         EventEncounter::MysteriousKnight => MonsterKind::MysteriousKnight,
         EventEncounter::FakeMerchant => MonsterKind::FakeMerchantMonster,
+        EventEncounter::PunchOff => return build_punch_off_combat(rs),
+        EventEncounter::DenseVegetation => return build_dense_vegetation_combat(rs),
     };
     // A combat-layout event's monster was created, its HP drawn, when its
     // room was entered (`RunState::bind_event`); the fight reuses it, as C#'s
@@ -141,6 +143,85 @@ pub fn build_event_combat(
             .unwrap_or(0)
     };
     let roster = [(kind, MonsterSpawnArgs::None, hp)];
+    enter_combat_from_roster(rs, &roster, RoomType::Unknown)
+}
+
+/// `PunchOffEventEncounter` on PunchOff's combat layout (C#
+/// `EnterCombatWithoutExitingEvent` reuses `_combatStateForCombatLayout`, made
+/// when the room was entered): the two Punch Constructs whose HP
+/// `RunState::bind_event` drew on Niche. `GenerateMonsters` gave the first
+/// `StartsWithFastPunch` and each a `StartingHpReduction = Rng.NextInt(2, 10)`
+/// on the encounter's Rng (`Seed + TotalFloor + hash(Id.Entry)`, its own
+/// stream), which `PunchConstruct.AfterAddedToRoom` takes off the current HP
+/// (at least 1) after its Artifact. sts2-agent fork (`event-fight-unbridged`).
+fn build_punch_off_combat(rs: &mut RunState) -> CombatState {
+    use sts2_core::runstate::RoomType;
+    let kinds = [MonsterKind::PunchConstruct, MonsterKind::PunchConstruct];
+    let mut hps: Vec<i32> = if rs.event_layout_hps.len() == kinds.len() {
+        std::mem::take(&mut rs.event_layout_hps)
+    } else {
+        sts2_core::monsters::roll_unique_max_hps(&kinds, &mut rs.rng.niche, rs.ascension_level)
+    };
+    hps.resize(kinds.len(), 0);
+    // C# `TotalFloor` leads the engine's `total_floor` by the act's Ancient
+    // rooms (`act_index`), as in `build_encounter_combat`.
+    let mut enc_rng = sts2_core::dotnet_rng::Rng::with_name(
+        rs.rng
+            .seed
+            .wrapping_add(rs.total_floor + i32::from(rs.act_index)),
+        "PUNCH_OFF_EVENT_ENCOUNTER",
+    );
+    let reductions = [enc_rng.next_int(2, 9), enc_rng.next_int(2, 9)];
+    let roster = [
+        (
+            kinds[0],
+            MonsterSpawnArgs::PunchConstruct {
+                starts_with_fast_punch: true,
+            },
+            hps[0],
+        ),
+        (
+            kinds[1],
+            MonsterSpawnArgs::PunchConstruct {
+                starts_with_fast_punch: false,
+            },
+            hps[1],
+        ),
+    ];
+    let mut combat = enter_combat_from_roster(rs, &roster, RoomType::Unknown);
+    for (uid, reduction) in combat.enemy_uids.clone().into_iter().zip(reductions) {
+        if let Some(c) = sts2_core::creature_by_id_mut(&mut combat.creatures, uid.0) {
+            c.current_hp = (c.current_hp - reduction).max(1);
+        }
+    }
+    combat
+}
+
+/// `DenseVegetationEventEncounter`: four Wrigglers in slots wriggler1..4 with
+/// `StartStunned = false` (each opens on its slot's move), a new combat
+/// state whose `CreateCreature` draws each HP on Niche. sts2-agent fork
+/// (`event-fight-unbridged`).
+fn build_dense_vegetation_combat(rs: &mut RunState) -> CombatState {
+    use crate::monsters::shared::DenseVegetationWrigglerSlot as Slot;
+    use sts2_core::runstate::RoomType;
+    let kinds = [MonsterKind::Wriggler; 4];
+    let hps =
+        sts2_core::monsters::roll_unique_max_hps(&kinds, &mut rs.rng.niche, rs.ascension_level);
+    let roster: Vec<(MonsterKind, MonsterSpawnArgs, i32)> =
+        [Slot::First, Slot::Second, Slot::Third, Slot::Fourth]
+            .into_iter()
+            .zip(hps)
+            .map(|(slot, hp)| {
+                (
+                    MonsterKind::Wriggler,
+                    MonsterSpawnArgs::Wriggler {
+                        slot,
+                        start_stunned: false,
+                    },
+                    hp,
+                )
+            })
+            .collect();
     enter_combat_from_roster(rs, &roster, RoomType::Unknown)
 }
 
