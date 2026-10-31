@@ -86,7 +86,7 @@ fn crystal_sphere_debt(state: &mut RunState) -> EventOutcome {
     // stay deferred (`6ynt.4.prophesize`); only the Debt curse-add is wired here.
     use sts2_core::cards::CardId;
     if let Some(curse) = crate::cards::spec_index::card_pod_from_id(CardId::Debt, false) {
-        state.master_deck.push(curse);
+        state.add_card_to_deck(curse, sts2_core::relic_effects::AddSource::EventGain);
     }
     EventOutcome::finished(
         "Payment Plan — gained a Debt curse (6 Prophesize picks deferred to 6ynt.4.prophesize).",
@@ -478,7 +478,7 @@ fn field_of_man_sized_holes_resist(state: &mut RunState) -> EventOutcome {
         if state.interactive_card_removal && state.pending_deck_removals > 0 {
             state.pending_post_removal_cards.push(card);
         } else {
-            state.master_deck.push(card);
+            state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
         }
     }
     EventOutcome::finished("Resisted — removed 2 cards and gained a Normality curse.")
@@ -760,7 +760,7 @@ fn luminous_choir_reach(state: &mut RunState) -> EventOutcome {
         if state.interactive_card_removal && state.pending_deck_removals > 0 {
             state.pending_post_removal_cards.push(card);
         } else {
-            state.master_deck.push(card);
+            state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
         }
     }
     EventOutcome::finished("Reached into the flesh — removed 2 cards and gained Spore Mind.")
@@ -1823,5 +1823,63 @@ mod tests {
             ids(&rs),
             vec![CardId::AscendersBane, CardId::Greed, CardId::SporeMind]
         );
+    }
+
+    // event-deck-add-hooks: an event's deck add is the game's CardPileCmd.Add
+    // to the Deck (or AddCurseToDeck): Hook.ModifyCardBeingAddedToDeck, then
+    // AfterCardChangedPiles per card (Lucky Fysh +15 gold each, Darkstone
+    // Periapt +6 max HP per curse).
+
+    fn hooked(relics: &[sts2_core::relics::RelicId]) -> RunState {
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.relics.extend_from_slice(relics);
+        rs.gold = 500;
+        rs
+    }
+
+    fn fysh_periapt() -> RunState {
+        use sts2_core::relics::RelicId;
+        hooked(&[RelicId::LuckyFysh, RelicId::DarkstonePeriapt])
+    }
+
+    /// Run `handler` on `rs`; assert `cards` cards, `curses` of them curses,
+    /// went in with their hooks (gold and max HP beside the event's own).
+    fn assert_hooked_adds(
+        mut rs: RunState,
+        handler: fn(&mut RunState) -> EventOutcome,
+        cards: i32,
+        curses: i32,
+        event_gold: i32,
+    ) -> RunState {
+        let (deck, gold, max_hp) = (rs.master_deck.len() as i32, rs.gold, rs.max_hp);
+        let _ = handler(&mut rs);
+        assert_eq!(rs.master_deck.len() as i32 - deck, cards, "cards added");
+        assert_eq!(
+            rs.gold - gold - event_gold,
+            15 * cards,
+            "Lucky Fysh per card"
+        );
+        assert_eq!(
+            rs.max_hp - max_hp,
+            6 * curses,
+            "Darkstone Periapt per curse"
+        );
+        rs
+    }
+
+    #[test]
+    fn event_deck_adds_run_the_deck_add_hooks_act2_hive() {
+        assert_hooked_adds(fysh_periapt(), crystal_sphere_debt, 1, 1, 0);
+        // Field of Man-Sized Holes: Normality after the removal, at once when
+        // there is nothing to choose.
+        let mut rs = fysh_periapt();
+        rs.interactive_card_removal = true;
+        rs.master_deck.clear();
+        let (gold, max_hp) = (rs.gold, rs.max_hp);
+        let _ = field_of_man_sized_holes_resist(&mut rs);
+        assert_eq!(rs.gold - gold, 15);
+        assert_eq!(rs.max_hp - max_hp, 6);
     }
 }

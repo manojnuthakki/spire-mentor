@@ -75,10 +75,12 @@ fn reflections_shatter(state: &mut RunState) -> EventOutcome {
         let seed = state.rng.rewards.next_int_exclusive(0, i32::MAX) as u64;
         clones.push(state.master_deck[i].clone_with_seed(seed));
     }
-    state.master_deck.extend(clones);
+    for clone in clones {
+        state.add_card_to_deck(clone, sts2_core::relic_effects::AddSource::EventGain);
+    }
     let gained_curse =
         if let Some(curse) = crate::cards::spec_index::card_pod_from_id(CardId::BadLuck, false) {
-            state.master_deck.push(curse);
+            state.add_card_to_deck(curse, sts2_core::relic_effects::AddSource::EventGain);
             true
         } else {
             false
@@ -588,7 +590,7 @@ fn spirit_grafter_let_it_in(state: &mut RunState) -> EventOutcome {
     // add to deck. Unconditional (no player choice, no RNG).
     let healed = state.heal(SPIRIT_GRAFTER_HEAL);
     if let Some(card) = card_pod_from_id(CardId::Metamorphosis, false) {
-        state.master_deck.push(card);
+        state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
     }
     EventOutcome::finished(format!("Healed {healed} HP, gained Metamorphosis."))
 }
@@ -759,7 +761,7 @@ fn sunken_treasury_second_chest(state: &mut RunState) -> EventOutcome {
     let (_, gold) = sunken_treasury_rolled_gold(state);
     state.gain_gold(gold);
     if let Some(curse) = card_pod_from_id(CardId::Greed, false) {
-        state.master_deck.push(curse);
+        state.add_card_to_deck(curse, sts2_core::relic_effects::AddSource::EventGain);
     }
     EventOutcome::finished(format!("Gained {gold} gold, gained a Greed curse."))
 }
@@ -1407,7 +1409,7 @@ fn this_or_that_ornate(state: &mut RunState) -> EventOutcome {
         state.obtain_relic(id);
     }
     if let Some(curse) = crate::cards::spec_index::card_pod_from_id(CardId::Clumsy, false) {
-        state.master_deck.push(curse);
+        state.add_card_to_deck(curse, sts2_core::relic_effects::AddSource::EventGain);
     }
     EventOutcome::finished(format!(
         "Gained {} and a Clumsy curse.",
@@ -1952,7 +1954,7 @@ fn trial_not_finished(description: &str) -> EventOutcome {
 
 fn trial_add_curse(state: &mut RunState, curse: CardId) {
     if let Some(card) = card_pod_from_id(curse, false) {
-        state.master_deck.push(card);
+        state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
     }
 }
 
@@ -2222,7 +2224,7 @@ fn unrest_site_rest(state: &mut RunState) -> EventOutcome {
     let missing = state.max_hp - state.current_hp;
     let healed = state.heal(missing);
     if let Some(curse) = crate::cards::spec_index::card_pod_from_id(CardId::PoorSleep, false) {
-        state.master_deck.push(curse);
+        state.add_card_to_deck(curse, sts2_core::relic_effects::AddSource::EventGain);
     }
     EventOutcome::finished(format!("Healed {healed} HP, gained a Poor Sleep curse."))
 }
@@ -2387,7 +2389,7 @@ fn wellspring_bathe(state: &mut RunState) -> EventOutcome {
         if state.interactive_card_removal && state.pending_deck_removals > 0 {
             state.pending_post_removal_cards.push(card);
         } else {
-            state.master_deck.push(card);
+            state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
         }
     }
     EventOutcome::finished("Bathed in the spring — removed a card and gained a Guilty curse.")
@@ -2568,7 +2570,7 @@ fn zen_weaver_breathing(state: &mut RunState) -> EventOutcome {
     state.gold = state.gold.saturating_sub(ZEN_WEAVER_BREATHING_COST);
     for _ in 0..2 {
         if let Some(card) = card_pod_from_id(CardId::Enlightenment, false) {
-            state.master_deck.push(card);
+            state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
         }
     }
     EventOutcome::finished(format!(
@@ -4061,5 +4063,93 @@ mod tests {
         assert_eq!(rs.pending_deck_removals, 0);
         assert_eq!(ids(&rs), vec![CardId::Greed]);
         assert_eq!(rs.gold, 50);
+    }
+
+    // event-deck-add-hooks: an event's deck add is the game's CardPileCmd.Add
+    // to the Deck (or AddCurseToDeck): Hook.ModifyCardBeingAddedToDeck, then
+    // AfterCardChangedPiles per card (Lucky Fysh +15 gold each, Darkstone
+    // Periapt +6 max HP per curse).
+
+    fn hooked(relics: &[sts2_core::relics::RelicId]) -> RunState {
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.relics.extend_from_slice(relics);
+        rs.gold = 500;
+        rs
+    }
+
+    fn fysh_periapt() -> RunState {
+        use sts2_core::relics::RelicId;
+        hooked(&[RelicId::LuckyFysh, RelicId::DarkstonePeriapt])
+    }
+
+    /// Run `handler` on `rs`; assert `cards` cards, `curses` of them curses,
+    /// went in with their hooks (gold and max HP beside the event's own).
+    fn assert_hooked_adds(
+        mut rs: RunState,
+        handler: fn(&mut RunState) -> EventOutcome,
+        cards: i32,
+        curses: i32,
+        event_gold: i32,
+    ) -> RunState {
+        let (deck, gold, max_hp) = (rs.master_deck.len() as i32, rs.gold, rs.max_hp);
+        let _ = handler(&mut rs);
+        assert_eq!(rs.master_deck.len() as i32 - deck, cards, "cards added");
+        assert_eq!(
+            rs.gold - gold - event_gold,
+            15 * cards,
+            "Lucky Fysh per card"
+        );
+        assert_eq!(
+            rs.max_hp - max_hp,
+            6 * curses,
+            "Darkstone Periapt per curse"
+        );
+        rs
+    }
+
+    #[test]
+    fn event_deck_adds_run_the_deck_add_hooks_shared_wave_b() {
+        use sts2_core::cards::CardId;
+        use sts2_core::relics::RelicId;
+        assert_hooked_adds(fysh_periapt(), spirit_grafter_let_it_in, 1, 0, 0);
+        assert_hooked_adds(fysh_periapt(), unrest_site_rest, 1, 1, 0);
+        assert_hooked_adds(
+            fysh_periapt(),
+            zen_weaver_breathing,
+            2,
+            0,
+            -ZEN_WEAVER_BREATHING_COST,
+        );
+        // Reflections' Shatter: a clone of each card, then Bad Luck.
+        let mut rs = fysh_periapt();
+        rs.master_deck = (0..3)
+            .map(|_| card_pod_from_id(CardId::DefendIronclad, false).unwrap())
+            .collect();
+        assert_hooked_adds(rs, reflections_shatter, 4, 1, 0);
+        // Wellspring's Guilty after its removal: at once (nothing to choose)
+        // and after the pick.
+        let mut rs = fysh_periapt();
+        rs.interactive_card_removal = true;
+        rs.master_deck = vec![card_pod_from_id(CardId::StrikeIronclad, false).unwrap()];
+        let (gold, max_hp) = (rs.gold, rs.max_hp);
+        let _ = wellspring_bathe(&mut rs);
+        assert_eq!(rs.gold - gold, 15);
+        assert_eq!(rs.max_hp - max_hp, 6);
+        // Toxic Egg upgrades Enlightenment (a Skill) as it goes in, completely.
+        let mut rs = hooked(&[RelicId::ToxicEgg]);
+        let _ = zen_weaver_breathing(&mut rs);
+        let added: Vec<_> = rs
+            .master_deck
+            .iter()
+            .filter(|c| c.card_id == CardId::Enlightenment)
+            .collect();
+        assert_eq!(added.len(), 2);
+        let up = card_pod_from_id(CardId::Enlightenment, true).unwrap();
+        for c in added {
+            assert!(c.upgraded);
+            assert_eq!(c.cost, up.cost);
+        }
     }
 }

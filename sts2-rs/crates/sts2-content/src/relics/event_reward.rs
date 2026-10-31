@@ -1798,8 +1798,12 @@ fn listener_fresnel_lens_card_reward(rs: &mut RunState, cards: &mut Vec<Card>) -
     if !run_owns(rs, RelicId::FresnelLens) {
         return EffectResult::NotImplemented;
     }
+    // C# `FresnelLens.EnchantValidCards`: only where `Nimble.CanEnchant(card)`
+    // (sts2-agent fork, event-deck-add-hooks).
     for card in cards {
-        card.add_enchantment(EnchantmentId::Nimble, FRESNEL_LENS_NIMBLE);
+        if nimble_can_enchant_card_being_added(card) {
+            card.add_enchantment(EnchantmentId::Nimble, FRESNEL_LENS_NIMBLE);
+        }
     }
     EffectResult::Resolved
 }
@@ -1849,6 +1853,11 @@ fn listener_fresnel_lens_merchant(
     _is_colorless: bool,
 ) -> EffectResult {
     if !run_owns(rs, RelicId::FresnelLens) {
+        return EffectResult::NotImplemented;
+    }
+    // C# `FresnelLens.EnchantValidCards`: only where `Nimble.CanEnchant(card)`
+    // (sts2-agent fork, event-deck-add-hooks).
+    if !nimble_can_enchant_card_being_added(card) {
         return EffectResult::NotImplemented;
     }
     card.add_enchantment(EnchantmentId::Nimble, FRESNEL_LENS_NIMBLE);
@@ -3988,13 +3997,14 @@ mod tests {
         rs.relics.push(RelicId::FresnelLens);
         let mk = |uid: u32| Card {
             uid: CardUid(std::num::NonZeroU32::new(uid).unwrap()),
-            card_id: sts2_core::cards::CardId::StrikeIronclad,
+            // A card that gains block: Nimble.CanEnchant (event-deck-add-hooks).
+            card_id: sts2_core::cards::CardId::DefendIronclad,
             cost: 1,
-            card_type: CT::Attack,
-            target_type: TargetType::Enemy,
+            card_type: CT::Skill,
+            target_type: TargetType::Self_,
             upgraded: false,
-            base_damage: 6,
-            base_block: 0,
+            base_damage: 0,
+            base_block: 5,
             ..Card::pod_defaults()
         };
         let options = vec![mk(1), mk(2), mk(3)];
@@ -4016,13 +4026,14 @@ mod tests {
         rs.relics.push(RelicId::FresnelLens);
         let mut card = Card {
             uid: CardUid(std::num::NonZeroU32::new(42).unwrap()),
-            card_id: sts2_core::cards::CardId::StrikeIronclad,
+            // A card that gains block: Nimble.CanEnchant (event-deck-add-hooks).
+            card_id: sts2_core::cards::CardId::DefendIronclad,
             cost: 1,
-            card_type: CT::Attack,
-            target_type: TargetType::Enemy,
+            card_type: CT::Skill,
+            target_type: TargetType::Self_,
             upgraded: false,
-            base_damage: 6,
-            base_block: 0,
+            base_damage: 0,
+            base_block: 5,
             ..Card::pod_defaults()
         };
         rs.modify_merchant_card_creation_results(&mut card, true);
@@ -5626,5 +5637,37 @@ mod tests {
             EffectResult::Resolved,
             "owned BingBong duplicates and resolves"
         );
+    }
+
+    // event-deck-add-hooks: FresnelLens.EnchantValidCards (card rewards and
+    // the merchant) enchants only what Nimble.CanEnchant allows, as the
+    // deck-add hook does.
+    #[test]
+    fn fresnel_lens_reward_and_merchant_enchant_only_what_nimble_can() {
+        use sts2_core::cards::CardId;
+        crate::cards::dispatch::install_default_registry();
+        let pod = |id| crate::cards::spec_index::card_pod_from_id(id, false).unwrap();
+        let mut rs = RunState::new();
+        rs.relics.push(RelicId::FresnelLens);
+        let mut cards = vec![
+            pod(CardId::StrikeIronclad),
+            pod(CardId::DefendIronclad),
+            pod(CardId::Injury),
+        ];
+        let _ = listener_fresnel_lens_card_reward(&mut rs, &mut cards);
+        let nimble: Vec<i32> = cards
+            .iter()
+            .map(|c| c.enchantment(EnchantmentId::Nimble))
+            .collect();
+        assert_eq!(nimble, vec![0, FRESNEL_LENS_NIMBLE, 0]);
+        for (id, want) in [
+            (CardId::StrikeIronclad, 0),
+            (CardId::DefendIronclad, FRESNEL_LENS_NIMBLE),
+            (CardId::Injury, 0),
+        ] {
+            let mut card = pod(id);
+            let _ = listener_fresnel_lens_merchant(&mut rs, &mut card, false);
+            assert_eq!(card.enchantment(EnchantmentId::Nimble), want, "{id:?}");
+        }
     }
 }

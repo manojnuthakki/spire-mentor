@@ -4517,6 +4517,23 @@ impl RunState {
         let _ = crate::run_effects::dispatch_modify_card_being_added_to_deck(self, card);
     }
 
+    /// Add `card` to the end of the master deck as C#'s
+    /// `CardPileCmd.Add(card, PileType.Deck)` does (and `AddCurseToDeck`,
+    /// which calls it): `Hook.ModifyCardBeingAddedToDeck` on the card, the
+    /// append, then `Hook.AfterCardChangedPiles` (the engine's
+    /// `on_card_added_to_deck` channel: Lucky Fysh, Darkstone Periapt).
+    /// sts2-agent fork (event-deck-add-hooks).
+    pub fn add_card_to_deck(&mut self, mut card: Card, source: crate::relic_effects::AddSource) {
+        self.modify_card_being_added_to_deck(&mut card);
+        let ctx = crate::run_effects::CardAddedRunCtx {
+            card_id: card.card_id,
+            card_type: card.card_type,
+            source,
+        };
+        self.master_deck.push(card);
+        let _ = crate::run_effects::dispatch_on_card_added_to_deck(self, &ctx);
+    }
+
     /// Fire the `modify_merchant_card_creation_results` channel for
     /// `card`. Listeners may enchant or otherwise mutate the merchant
     /// inventory item before it's offered. `is_colorless` mirrors the

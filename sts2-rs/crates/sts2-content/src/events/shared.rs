@@ -182,7 +182,7 @@ fn trash_heap_grab(state: &mut RunState) -> EventOutcome {
     let mut rng = event_rng(state, TRASH_HEAP_STREAM);
     let idx = rng.next_int_exclusive(0, TRASH_HEAP_CARDS.len() as i32) as usize;
     if let Some(card) = crate::cards::spec_index::card_pod_from_id(TRASH_HEAP_CARDS[idx], false) {
-        state.master_deck.push(card);
+        state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
     }
     EventOutcome::finished("Gained 100 gold and a card.")
 }
@@ -713,7 +713,7 @@ pub const BATTLEWORN_DUMMY: EventSpec = EventSpec {
 // Same fix as `byrdonis_take` above. Bead `sts2-rs-RP26`.
 fn bugslayer_add_card(state: &mut RunState, card_id: sts2_core::cards::CardId) {
     if let Some(card) = crate::cards::spec_index::card_pod_from_id(card_id, false) {
-        state.master_deck.push(card);
+        state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
     }
 }
 
@@ -779,7 +779,7 @@ fn byrdonis_take(state: &mut RunState) -> EventOutcome {
     if let Some(card) =
         crate::cards::spec_index::card_pod_from_id(sts2_core::cards::CardId::ByrdonisEgg, false)
     {
-        state.master_deck.push(card);
+        state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
     }
     EventOutcome::finished("Added Byrdonis Egg to the deck.")
 }
@@ -1399,7 +1399,7 @@ fn grave_confront(state: &mut RunState) -> EventOutcome {
     if let Some(card) =
         crate::cards::spec_index::card_pod_from_id(sts2_core::cards::CardId::Decay, false)
     {
-        state.master_deck.push(card);
+        state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
     }
     EventOutcome::finished("Added Decay to the deck (Soul's Power enchant deferred).")
 }
@@ -1506,7 +1506,7 @@ pub const HUNGRY_FOR_MUSHROOMS: EventSpec = EventSpec {
 fn infested_study(state: &mut RunState) -> EventOutcome {
     if let Some(id) = crate::cards::spec_index::roll_infested_study_card(state) {
         if let Some(card) = crate::cards::spec_index::card_pod_from_id(id, false) {
-            state.master_deck.push(card);
+            state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
         }
     }
     EventOutcome::finished("Gained a random Power card.")
@@ -1515,7 +1515,7 @@ fn infested_study(state: &mut RunState) -> EventOutcome {
 fn infested_touch_core(state: &mut RunState) -> EventOutcome {
     if let Some(id) = crate::cards::spec_index::roll_infested_touch_core_card(state) {
         if let Some(card) = crate::cards::spec_index::card_pod_from_id(id, false) {
-            state.master_deck.push(card);
+            state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
         }
     }
     EventOutcome::finished("Gained a random 0-cost card.")
@@ -1760,7 +1760,7 @@ fn punchoff_nab(state: &mut RunState) -> EventOutcome {
     if let Some(card) =
         crate::cards::spec_index::card_pod_from_id(sts2_core::cards::CardId::Injury, false)
     {
-        state.master_deck.push(card);
+        state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
     }
     if state.interactive_rewards {
         // C# `PunchOff.Nab`: `OfferCustom([new RelicReward(player)])`, a relic
@@ -2945,5 +2945,59 @@ mod tests {
         // 24 HP healed: 1 -> 25. The `+`/`*` mutants overshoot (>=79 healed),
         // the `/`/`%` mutants undershoot (<=2 healed); all differ from 24.
         assert_eq!(rs.current_hp, 25, "healed exactly 30% of max HP");
+    }
+
+    // event-deck-add-hooks: an event's deck add is the game's CardPileCmd.Add
+    // to the Deck (or AddCurseToDeck): Hook.ModifyCardBeingAddedToDeck, then
+    // AfterCardChangedPiles per card (Lucky Fysh +15 gold each, Darkstone
+    // Periapt +6 max HP per curse).
+
+    fn hooked(relics: &[sts2_core::relics::RelicId]) -> RunState {
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.relics.extend_from_slice(relics);
+        rs.gold = 500;
+        rs
+    }
+
+    fn fysh_periapt() -> RunState {
+        use sts2_core::relics::RelicId;
+        hooked(&[RelicId::LuckyFysh, RelicId::DarkstonePeriapt])
+    }
+
+    /// Run `handler` on `rs`; assert `cards` cards, `curses` of them curses,
+    /// went in with their hooks (gold and max HP beside the event's own).
+    fn assert_hooked_adds(
+        mut rs: RunState,
+        handler: fn(&mut RunState) -> EventOutcome,
+        cards: i32,
+        curses: i32,
+        event_gold: i32,
+    ) -> RunState {
+        let (deck, gold, max_hp) = (rs.master_deck.len() as i32, rs.gold, rs.max_hp);
+        let _ = handler(&mut rs);
+        assert_eq!(rs.master_deck.len() as i32 - deck, cards, "cards added");
+        assert_eq!(
+            rs.gold - gold - event_gold,
+            15 * cards,
+            "Lucky Fysh per card"
+        );
+        assert_eq!(
+            rs.max_hp - max_hp,
+            6 * curses,
+            "Darkstone Periapt per curse"
+        );
+        rs
+    }
+
+    #[test]
+    fn event_deck_adds_run_the_deck_add_hooks_shared() {
+        assert_hooked_adds(fysh_periapt(), trash_heap_grab, 1, 0, 100);
+        assert_hooked_adds(fysh_periapt(), bugslayer_exterminate, 1, 0, 0);
+        assert_hooked_adds(fysh_periapt(), byrdonis_take, 1, 0, 0);
+        assert_hooked_adds(fysh_periapt(), grave_confront, 1, 1, 0);
+        assert_hooked_adds(fysh_periapt(), infested_study, 1, 0, 0);
+        assert_hooked_adds(fysh_periapt(), infested_touch_core, 1, 0, 0);
     }
 }

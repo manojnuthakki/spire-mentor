@@ -274,13 +274,14 @@ pub fn install_pool() {
 // added to the master deck — reward, event, merchant — is upgraded
 // pre-add). Curse/Status cards never upgrade.
 
+///
+/// C# `EggRelicHelper.UpgradeValidCards` (the card-reward arm): a card of the
+/// type that `IsUpgradable` gets `CardCmd.Upgrade`, its whole upgrade, as the
+/// deck-add arm (sts2-agent fork, event-deck-add-hooks).
 fn upgrade_cards_of_type(cards: &mut [Card], ct: CardType) -> bool {
     let mut any = false;
     for card in cards {
-        if card.card_type == ct && !card.upgraded {
-            card.upgraded = true;
-            any = true;
-        }
+        any |= upgrade_card_of_type(card, ct);
     }
     any
 }
@@ -2428,5 +2429,26 @@ mod tests {
             DamageMul::ONE,
             "non-Weak positive power must not engage PaperKrane"
         );
+    }
+
+    // event-deck-add-hooks: EggRelicHelper.UpgradeValidCards (card rewards)
+    // is CardCmd.Upgrade on the card: its whole upgrade, as the deck add's.
+    #[test]
+    fn eggs_upgrade_reward_cards_completely() {
+        use sts2_core::cards::CardId;
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+        let pod = |id, up| crate::cards::spec_index::card_pod_from_id(id, up).unwrap();
+        let mut rs = RunState::new();
+        rs.relics.push(RelicId::ToxicEgg);
+        rs.relics.push(RelicId::MoltenEgg);
+        let mut cards = vec![pod(CardId::DefendIronclad, false), pod(CardId::Bash, false)];
+        let _ = listener_toxic_egg_card_reward(&mut rs, &mut cards);
+        let _ = listener_molten_egg_card_reward(&mut rs, &mut cards);
+        let defend = pod(CardId::DefendIronclad, true);
+        let bash = pod(CardId::Bash, true);
+        assert!(cards[0].upgraded && cards[1].upgraded);
+        assert_eq!(cards[0].base_block, defend.base_block);
+        assert_eq!(cards[1].base_damage, bash.base_damage);
     }
 }
