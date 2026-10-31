@@ -62,8 +62,9 @@ fn upgraded(rewards: &[Vec<(CardId, bool)>]) -> usize {
     rewards.iter().flatten().filter(|(_, u)| *u).count()
 }
 
-/// Glass Eye in act 3: no card is upgraded and no upgrade float is drawn
-/// (15 cards: one draw fewer each than Orrery's same-sized set).
+/// Glass Eye in act 3: no card is upgraded and no upgrade float is drawn,
+/// nor a rarity (uniform odds, a forced rarity: pool-placeholders): 15 cards,
+/// two draws fewer each than Orrery's same-sized set.
 #[test]
 fn glass_eye_rolls_no_upgrade() {
     let (glass, glass_draws) = offered_set(3, &[RelicId::BurningBlood], RelicId::GlassEye);
@@ -71,7 +72,7 @@ fn glass_eye_rolls_no_upgrade() {
     assert_eq!(glass.len(), 5);
     assert_eq!(orrery.len(), 5);
     assert_eq!(upgraded(&glass), 0, "{glass:?}");
-    assert_eq!(orrery_draws, glass_draws + 15);
+    assert_eq!(orrery_draws, glass_draws + 30);
 }
 
 /// Orrery in act 3 rolls each card's upgrade on the rewards stream (one

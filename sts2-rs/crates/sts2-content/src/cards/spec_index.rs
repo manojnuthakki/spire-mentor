@@ -1062,6 +1062,55 @@ pub fn roll_noncombat_card_reward_options(rs: &mut RunState, roll_upgrade: bool)
     cards.into_iter().map(|c| c.card_id).collect()
 }
 
+/// `GlassEye::AfterObtained` (`GlassEye.cs:15-33`): five card rewards of 3,
+/// one per rarity of (Common, Common, Uncommon, Uncommon, Rare), each
+/// `CardFactory.CreateForReward(owner, 3, ForNonCombatWithUniformOdds(
+/// [owner's pool], c => c.Rarity == rarity).WithFlags(NoRarityModification))`.
+/// `CardRarityOddsType.Uniform` rolls no rarity: each card is a `NextItem`
+/// on `PlayerRng.Rewards` over the pool's cards of that rarity, less the
+/// reward's earlier picks; `ForNonCombatWithUniformOdds` sets `NoUpgradeRoll`.
+/// Then `Hook.TryModifyCardRewardOptions` (the late channel: the eggs'
+/// upgrades). Returns each reward's ids and upgrade flags, in C# order
+/// (sts2-agent fork, pool-placeholders).
+#[must_use]
+pub fn roll_glass_eye_card_rewards(rs: &mut RunState) -> Vec<(Vec<CardId>, Vec<bool>)> {
+    const RARITIES: [CardRarity; 5] = [
+        CardRarity::Common,
+        CardRarity::Common,
+        CardRarity::Uncommon,
+        CardRarity::Uncommon,
+        CardRarity::Rare,
+    ];
+    const CARDS: usize = 3;
+    let owner = rs.character_id;
+    let mut out = Vec::with_capacity(RARITIES.len());
+    for rarity in RARITIES {
+        let mut chosen: Vec<CardId> = Vec::with_capacity(CARDS);
+        for _ in 0..CARDS {
+            let mut candidates = eligible_ids_for_rarity(&[owner], false, rarity);
+            candidates.retain(|id| !chosen.contains(id));
+            if candidates.is_empty() {
+                break;
+            }
+            let idx = rs
+                .rng
+                .rewards
+                .next_int_exclusive(0, candidates.len() as i32) as usize;
+            chosen.push(candidates[idx]);
+        }
+        let mut cards: Vec<sts2_core::cards::Card> = chosen
+            .iter()
+            .filter_map(|&id| card_pod_from_id(id, false))
+            .collect();
+        let _ = sts2_core::run_effects::dispatch_modify_card_reward_options_late(rs, &mut cards);
+        out.push((
+            cards.iter().map(|c| c.card_id).collect(),
+            cards.iter().map(|c| c.upgraded).collect(),
+        ));
+    }
+    out
+}
+
 /// The ordinal sort key C# uses for a character's `CardPoolModel` inside
 /// `StableShuffle` — the model `Id.Entry`, which is the slugified pool class
 /// name `<NAME>_CARD_POOL` (`Ironclad.CardPool => IroncladCardPool`,

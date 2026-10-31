@@ -2695,14 +2695,25 @@ fn listener_glass_eye(rs: &mut RunState) -> EffectResult {
         return EffectResult::NotImplemented;
     }
     // C# `ForNonCombatWithUniformOdds(...)`: `NoUpgradeRoll`, so the cards
-    // roll no upgrade and draw no upgrade float (sts2-agent fork).
+    // roll no upgrade and draw no upgrade float (sts2-agent fork). Each
+    // reward's rarity is forced, with uniform odds (pool-placeholders).
+    let rewards = crate::cards::spec_index::roll_glass_eye_card_rewards(rs);
+    debug_assert_eq!(rewards.len(), GLASS_EYE_CARDS);
     if rs.interactive_rewards {
-        offer_card_reward_set(rs, GLASS_EYE_CARDS, true);
+        let set = rewards
+            .into_iter()
+            .map(|(options, upgraded)| OfferedReward::Card {
+                options: Some(options),
+                upgraded,
+                no_upgrade_roll: true,
+            })
+            .collect();
+        rs.offer_custom_rewards(set, true);
         return EffectResult::Resolved;
     }
-    for _ in 0..GLASS_EYE_CARDS {
+    for (options, _) in rewards {
         rs.pending_rewards
-            .push(Reward::Card(CardReward::empty_no_upgrade_roll()));
+            .push(Reward::Card(CardReward::from_options(options)));
     }
     EffectResult::Resolved
 }
@@ -7406,6 +7417,49 @@ mod tests {
             .rev()
             .take(GLASS_EYE_CARDS)
             .all(|r| matches!(r, Reward::Card(_))));
+    }
+
+    /// pool-placeholders: C# `GlassEye.AfterObtained` offers five card rewards
+    /// of 3, each `ForNonCombatWithUniformOdds(owner's pool, c.Rarity == r)`
+    /// for r in (Common, Common, Uncommon, Uncommon, Rare): every card of a
+    /// reward has its rarity, the three distinct, none upgraded (NoUpgradeRoll).
+    #[test]
+    fn listener_glass_eye_offers_five_rewards_of_forced_rarities() {
+        use sts2_core::runstate::{OfferedReward, RunState};
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.interactive_rewards = true;
+        rs.relics.push(RelicId::GlassEye);
+        rs.last_obtained_relic = Some(RelicId::GlassEye);
+        let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
+        let set = rs.offered_reward_sets.last().expect("an offered set");
+        assert_eq!(set.rewards.len(), GLASS_EYE_CARDS);
+        // C#'s CardRarity discriminants: Common 2, Uncommon 3, Rare 4.
+        for (reward, want) in set.rewards.iter().zip([2u8, 2, 3, 3, 4]) {
+            let OfferedReward::Card {
+                options: Some(options),
+                upgraded,
+                no_upgrade_roll,
+            } = reward
+            else {
+                panic!("a rolled card reward, got {reward:?}");
+            };
+            assert!(*no_upgrade_roll);
+            assert_eq!(options.len(), 3);
+            for id in options {
+                assert_eq!(
+                    crate::cards::spec_index::card_rarity_rank_csharp(*id),
+                    want,
+                    "{id:?}"
+                );
+            }
+            let mut distinct = options.clone();
+            distinct.sort();
+            distinct.dedup();
+            assert_eq!(distinct.len(), 3);
+            assert!(upgraded.iter().all(|u| !u));
+        }
     }
 
     /// Bead `sts2-rs-66l9f`: GlassEye listener is noop without ownership.
