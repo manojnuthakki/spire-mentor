@@ -282,6 +282,12 @@ pub struct CardReward {
     /// the combat (`Encounter`) roller with that room type's rarity odds.
     /// `None` for the other sources. sts2-agent fork.
     pub for_room: Option<RoomType>,
+    /// Each pre-resolved option's upgrade state, parallel to `options` (empty:
+    /// none upgraded): what the roll and the late reward hooks (Silver
+    /// Crucible, the eggs) left on a reward rolled before it was queued
+    /// (Glass Eye's), carried to the offering so no hook runs twice.
+    /// sts2-agent fork.
+    pub upgraded: Vec<bool>,
 }
 
 impl CardReward {
@@ -293,6 +299,7 @@ impl CardReward {
             options: Vec::new(),
             no_upgrade_roll: false,
             for_room: None,
+            upgraded: Vec::new(),
         }
     }
 
@@ -304,6 +311,7 @@ impl CardReward {
             options: Vec::new(),
             no_upgrade_roll: true,
             for_room: None,
+            upgraded: Vec::new(),
         }
     }
 
@@ -315,6 +323,7 @@ impl CardReward {
             options: Vec::new(),
             no_upgrade_roll: false,
             for_room: Some(room),
+            upgraded: Vec::new(),
         }
     }
 
@@ -325,6 +334,18 @@ impl CardReward {
             options,
             no_upgrade_roll: false,
             for_room: None,
+            upgraded: Vec::new(),
+        }
+    }
+
+    /// Construct a pre-resolved `CardReward` whose options keep the upgrade
+    /// state they were rolled with (`upgraded` parallel to `options`).
+    /// sts2-agent fork.
+    #[must_use]
+    pub fn from_resolved(options: Vec<CardId>, upgraded: Vec<bool>) -> Self {
+        Self {
+            upgraded,
+            ..Self::from_options(options)
         }
     }
 }

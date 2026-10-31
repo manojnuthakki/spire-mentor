@@ -1051,9 +1051,12 @@ pub fn roll_infested_touch_core_card(rs: &mut RunState) -> Option<CardId> {
 /// The late hooks run either way.
 #[must_use]
 pub fn roll_noncombat_card_reward_options(rs: &mut RunState, roll_upgrade: bool) -> Vec<CardId> {
-    let character = rs.character_id;
+    // A `CardReward` (`IsCardReward`): `CreateForReward` folds
+    // `Hook.ModifyCardRewardCreationOptions` (Dingy Rug's colorless pool)
+    // before it picks (sts2-agent fork, pool-placeholders).
+    let pool = card_reward_pool(rs, roll_upgrade, true);
     let mut cards: Vec<sts2_core::cards::Card> =
-        roll_reward_cards_base_odds(rs, 3, roll_upgrade, &[character], false)
+        roll_reward_cards_base_odds(rs, 3, roll_upgrade, &pool)
             .into_iter()
             .filter_map(|(id, upgraded)| card_pod_from_id(id, upgraded))
             .collect();
@@ -1069,7 +1072,9 @@ pub fn roll_noncombat_card_reward_options(rs: &mut RunState, roll_upgrade: bool)
 /// `CardRarityOddsType.Uniform` rolls no rarity: each card is a `NextItem`
 /// on `PlayerRng.Rewards` over the pool's cards of that rarity, less the
 /// reward's earlier picks; `ForNonCombatWithUniformOdds` sets `NoUpgradeRoll`.
-/// Then `Hook.TryModifyCardRewardOptions` (the late channel: the eggs'
+/// Each card's pool is the owner's after `Hook.ModifyCardRewardCreationOptions`
+/// ([`card_reward_pool`]: Dingy Rug's colorless cards). Then
+/// `Hook.TryModifyCardRewardOptions` (the late channel: the eggs'
 /// upgrades). Returns each reward's ids and upgrade flags, in C# order
 /// (sts2-agent fork, pool-placeholders).
 #[must_use]
@@ -1082,12 +1087,17 @@ pub fn roll_glass_eye_card_rewards(rs: &mut RunState) -> Vec<(Vec<CardId>, Vec<b
         CardRarity::Rare,
     ];
     const CARDS: usize = 3;
-    let owner = rs.character_id;
     let mut out = Vec::with_capacity(RARITIES.len());
     for rarity in RARITIES {
+        // `CardReward` adds `IsCardReward`, and the options carry
+        // `NoRarityModification`, not `NoCardPoolModifications`: the pool
+        // modifiers (Dingy Rug's colorless pool) apply, the rarity filter
+        // stays (`WithCardPools(pools, options.CardPoolFilter)`). They draw
+        // no RNG; C# folds them per card, the same options each time.
+        let pool = card_reward_pool(rs, false, false);
         let mut chosen: Vec<CardId> = Vec::with_capacity(CARDS);
         for _ in 0..CARDS {
-            let mut candidates = eligible_ids_for_rarity(&[owner], false, rarity);
+            let mut candidates = pool.candidates(rarity);
             candidates.retain(|id| !chosen.contains(id));
             if candidates.is_empty() {
                 break;
@@ -1258,16 +1268,14 @@ fn roll_reward_options_base_odds(
     character_ids: &[CharacterId],
     include_colorless: bool,
 ) -> Vec<CardId> {
-    roll_reward_cards_base_odds(
-        rs,
-        count,
-        consume_upgrade_roll,
-        character_ids,
+    let pool = RewardPool::Pools {
+        character_ids: character_ids.to_vec(),
         include_colorless,
-    )
-    .into_iter()
-    .map(|(id, _)| id)
-    .collect()
+    };
+    roll_reward_cards_base_odds(rs, count, consume_upgrade_roll, &pool)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect()
 }
 
 /// [`roll_reward_options_base_odds`] with each card's upgrade roll result
@@ -1276,8 +1284,7 @@ fn roll_reward_cards_base_odds(
     rs: &mut RunState,
     count: usize,
     consume_upgrade_roll: bool,
-    character_ids: &[CharacterId],
-    include_colorless: bool,
+    pool: &RewardPool,
 ) -> Vec<(CardId, bool)> {
     use sts2_core::card_rewards::{
         combat_card_upgrade_base_chance, roll_for_upgrade_with_dotnet, RarityContext,
@@ -1298,11 +1305,7 @@ fn roll_reward_cards_base_odds(
         // fires in practice.
         let mut candidates: Vec<CardId>;
         loop {
-            candidates = eligible_ids_for_rarity(
-                character_ids,
-                include_colorless,
-                reward_rarity_to_card_rarity(rarity),
-            );
+            candidates = pool.candidates(reward_rarity_to_card_rarity(rarity));
             candidates.retain(|id| !chosen.contains(id));
             if !candidates.is_empty() {
                 break;
@@ -2028,6 +2031,66 @@ const fn reward_rarity_to_card_rarity(r: sts2_core::card_rewards::RewardRarity) 
     }
 }
 
+/// A card reward's pool after `Hook.ModifyCardRewardCreationOptions`: the
+/// character slices (plus the colorless pool), or a listener's explicit slate
+/// (Dingy Rug's character + colorless). sts2-agent fork (pool-placeholders).
+#[derive(Clone, Debug)]
+enum RewardPool {
+    Pools {
+        character_ids: Vec<CharacterId>,
+        include_colorless: bool,
+    },
+    Custom(Vec<CardId>),
+}
+
+impl RewardPool {
+    /// The pool's cards of `rarity`, in pool order, less the multiplayer-only
+    /// ones (C# `CardFactory.FilterForPlayerCount` with one player).
+    fn candidates(&self, rarity: CardRarity) -> Vec<CardId> {
+        match self {
+            Self::Pools {
+                character_ids,
+                include_colorless,
+            } => eligible_ids_for_rarity(character_ids, *include_colorless, rarity),
+            Self::Custom(ids) => ids
+                .iter()
+                .copied()
+                .filter(|&id| rarity_for_card_id(id) == Some(rarity) && !is_multiplayer_only(id))
+                .collect(),
+        }
+    }
+}
+
+/// The owner's card-reward pool after `Hook.ModifyCardRewardCreationOptions`
+/// (C# `CardFactory.CreateForReward`'s first step) for a non-combat
+/// `CardReward` over `owner.Character.CardPool`: Dingy Rug adds the colorless
+/// pool. `allow_rarity_modifications` is false for options with
+/// `NoRarityModification` (Glass Eye's). The listeners draw no RNG.
+/// sts2-agent fork (pool-placeholders).
+fn card_reward_pool(
+    rs: &mut RunState,
+    roll_upgrade: bool,
+    allow_rarity_modifications: bool,
+) -> RewardPool {
+    let opts =
+        rs.modify_card_reward_creation_options(sts2_core::runstate::CardRewardGenerationOptions {
+            character_ids: vec![rs.character_id],
+            use_default_character_pool: false,
+            roll_upgrade,
+            card_creation_source: "other",
+            allow_rarity_modifications,
+            ..Default::default()
+        });
+    if opts.has_custom_card_pool {
+        RewardPool::Custom(opts.custom_card_ids)
+    } else {
+        RewardPool::Pools {
+            character_ids: opts.character_ids,
+            include_colorless: opts.include_colorless,
+        }
+    }
+}
+
 /// Walk every per-character + colorless slice and collect `CardId`s
 /// whose [`CardSpec`] matches `rarity`. The walk is deterministic in
 /// slice order so the sampler downstream is reproducible under a
@@ -2202,11 +2265,7 @@ pub fn roll_card_reward_cards(
         let cr = reward_rarity_to_card_rarity(rarity);
         // 2. Candidates for the rolled rarity, minus already-picked.
         let mut candidates: Vec<CardId> = if has_custom {
-            custom_ids
-                .iter()
-                .copied()
-                .filter(|&id| rarity_for_card_id(id) == Some(cr))
-                .collect()
+            RewardPool::Custom(custom_ids.clone()).candidates(cr)
         } else {
             eligible_ids_for_rarity(&character_ids, include_colorless, cr)
         };
@@ -2804,6 +2863,85 @@ pub fn restock_shop_entry(
 
 #[cfg(test)]
 mod tests {
+
+    /// pool-placeholders (Codex's review): with Dingy Rug held, C#
+    /// `CardFactory.CreateForReward` folds `Hook.ModifyCardRewardCreationOptions`
+    /// for every `CardReward` (`IsCardReward`) without
+    /// `NoCardPoolModifications`: Glass Eye's forced-rarity rewards and the
+    /// non-combat sentinels (Lost Coffer, Orrery, event grants) draw from the
+    /// owner's pool plus the colorless pool, in pool order, single-player cards
+    /// only. Each roll here is replayed against that pool on a clone of the RNG.
+    fn dingy_rug_state(seed: u32) -> RunState {
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.rng.rewards = sts2_core::DotNetRng::new(seed as i32 + 1);
+        rs.relics.push(sts2_core::RelicId::DingyRug);
+        rs
+    }
+
+    fn widened(rarity: CardRarity) -> Vec<CardId> {
+        let mut pool = eligible_ids_for_rarity(&[CharacterId::Ironclad], true, rarity);
+        pool.retain(|&id| !is_multiplayer_only(id));
+        pool
+    }
+
+    fn is_colorless(id: CardId) -> bool {
+        COLORLESS_SPECS.iter().any(|f| f().id == id)
+    }
+
+    #[test]
+    fn glass_eye_rewards_draw_from_dingy_rugs_widened_pool() {
+        let rarities = [
+            CardRarity::Common,
+            CardRarity::Common,
+            CardRarity::Uncommon,
+            CardRarity::Uncommon,
+            CardRarity::Rare,
+        ];
+        let mut colorless = 0;
+        for seed in 0..8 {
+            let mut rs = dingy_rug_state(seed);
+            let mut rng = rs.rng.rewards.clone();
+            let rewards = roll_glass_eye_card_rewards(&mut rs);
+            for ((ids, _), rarity) in rewards.iter().zip(rarities) {
+                let mut want: Vec<CardId> = Vec::new();
+                for _ in 0..3 {
+                    let mut c = widened(rarity);
+                    c.retain(|id| !want.contains(id));
+                    want.push(c[rng.next_int_exclusive(0, c.len() as i32) as usize]);
+                }
+                assert_eq!(ids, &want, "seed {seed} {rarity:?}");
+                colorless += ids.iter().filter(|&&id| is_colorless(id)).count();
+            }
+        }
+        assert!(colorless > 0, "Dingy Rug's colorless cards are offered");
+    }
+
+    #[test]
+    fn noncombat_card_rewards_draw_from_dingy_rugs_widened_pool() {
+        let mut colorless = 0;
+        for seed in 0..20 {
+            let mut rs = dingy_rug_state(seed);
+            let ids = roll_noncombat_card_reward_options(&mut rs, false);
+            for id in &ids {
+                assert!(!is_multiplayer_only(*id), "{id:?}");
+            }
+            colorless += ids.iter().filter(|&&id| is_colorless(id)).count();
+        }
+        assert!(colorless > 0, "Dingy Rug's colorless cards are offered");
+    }
+
+    #[test]
+    fn combat_card_rewards_from_a_custom_pool_leave_out_multiplayer_only_cards() {
+        let mut rs = dingy_rug_state(0);
+        for _ in 0..400 {
+            let opts = sts2_core::runstate::CardRewardGenerationOptions::default();
+            for card in roll_card_reward_cards(&mut rs, opts, CharacterId::Ironclad) {
+                assert!(!is_multiplayer_only(card.card_id), "{:?}", card.card_id);
+            }
+        }
+    }
     use super::*;
 
     /// Scroll Boxes makes two packs of `[common, common, uncommon]`, with no

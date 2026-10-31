@@ -2711,9 +2711,11 @@ fn listener_glass_eye(rs: &mut RunState) -> EffectResult {
         rs.offer_custom_rewards(set, true);
         return EffectResult::Resolved;
     }
-    for (options, _) in rewards {
+    // The rolled upgrades travel with the reward: its hooks have run (Silver
+    // Crucible's uses are spent), so the drain must not lose or redo them.
+    for (options, upgraded) in rewards {
         rs.pending_rewards
-            .push(Reward::Card(CardReward::from_options(options)));
+            .push(Reward::Card(CardReward::from_resolved(options, upgraded)));
     }
     EffectResult::Resolved
 }
@@ -7459,6 +7461,37 @@ mod tests {
             distinct.dedup();
             assert_eq!(distinct.len(), 3);
             assert!(upgraded.iter().all(|u| !u));
+        }
+    }
+
+    /// Codex's review (pool-placeholders): without interactive rewards, Glass
+    /// Eye's queued rewards keep the upgrades their late hooks gave (here the
+    /// three eggs: every card upgraded); the drain must not lose them.
+    #[test]
+    fn listener_glass_eye_queues_rewards_with_their_upgrades() {
+        use sts2_core::runstate::{Reward, RunState};
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.interactive_rewards = false;
+        for egg in [RelicId::MoltenEgg, RelicId::FrozenEgg, RelicId::ToxicEgg] {
+            rs.relics.push(egg);
+        }
+        rs.relics.push(RelicId::GlassEye);
+        rs.last_obtained_relic = Some(RelicId::GlassEye);
+        let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
+        let queued: Vec<_> = rs
+            .pending_rewards
+            .iter()
+            .filter_map(|r| match r {
+                Reward::Card(c) => Some(c.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(queued.len(), GLASS_EYE_CARDS);
+        for reward in queued {
+            assert_eq!(reward.options.len(), 3);
+            assert_eq!(reward.upgraded, vec![true; 3], "{reward:?}");
         }
     }
 

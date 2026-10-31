@@ -3764,6 +3764,7 @@ impl RunManager {
                     Vec<crate::cards::CardId>,
                     bool,
                     Option<crate::runstate::RoomType>,
+                    Vec<bool>,
                 ),
             }
             let queued = match &self.run_state.pending_rewards[i] {
@@ -3778,6 +3779,7 @@ impl RunManager {
                         reward.options.clone(),
                         !reward.no_upgrade_roll,
                         reward.for_room,
+                        reward.upgraded.clone(),
                     ))
                 }
                 Reward::Card(_) => break, // later drain rolls this one
@@ -3808,7 +3810,7 @@ impl RunManager {
                     // `CardRemovalReward.OnSelect` → `DoLocalCardRemoval` analog.
                     let _ = self.run_state.remove_cards_from_deck(count as usize);
                 }
-                Resolve::SurfaceCard(pre_resolved, roll_upgrade, for_room) => {
+                Resolve::SurfaceCard(pre_resolved, roll_upgrade, for_room, upgraded) => {
                     let room_roller = self.callbacks.generate_room_type_card_reward_options;
                     if let (true, Some(room), Some(roller)) =
                         (pre_resolved.is_empty(), for_room, room_roller)
@@ -3832,8 +3834,10 @@ impl RunManager {
                         self.card_reward_upgraded =
                             std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
                     } else {
+                        // The flags it was rolled with (Glass Eye's, its late
+                        // hooks already run): empty is none upgraded.
                         self.card_reward_options = pre_resolved;
-                        self.card_reward_upgraded = Vec::new();
+                        self.card_reward_upgraded = upgraded;
                     }
                     opened = true;
                 }
@@ -8461,6 +8465,28 @@ mod tests {
             3,
             "fallback roller filled offering"
         );
+    }
+
+    /// A pre-resolved card reward keeps the upgrades it was rolled with (Glass
+    /// Eye's, after Silver Crucible's or the eggs' late hooks) when the drain
+    /// surfaces it: no hook runs again, none of its upgrades is lost.
+    /// sts2-agent fork.
+    #[test]
+    fn drain_pending_rewards_keeps_a_resolved_rewards_upgrades() {
+        use crate::cards::CardId;
+        use crate::runstate::{CardReward, Reward};
+        let mut rm = RunManager::new(0, CharacterId::Ironclad)
+            .with_content_callbacks(drain_test_callbacks());
+        let ids = vec![CardId::StrikeIronclad, CardId::DefendIronclad, CardId::Bash];
+        rm.run_state
+            .pending_rewards
+            .push(Reward::Card(CardReward::from_resolved(
+                ids.clone(),
+                vec![true, false, true],
+            )));
+        assert!(rm.drain_pending_rewards());
+        assert_eq!(rm.card_reward_options, ids);
+        assert_eq!(rm.card_reward_upgraded, vec![true, false, true]);
     }
 
     #[test]
