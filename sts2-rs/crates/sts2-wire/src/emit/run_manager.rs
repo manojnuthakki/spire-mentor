@@ -498,6 +498,12 @@ pub fn card_value(card: &sts2_core::cards::Card) -> Value {
         super::names::card_type_python_name(card.card_type)
     };
     set(&mut d, "type", card_type);
+    // Mad Science's rider (C# `MadScience.TinkerTimeRider`), as Headless
+    // writes it: the game's `RiderEffect` name (sts2-agent fork).
+    if card.card_id == sts2_core::cards::CardId::MadScience {
+        let (_, rider) = sts2_content::cards::colorless::mad_science_variant_of(card);
+        set(&mut d, "tinker_time_rider", rider.wire_name());
+    }
     // Headless's `star_cost` (C# `GetStarCostWithModifiers()`, left out for a
     // card without one) and `star_cost_x` (Stardust), sts2-agent fork.
     if sts2_core::card_has_star_cost_x(card.card_id) {

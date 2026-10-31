@@ -1262,6 +1262,24 @@ impl TinkerTimeRider {
         }
     }
 
+    /// C#'s `TinkerTime.RiderEffect` enum name, as Headless writes a Mad
+    /// Science's `tinker_time_rider` (the emit half of [`Self::from_wire_name`]).
+    #[must_use]
+    pub fn wire_name(self) -> &'static str {
+        match self {
+            Self::None => "None",
+            Self::Sapping => "Sapping",
+            Self::Violence => "Violence",
+            Self::Choking => "Choking",
+            Self::Energized => "Energized",
+            Self::Wisdom => "Wisdom",
+            Self::Chaos => "Chaos",
+            Self::Expertise => "Expertise",
+            Self::Curious => "Curious",
+            Self::Improvement => "Improvement",
+        }
+    }
+
     /// Resolve a wire spelling of C#'s `TinkerTime.RiderEffect` enum name.
     /// Case-insensitive; unknown spellings return `None` (the caller decides
     /// whether that is a hard error or "no rider"). This is the ingest half of

@@ -236,6 +236,15 @@ pub fn card_to_value(state: &CombatState, card: &Card) -> Value {
         set(&mut d, "enchantment", id.wire_name());
         set(&mut d, "enchantment_amount", *amount);
     }
+    // Mad Science's per-instance type and rider (C# `MadScience.Type =>
+    // TinkerTimeType`, `TinkerTimeRider`), which the registry's spec (the
+    // default Attack build) can't give a consumer; Headless writes both on
+    // every pile's card (sts2-agent fork).
+    if card.card_id == sts2_core::cards::CardId::MadScience {
+        let (mode, rider) = sts2_content::cards::colorless::mad_science_variant_of(card);
+        set(&mut d, "type", card_type_python_name(mode));
+        set(&mut d, "tinker_time_rider", rider.wire_name());
+    }
     // The card's own extra plays (Hidden Gem); an enchantment's are the
     // enchantment's. Absent when 0, as before the field.
     if card.base_replay_count != 0 {
