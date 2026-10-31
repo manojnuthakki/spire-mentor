@@ -771,12 +771,32 @@ const STONE_OF_ALL_TIME_OPTIONS: &[EventOptionSpec] = &[
     },
 ];
 
+/// C# `StoneOfAllTime.GenerateInitialOptions`: with no potion Lift is
+/// `LIFT_LOCKED`; with no deck card `Vigorous.CanEnchant` accepts Push is
+/// `PUSH_LOCKED` (both handler-less). sts2-agent fork.
+fn stone_of_all_time_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let mut opts = super::default_option_info_from_spec(state, spec);
+    super::lock_option_if(
+        &mut opts,
+        "lift",
+        stone_lift_potion(state).is_none(),
+        "STONE_OF_ALL_TIME.pages.INITIAL.options.LIFT_LOCKED",
+    );
+    super::lock_option_if(
+        &mut opts,
+        "push",
+        !state.master_deck.iter().any(vigorous_can_enchant),
+        "STONE_OF_ALL_TIME.pages.INITIAL.options.PUSH_LOCKED",
+    );
+    opts
+}
+
 pub const STONE_OF_ALL_TIME: EventSpec = EventSpec {
     id: EventId::StoneOfAllTime,
     python_name: "StoneOfAllTime",
     // C# `CurrentActIndex == 1 && Potions.Any()` (Act 2 + ≥1 potion). Bead `sts2-rs-1hiht`.
     is_allowed: stone_of_all_time_allowed,
-    generate_options: default_option_info_from_spec,
+    generate_options: stone_of_all_time_generate_options,
     options: STONE_OF_ALL_TIME_OPTIONS,
 };
 
@@ -786,14 +806,13 @@ pub const STONE_OF_ALL_TIME: EventSpec = EventSpec {
 const SYMBIOTE_STREAM: &str = "SYMBIOTE";
 
 /// C# `Symbiote.CanEnchant(card) => Corrupted.CanEnchant(card)`. Corrupted has
-/// no `CanEnchant` override, so this is the base `EnchantmentModel.CanEnchant`:
-/// not Status/Curse, no existing enchantment, concrete cost (X-cost stays
-/// eligible) — identical to [`super::shared_wave_b`]'s `sown_can_enchant`.
+/// no `CanEnchant` override but does override `CanEnchantCardType` to Attack
+/// only (`Corrupted.cs`), so this is the base `EnchantmentModel.CanEnchant`
+/// over Attacks: no existing enchantment, playable (X-cost stays eligible).
+/// sts2-agent fork: the Attack restriction was missing.
 fn symbiote_can_enchant(c: &sts2_core::cards::Card) -> bool {
     use sts2_core::cards::CardType;
-    !matches!(c.card_type, CardType::Status | CardType::Curse)
-        && c.enchantments.is_empty()
-        && (c.cost >= 0 || c.is_x_cost())
+    c.card_type == CardType::Attack && c.enchantments.is_empty() && (c.cost >= 0 || c.is_x_cost())
 }
 
 fn symbiote_approach(state: &mut RunState) -> EventOutcome {
@@ -813,7 +832,7 @@ fn symbiote_approach(state: &mut RunState) -> EventOutcome {
             .push(sts2_core::PendingDeckEnchant {
                 enchantment: EnchantmentId::Corrupted,
                 amount: 1,
-                type_restriction: None,
+                type_restriction: Some(sts2_core::cards::CardType::Attack),
                 secondary_type: None,
             });
         EventOutcome::finished("Pick a card to enchant with Corrupted.")
@@ -885,12 +904,25 @@ const SYMBIOTE_OPTIONS: &[EventOptionSpec] = &[
     },
 ];
 
+/// C# `Symbiote.GenerateInitialOptions`: with no deck card Corrupted can
+/// take, Approach is the handler-less `APPROACH_LOCKED`. sts2-agent fork.
+fn symbiote_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let mut opts = super::default_option_info_from_spec(state, spec);
+    super::lock_option_if(
+        &mut opts,
+        "approach",
+        !state.master_deck.iter().any(symbiote_can_enchant),
+        "SYMBIOTE.pages.INITIAL.options.APPROACH_LOCKED",
+    );
+    opts
+}
+
 pub const SYMBIOTE: EventSpec = EventSpec {
     id: EventId::Symbiote,
     python_name: "Symbiote",
     // C# `CurrentActIndex > 0` (Act 2+). Bead `sts2-rs-1hiht`.
     is_allowed: allowed_act_2_plus,
-    generate_options: default_option_info_from_spec,
+    generate_options: symbiote_generate_options,
     options: SYMBIOTE_OPTIONS,
 };
 

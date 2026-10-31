@@ -384,6 +384,25 @@ pub fn default_option_info_from_spec(state: &RunState, spec: &EventSpec) -> Vec<
         .collect()
 }
 
+/// Lock option `option_id` of `opts` when `locked`: C# builds a locked option
+/// with no handler (`IsLocked => OnChosen == null`) under its own text key,
+/// so it shows as `enabled: false` under `locked_key` (the run manager then
+/// refuses it while another option is enabled). sts2-agent fork.
+pub fn lock_option_if(
+    opts: &mut [EventOptionInfo],
+    option_id: &str,
+    locked: bool,
+    locked_key: &'static str,
+) {
+    if !locked {
+        return;
+    }
+    if let Some(o) = opts.iter_mut().find(|o| o.option_id == option_id) {
+        o.enabled = false;
+        o.loc_key = locked_key;
+    }
+}
+
 /// The options of a two-page event whose static list holds page 0's first
 /// `page0_len` options, then the follow-up page's (opened by setting
 /// `event_state.page = 1`, C# `SetEventState`): the current page's, built as

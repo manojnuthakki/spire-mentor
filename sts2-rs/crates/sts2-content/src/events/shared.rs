@@ -1518,12 +1518,37 @@ const GRAVE_OPTIONS: &[EventOptionSpec] = &[
     },
 ];
 
+/// C# `SoulsPower.CanEnchant`: the base `EnchantmentModel.CanEnchant` (not
+/// Status/Curse, no existing enchantment, playable) and the card's own
+/// Exhaust keyword (`GetKeywordsWithSources(Local)`). sts2-agent fork.
+fn souls_power_can_enchant(c: &sts2_core::cards::Card) -> bool {
+    use sts2_core::cards::CardType;
+    !matches!(c.card_type, CardType::Status | CardType::Curse)
+        && c.enchantments.is_empty()
+        && (c.cost >= 0 || c.is_x_cost())
+        && sts2_core::card_effects::card_exhausts_inst(c)
+}
+
+/// C# `GraveOfTheForgotten.GenerateInitialOptions`: without a deck card
+/// `SoulsPower.CanEnchant` accepts (`HasEnchantableCards`), Confront is the
+/// handler-less `CONFRONT_LOCKED`. sts2-agent fork.
+fn grave_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let mut opts = default_option_info_from_spec(state, spec);
+    super::lock_option_if(
+        &mut opts,
+        "confront",
+        !state.master_deck.iter().any(souls_power_can_enchant),
+        "GRAVE_OF_THE_FORGOTTEN.pages.INITIAL.options.CONFRONT_LOCKED",
+    );
+    opts
+}
+
 /// `GraveOfTheForgotten` spec. Pin: `shared.py:937`.
 pub const GRAVE_OF_THE_FORGOTTEN: EventSpec = EventSpec {
     id: EventId::GraveOfTheForgotten,
     python_name: "GraveOfTheForgotten",
     is_allowed: any_enchantable_deck_card,
-    generate_options: default_option_info_from_spec,
+    generate_options: grave_generate_options,
     options: GRAVE_OPTIONS,
 };
 

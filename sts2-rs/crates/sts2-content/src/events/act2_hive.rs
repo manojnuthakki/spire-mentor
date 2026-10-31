@@ -429,6 +429,20 @@ const ENDLESS_CONVEYOR_OPTIONS: &[EventOptionSpec] = &[
     },
 ];
 
+/// C# `EndlessConveyor.GenerateGrabSomethingOffTheBeltOption`: below the
+/// dish's `Gold` cost (40) the grab is handler-less under
+/// `ENDLESS_CONVEYOR.pages.ALL.options.LOCKED`. sts2-agent fork.
+fn endless_conveyor_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let mut opts = super::default_option_info_from_spec(state, spec);
+    super::lock_option_if(
+        &mut opts,
+        "grab",
+        state.gold < ENDLESS_CONVEYOR_GRAB_COST,
+        "ENDLESS_CONVEYOR.pages.ALL.options.LOCKED",
+    );
+    opts
+}
+
 /// Port pin: `sts2-rl-agent@01c094d:sts2_env/events/act2.py:179`.
 /// `is_allowed`: `endless_conveyor_allowed` (`gold >= 105`) — wired.
 /// `observe` (1-card upgrade) wired via the event-RNG replay
@@ -439,7 +453,7 @@ pub const ENDLESS_CONVEYOR: EventSpec = EventSpec {
     id: EventId::EndlessConveyor,
     python_name: "EndlessConveyor",
     is_allowed: endless_conveyor_allowed,
-    generate_options: super::default_option_info_from_spec,
+    generate_options: endless_conveyor_generate_options,
     options: ENDLESS_CONVEYOR_OPTIONS,
 };
 
@@ -1143,6 +1157,27 @@ const RANWID_OPTIONS: &[EventOptionSpec] = &[
     },
 ];
 
+/// C# `RanwidTheElder.GenerateInitialOptions`: with no potion to give the
+/// first option is `POTION_LOCKED`, with no tradable relic the third is
+/// `RELIC_LOCKED` (both handler-less). sts2-agent fork.
+fn ranwid_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let (potion, relic) = ranwid_asks_for(state);
+    let mut opts = super::default_option_info_from_spec(state, spec);
+    super::lock_option_if(
+        &mut opts,
+        "potion",
+        potion.is_none(),
+        "RANWID_THE_ELDER.pages.INITIAL.options.POTION_LOCKED",
+    );
+    super::lock_option_if(
+        &mut opts,
+        "relic",
+        relic.is_none(),
+        "RANWID_THE_ELDER.pages.INITIAL.options.RELIC_LOCKED",
+    );
+    opts
+}
+
 /// Port pin: `sts2-rl-agent@01c094d:sts2_env/events/act2.py:695`.
 /// `is_allowed`: `ranwid_the_elder_allowed`
 /// (`current_act_index > 0 && gold >= 100 && held_potions && relics`) — wired.
@@ -1150,7 +1185,7 @@ pub const RANWID_THE_ELDER: EventSpec = EventSpec {
     id: EventId::RanwidTheElder,
     python_name: "RanwidTheElder",
     is_allowed: ranwid_the_elder_allowed,
-    generate_options: super::default_option_info_from_spec,
+    generate_options: ranwid_generate_options,
     options: RANWID_OPTIONS,
 };
 

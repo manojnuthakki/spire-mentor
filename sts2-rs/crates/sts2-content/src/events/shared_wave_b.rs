@@ -2472,6 +2472,16 @@ fn wood_carvings_bird(state: &mut RunState) -> EventOutcome {
     wood_carvings_transform(state, CardId::Peck, "Transformed a Basic card into Peck.")
 }
 
+/// C# `Slither.CanEnchant`: the base `EnchantmentModel.CanEnchant` (not
+/// Status/Curse, no existing enchantment, playable) and not X-cost; the
+/// filter `RunManager::enchant_eligible_deck_indices` applies for Slither.
+fn slither_can_enchant(c: &sts2_core::cards::Card) -> bool {
+    use sts2_core::cards::CardType;
+    !matches!(c.card_type, CardType::Status | CardType::Curse)
+        && c.enchantments.is_empty()
+        && c.cost >= 0
+}
+
 fn wood_carvings_snake(state: &mut RunState) -> EventOutcome {
     // C# `Snake` (`WoodCarvings.cs:67`): `CardSelectCmd.FromDeckForEnchantment(
     // Slither, 1)` then `CardCmd.Enchant<Slither>(card, 1m)`.
@@ -2488,12 +2498,11 @@ fn wood_carvings_snake(state: &mut RunState) -> EventOutcome {
     } else {
         // Auto mode: enchant the first eligible card (mirror of
         // `RunManager::enchant_eligible_deck_indices`'s filter).
-        use sts2_core::cards::CardType;
-        if let Some(card) = state.master_deck.iter_mut().find(|c| {
-            !matches!(c.card_type, CardType::Status | CardType::Curse)
-                && c.enchantments.is_empty()
-                && c.cost >= 0
-        }) {
+        if let Some(card) = state
+            .master_deck
+            .iter_mut()
+            .find(|c| slither_can_enchant(c))
+        {
             card.enchantments.push((EnchantmentId::Slither, 1));
         }
     }
@@ -2541,11 +2550,24 @@ const WOOD_CARVINGS_OPTIONS: &[EventOptionSpec] = &[
     },
 ];
 
+/// C# `WoodCarvings.GenerateInitialOptions`: with no deck card Slither can
+/// take, Snake is the handler-less `SNAKE_LOCKED`. sts2-agent fork.
+fn wood_carvings_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let mut opts = default_option_info_from_spec(state, spec);
+    super::lock_option_if(
+        &mut opts,
+        "snake",
+        !state.master_deck.iter().any(slither_can_enchant),
+        "WOOD_CARVINGS.pages.INITIAL.options.SNAKE_LOCKED",
+    );
+    opts
+}
+
 pub const WOOD_CARVINGS: EventSpec = EventSpec {
     id: EventId::WoodCarvings,
     python_name: "WoodCarvings",
     is_allowed: deck_has_basic_card,
-    generate_options: default_option_info_from_spec,
+    generate_options: wood_carvings_options,
     options: WOOD_CARVINGS_OPTIONS,
 };
 
@@ -2657,11 +2679,32 @@ const ZEN_WEAVER_OPTIONS: &[EventOptionSpec] = &[
     },
 ];
 
+/// C# `ZenWeaver.GenerateInitialOptions`: Emotional Awareness under its cost
+/// (125) and Arachnid Acupuncture under its cost (250) are each the
+/// handler-less `CreateLockedOption()`, text key
+/// `ZEN_WEAVER.pages.INITIAL.options.LOCKED`. sts2-agent fork.
+fn zen_weaver_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let mut opts = default_option_info_from_spec(state, spec);
+    super::lock_option_if(
+        &mut opts,
+        "emotional",
+        state.gold < ZEN_WEAVER_EMOTIONAL_COST,
+        "ZEN_WEAVER.pages.INITIAL.options.LOCKED",
+    );
+    super::lock_option_if(
+        &mut opts,
+        "acupuncture",
+        state.gold < ZEN_WEAVER_ACUPUNCTURE_COST,
+        "ZEN_WEAVER.pages.INITIAL.options.LOCKED",
+    );
+    opts
+}
+
 pub const ZEN_WEAVER: EventSpec = EventSpec {
     id: EventId::ZenWeaver,
     python_name: "ZenWeaver",
     is_allowed: zen_weaver_allowed,
-    generate_options: default_option_info_from_spec,
+    generate_options: zen_weaver_options,
     options: ZEN_WEAVER_OPTIONS,
 };
 
