@@ -868,7 +868,11 @@ pub fn dispatch_modify_rest_site_heal_rewards(
     if is_empty_modify_rest_site_heal_rewards() {
         return EffectResult::NotImplemented;
     }
-    let listeners = listeners_modify_rest_site_heal_rewards();
+    // C# `Hook.ModifyRestSiteHealRewards` walks the player's relics in held
+    // order; the set rolls its rewards in that list order. sts2-agent fork
+    // (`queued-producers`).
+    let mut listeners = listeners_modify_rest_site_heal_rewards();
+    sort_by_held_order(run_state, &mut listeners);
     let mut any_resolved = false;
     for (_id, f) in listeners {
         if f(run_state, rewards) == EffectResult::Resolved {
@@ -1239,6 +1243,19 @@ run_hook_channel!(
     fn(&mut RunState, rewards: &mut Vec<Reward>, room_type: RoomType) -> EffectResult
 );
 
+/// Order a channel's listeners as C# `RunState.IterateHookListeners` meets
+/// their relics: in the order the player holds them; a listener for a relic
+/// not held (a test's) after, in id order (the sort is stable). sts2-agent fork.
+fn sort_by_held_order<F>(run_state: &RunState, listeners: &mut [(RelicId, F)]) {
+    listeners.sort_by_key(|(id, _)| {
+        run_state
+            .relics
+            .iter()
+            .position(|r| r == id)
+            .unwrap_or(usize::MAX)
+    });
+}
+
 /// Dispatch the run-side `modify_rewards` channel. Listeners may
 /// mutate `rewards` in place. Same accumulation convention as
 /// [`dispatch_after_obtained`].
@@ -1255,13 +1272,7 @@ pub fn dispatch_modify_rewards(
     // (and its reward rolls) first. A listener for a relic not held (a
     // test's) runs after, in id order. sts2-agent fork (`hook-read-order`).
     let mut listeners = listeners_modify_rewards();
-    listeners.sort_by_key(|(id, _)| {
-        run_state
-            .relics
-            .iter()
-            .position(|r| r == id)
-            .unwrap_or(usize::MAX)
-    });
+    sort_by_held_order(run_state, &mut listeners);
     let mut any_resolved = false;
     for (_id, f) in listeners {
         if f(run_state, rewards, room_type) == EffectResult::Resolved {

@@ -1761,7 +1761,6 @@ const FAKE_VENERABLE_TEA_SET_ENERGY: i32 = 1;
 /// (C# `Monsters/Byrdpip.cs` `MinInitialHp == MaxInitialHp == 9999`).
 /// Bead `sts2-rs-4x616`.
 const BYRDPIP_PET_HP: i32 = 9999;
-const DREAM_CATCHER_PROCS: i32 = 3;
 const FRESNEL_LENS_NIMBLE: i32 = 2;
 const WONGOS_COMBATS_NEEDED: i32 = 5;
 const WONGOS_RELICS: usize = 3;
@@ -1776,25 +1775,19 @@ const WONGOS_RELICS: usize = 3;
 const WONGOS_GAVE_SENTINEL: i32 = -1;
 
 /// `DreamCatcher::modify_rest_site_heal_rewards` — push one
-/// `CardReward` per call until `_procs_left` hits zero
-/// (`shop_event.py:1207-1209`, `PROCS=3`). The `_procs_left` counter
-/// lives on `RunState.relic_counters[DreamCatcher]`, initialised
-/// lazily to [`DREAM_CATCHER_PROCS`] on first invocation.
-/// Ownership-gated so the dispatch is a no-op when the player doesn't
+/// `CardReward` per heal (the Python port's `PROCS=3` limit,
+/// `shop_event.py:1207-1209`, was dropped). Ownership-gated so the dispatch is a no-op when the player doesn't
 /// carry the relic. Bead `sts2-rs-9wx7`.
+///
+/// sts2-agent fork: C# `DreamCatcher.TryModifyRestSiteHealRewards` adds
+/// `CardReward(CardCreationOptions.ForRoom(player, RoomType.Monster), 3)` on
+/// every heal, with no limit (the Python port's three procs are not the
+/// game's); its options roll on the combat roller (`queued-producers`).
 fn listener_dream_catcher(rs: &mut RunState, rewards: &mut Vec<Reward>) -> EffectResult {
     if !run_owns(rs, RelicId::DreamCatcher) {
         return EffectResult::NotImplemented;
     }
-    let entry = rs
-        .relic_counters
-        .entry(RelicId::DreamCatcher)
-        .or_insert(DREAM_CATCHER_PROCS);
-    if *entry <= 0 {
-        return EffectResult::NotImplemented;
-    }
-    *entry -= 1;
-    rewards.push(Reward::Card(CardReward::empty()));
+    rewards.push(Reward::Card(CardReward::for_room(RoomType::Monster)));
     EffectResult::Resolved
 }
 
@@ -3896,23 +3889,21 @@ mod tests {
 
     // --- Wave 6 (sts2-rs-9wx7) reward-flow retrofits -----------------------
 
-    /// `DreamCatcher` pushes one `CardReward` per `_procs_left`
-    /// (initial 3), then becomes a no-op.
+    /// `DreamCatcher` pushes one `CardReward(ForRoom(Monster))` on every
+    /// heal (C# `DreamCatcher.TryModifyRestSiteHealRewards`: no limit).
     #[test]
-    fn listener_dream_catcher_pushes_three_card_rewards() {
+    fn listener_dream_catcher_pushes_a_card_reward_on_every_heal() {
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
         rs.relics.push(RelicId::DreamCatcher);
-        for expected_len in 1..=3 {
+        for _ in 0..4 {
             let rewards = rs.offer_rest_site_rewards();
-            assert_eq!(rewards.len(), expected_len.min(1));
-            assert!(matches!(rewards[0], Reward::Card(_)));
+            assert_eq!(rewards.len(), 1);
+            assert!(matches!(
+                &rewards[0],
+                Reward::Card(c) if c.for_room == Some(RoomType::Monster)
+            ));
         }
-        // Fourth call: counter exhausted, listener is a no-op.
-        let rewards = rs.offer_rest_site_rewards();
-        assert!(rewards.is_empty());
-        // Counter latched at 0.
-        assert_eq!(rs.relic_counters[&RelicId::DreamCatcher], 0);
     }
 
     /// `DreamCatcher` is a no-op when the player doesn't carry it.

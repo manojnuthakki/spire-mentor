@@ -3117,7 +3117,33 @@ impl RunState {
     /// for the run loop to drain (e.g. Dream Catcher's `CardReward`). Bead
     /// `sts2-rs-RP23`.
     fn grant_rest_site_rewards(&mut self) {
-        for reward in self.offer_rest_site_rewards() {
+        let rewards = self.offer_rest_site_rewards();
+        // Under the rewards screen (sts2-agent fork, `queued-producers`): one
+        // custom set (C# `RewardsCmd.OfferCustom`), rolled when it opens; an
+        // empty list offers nothing. Dream Catcher's card reward is
+        // `ForRoom(Monster)`, Tiny Mailbox's potions `PotionReward(player)`.
+        if self.interactive_rewards {
+            let offered: Vec<OfferedReward> = rewards
+                .into_iter()
+                .filter_map(|reward| match reward {
+                    Reward::Potion(p) => Some(OfferedReward::Potion(p.potion_kind)),
+                    Reward::Card(c) => Some(match c.for_room {
+                        Some(room) => OfferedReward::RoomTypeCard(room),
+                        None => OfferedReward::Card {
+                            options: (!c.options.is_empty()).then_some(c.options),
+                            upgraded: Vec::new(),
+                            no_upgrade_roll: c.no_upgrade_roll,
+                        },
+                    }),
+                    Reward::Relic(rr) => Some(OfferedReward::Relic(rr)),
+                    Reward::Gold { amount } => Some(OfferedReward::Gold(amount)),
+                    _ => None,
+                })
+                .collect();
+            self.offer_custom_rewards(offered, true);
+            return;
+        }
+        for reward in rewards {
             match reward {
                 Reward::Potion(p) => {
                     let _ = self.procure_potion(p);

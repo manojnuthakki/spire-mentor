@@ -3755,7 +3755,11 @@ impl RunManager {
             enum Resolve {
                 Potion(Option<crate::potions::PotionKind>),
                 RemoveCard(u32),
-                SurfaceCard(Vec<crate::cards::CardId>, bool),
+                SurfaceCard(
+                    Vec<crate::cards::CardId>,
+                    bool,
+                    Option<crate::runstate::RoomType>,
+                ),
             }
             let queued = match &self.run_state.pending_rewards[i] {
                 Reward::Potion(reward) => Some(Resolve::Potion(reward.potion_kind)),
@@ -3768,6 +3772,7 @@ impl RunManager {
                     Some(Resolve::SurfaceCard(
                         reward.options.clone(),
                         !reward.no_upgrade_roll,
+                        reward.for_room,
                     ))
                 }
                 Reward::Card(_) => break, // later drain rolls this one
@@ -3798,8 +3803,17 @@ impl RunManager {
                     // `CardRemovalReward.OnSelect` → `DoLocalCardRemoval` analog.
                     let _ = self.run_state.remove_cards_from_deck(count as usize);
                 }
-                Resolve::SurfaceCard(pre_resolved, roll_upgrade) => {
-                    if pre_resolved.is_empty() {
+                Resolve::SurfaceCard(pre_resolved, roll_upgrade, for_room) => {
+                    let room_roller = self.callbacks.generate_room_type_card_reward_options;
+                    if let (true, Some(room), Some(roller)) =
+                        (pre_resolved.is_empty(), for_room, room_roller)
+                    {
+                        // C# `CardCreationOptions.ForRoom(room)` (Dream
+                        // Catcher's): the combat roller, with its pity.
+                        self.card_reward_options = roller(&mut self.run_state, room);
+                        self.card_reward_upgraded =
+                            std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                    } else if pre_resolved.is_empty() {
                         // Non-combat (`CardCreationSource.Other`) reward: roll
                         // BASE odds, NOT the pity-updating combat roller. These
                         // sentinels (Lost Coffer, Orrery, event card grants)
