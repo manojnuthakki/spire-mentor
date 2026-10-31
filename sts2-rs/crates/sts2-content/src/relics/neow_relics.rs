@@ -465,7 +465,9 @@ fn listener_hefty_tablet(rs: &mut RunState) -> EffectResult {
     if options.is_empty() {
         // No Rare cards to offer (unreachable for shipped pools) — the
         // screen would show nothing; C# still always adds the Injury.
-        rs.master_deck.extend(post_add);
+        for card in post_add {
+            rs.add_card_to_deck(card, sts2_core::relic_effects::AddSource::RelicGain);
+        }
     } else {
         rs.pending_card_selects
             .push(sts2_core::runstate::PendingCardSelect::with_post_add(

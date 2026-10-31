@@ -2776,18 +2776,18 @@ fn listener_kaleidoscope(rs: &mut RunState) -> EffectResult {
     if rs.interactive_rewards {
         let set = rewards
             .into_iter()
-            .map(|options| OfferedReward::Card {
+            .map(|(options, upgraded)| OfferedReward::Card {
                 options: Some(options),
-                upgraded: Vec::new(),
+                upgraded,
                 no_upgrade_roll: false,
             })
             .collect();
         rs.offer_custom_rewards(set, true);
         return EffectResult::Resolved;
     }
-    for reward in rewards {
+    for (options, upgraded) in rewards {
         rs.pending_rewards
-            .push(Reward::Card(CardReward::from_options(reward)));
+            .push(Reward::Card(CardReward::from_resolved(options, upgraded)));
     }
     EffectResult::Resolved
 }

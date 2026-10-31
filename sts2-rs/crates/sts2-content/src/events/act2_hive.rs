@@ -869,7 +869,7 @@ fn morphic_grove_group(state: &mut RunState) -> EventOutcome {
             ) {
                 if let Some(card) = crate::cards::spec_index::card_pod_from_id(new_id, false) {
                     state.master_deck.remove(0);
-                    state.master_deck.push(card);
+                    state.add_transformed_card_to_deck(card);
                     done += 1;
                 }
             } else {

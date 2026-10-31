@@ -2072,7 +2072,7 @@ fn trial_nondescript_innocent(state: &mut RunState) -> EventOutcome {
             ) {
                 if let Some(card) = card_pod_from_id(new_id, false) {
                     state.master_deck.remove(0);
-                    state.master_deck.push(card);
+                    state.add_transformed_card_to_deck(card);
                 }
             }
         }
@@ -2462,7 +2462,7 @@ fn wood_carvings_transform(
         });
         if let Some(idx) = idx {
             state.master_deck.remove(idx);
-            state.master_deck.push(target);
+            state.add_transformed_card_to_deck(target);
         }
     }
     EventOutcome::finished(finished.to_owned())

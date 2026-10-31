@@ -1232,7 +1232,10 @@ const fn character_pool_entry(character: CharacterId) -> &'static str {
 /// `sts2-rs-utgn4` (v0.107.1 Kaleidoscope; closes the PARITY13/PARITY117
 /// Neow `card_reward` whole-run residual).
 #[must_use]
-pub fn roll_kaleidoscope_card_rewards(rs: &mut RunState, owner: CharacterId) -> Vec<Vec<CardId>> {
+pub fn roll_kaleidoscope_card_rewards(
+    rs: &mut RunState,
+    owner: CharacterId,
+) -> Vec<(Vec<CardId>, Vec<bool>)> {
     /// `Kaleidoscope.DynamicVars.Cards` — `CanonicalVars => CardsVar(2)`.
     const CARDS: usize = 2;
     /// `StableShuffle(...).Take(3)` — pools (and thus cards) per reward.
@@ -1248,7 +1251,7 @@ pub fn roll_kaleidoscope_card_rewards(rs: &mut RunState, owner: CharacterId) -> 
         CharacterId::Necrobinder,
         CharacterId::Defect,
     ];
-    let mut rewards: Vec<Vec<CardId>> = Vec::with_capacity(CARDS);
+    let mut rewards: Vec<(Vec<CardId>, Vec<bool>)> = Vec::with_capacity(CARDS);
     for _ in 0..CARDS {
         // Fresh non-owner pool list each reward (C# rebuilds + reshuffles per
         // iteration of its `for i in 0..Cards` loop).
@@ -1263,12 +1266,32 @@ pub fn roll_kaleidoscope_card_rewards(rs: &mut RunState, owner: CharacterId) -> 
                 character_pool_entry(a).cmp(character_pool_entry(b))
             });
         pools.truncate(POOLS_PER_REWARD);
-        // One `CardCreationSource.Other` card per pool on the Rewards stream.
-        let mut reward_cards: Vec<CardId> = Vec::with_capacity(POOLS_PER_REWARD);
+        // One `CardCreationSource.Other` card per pool on the Rewards stream,
+        // its upgrade roll kept, then that `CreateForReward`'s own late hooks
+        // (`Hook.TryModifyCardRewardOptions` over the one card: the eggs).
+        // The `CardReward` built from the three cards runs the hooks once
+        // more when populated (`_cardsWereManuallySet`). sts2-agent fork
+        // (deck-add-hooks-transforms: Kaleidoscope's skipped late hooks).
+        let mut reward_cards: Vec<sts2_core::cards::Card> = Vec::with_capacity(POOLS_PER_REWARD);
         for ch in pools {
-            reward_cards.extend(roll_reward_options_base_odds(rs, 1, true, &[ch], false));
+            let pool = RewardPool::Pools {
+                character_ids: vec![ch],
+                include_colorless: false,
+            };
+            for (id, upgraded) in roll_reward_cards_base_odds(rs, 1, true, &pool) {
+                let mut one: Vec<sts2_core::cards::Card> =
+                    card_pod_from_id(id, upgraded).into_iter().collect();
+                let _ =
+                    sts2_core::run_effects::dispatch_modify_card_reward_options_late(rs, &mut one);
+                reward_cards.extend(one);
+            }
         }
-        rewards.push(reward_cards);
+        let _ =
+            sts2_core::run_effects::dispatch_modify_card_reward_options_late(rs, &mut reward_cards);
+        rewards.push((
+            reward_cards.iter().map(|c| c.card_id).collect(),
+            reward_cards.iter().map(|c| c.upgraded).collect(),
+        ));
     }
     rewards
 }

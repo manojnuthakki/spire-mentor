@@ -858,7 +858,11 @@ impl EventEffect {
                 rs.relics.push(*id);
                 rs.last_obtained_relic = Some(*id);
             }
-            Self::AddCardToDeck(card) => rs.master_deck.push(*card),
+            // C# `CardPileCmd.Add(card, Deck)`: the deck-add hooks (sts2-agent
+            // fork, deck-add-hooks-transforms).
+            Self::AddCardToDeck(card) => {
+                rs.add_card_to_deck(*card, crate::relic_effects::AddSource::EventGain);
+            }
         }
     }
 }

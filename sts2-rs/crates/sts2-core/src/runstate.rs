@@ -4555,6 +4555,16 @@ impl RunState {
         let _ = crate::run_effects::dispatch_on_card_added_to_deck(self, &ctx);
     }
 
+    /// Add one replacement of C# `CardCmd.Transform` to the deck, its
+    /// originals already removed: `Hook.ModifyCardBeingAddedToDeck`,
+    /// `AddInternal` at the deck's end, then `Hook.AfterCardChangedPiles`
+    /// ([`Self::add_card_to_deck`]). Callers with several replacements add
+    /// them in ascending order of their originals' deck indices (C#
+    /// `PileIndexSort`). sts2-agent fork (deck-add-hooks-transforms).
+    pub fn add_transformed_card_to_deck(&mut self, card: Card) {
+        self.add_card_to_deck(card, crate::relic_effects::AddSource::Other);
+    }
+
     /// Fire the `modify_merchant_card_creation_results` channel for
     /// `card`. Listeners may enchant or otherwise mutate the merchant
     /// inventory item before it's offered. `is_colorless` mirrors the
@@ -4810,7 +4820,9 @@ impl RunState {
         let len = self.master_deck.len() as i32;
         let idx = self.rng.rewards.next_int_exclusive(0, len) as usize;
         let clone = self.master_deck[idx];
-        self.master_deck.push(clone);
+        // C# `CardPileCmd.Add(clone, Deck)`: the deck-add hooks
+        // (sts2-agent fork, deck-add-hooks-transforms).
+        self.add_card_to_deck(clone, crate::relic_effects::AddSource::RelicGain);
         true
     }
 
@@ -5254,8 +5266,12 @@ impl RunState {
         // Append the resolved replacements at the deck tail. Python
         // re-emits the replacements at the deck tail too; pile order
         // is non-load-bearing for parity (combat shuffle randomizes).
+        // C# `CardCmd.Transform` runs each deck replacement through
+        // `Hook.ModifyCardBeingAddedToDeck`, appends it, then
+        // `Hook.AfterCardChangedPiles` (sts2-agent fork,
+        // deck-add-hooks-transforms).
         for card in replacements.into_iter().take(take) {
-            self.master_deck.push(card);
+            self.add_transformed_card_to_deck(card);
         }
         take
     }
@@ -5350,9 +5366,11 @@ impl RunState {
         for &(deck_idx, _) in pairs.iter().rev() {
             self.master_deck.remove(deck_idx);
         }
-        // Append replacements in ascending original-index order.
+        // Append replacements in ascending original-index order, each
+        // through the deck-add hooks as C# `CardCmd.Transform` runs them
+        // (sts2-agent fork, deck-add-hooks-transforms).
         for (_, replacement) in pairs {
-            self.master_deck.push(replacement);
+            self.add_transformed_card_to_deck(replacement);
         }
         transformed
     }

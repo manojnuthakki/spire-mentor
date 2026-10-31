@@ -2201,7 +2201,9 @@ fn listener_paels_tooth_after_combat_end(rs: &mut RunState) -> EffectResult {
     let idx = rs.rng.rewards.next_int_exclusive(0, len as i32) as usize;
     let mut card = rs.paels_tooth_stored.remove(idx);
     let _ = card.upgrade();
-    rs.master_deck.push(card);
+    // C# `CardPileCmd.Add(card, Deck)` after the upgrade: the deck-add hooks
+    // (sts2-agent fork, deck-add-hooks-transforms).
+    rs.add_card_to_deck(card, sts2_core::relic_effects::AddSource::RelicGain);
     EffectResult::Resolved
 }
 

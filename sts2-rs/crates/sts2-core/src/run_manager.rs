@@ -3661,7 +3661,12 @@ impl RunManager {
         self.card_offer_can_skip = true;
         if std::mem::take(&mut self.card_offer_choose_screen) {
             let post = std::mem::take(&mut self.pending_choose_screen_post_add);
-            self.run_state.master_deck.extend(post);
+            // Each a C# `CardPileCmd.Add(.., Deck)`: the deck-add hooks, as on
+            // the pick path (sts2-agent fork, deck-add-hooks-transforms).
+            for card in post {
+                self.run_state
+                    .add_card_to_deck(card, crate::relic_effects::AddSource::Reward);
+            }
         }
         self.advance_after_card_reward();
         ActionResult::Advanced
@@ -4753,13 +4758,19 @@ impl RunManager {
         let curses = std::mem::take(&mut self.run_state.pending_neows_bones_curses);
         if let Some(roll) = self.callbacks.roll_neows_bones_curse {
             for _ in 0..curses {
+                // C# `CardPileCmd.AddCurseToDeck`: the deck-add hooks
+                // (Darkstone Periapt; sts2-agent fork, deck-add-hooks-transforms).
                 if let Some(card) = roll(&mut self.run_state) {
-                    self.run_state.master_deck.push(card);
+                    self.run_state
+                        .add_card_to_deck(card, crate::relic_effects::AddSource::RelicGain);
                 }
             }
         }
         let cards = std::mem::take(&mut self.run_state.pending_post_pick_cards);
-        self.run_state.master_deck.extend(cards);
+        for card in cards {
+            self.run_state
+                .add_card_to_deck(card, crate::relic_effects::AddSource::RelicGain);
+        }
     }
 
     /// Master-deck positions eligible for the FRONT pending interactive
@@ -4888,15 +4899,17 @@ impl RunManager {
             return ActionResult::InvalidForPhase;
         };
         let entry = self.run_state.pending_deck_transforms.remove(0);
+        // C# `CardCmd.Transform`: the original removed, then the replacement
+        // through the deck-add hooks (sts2-agent fork, deck-add-hooks-transforms).
         if let Some(replacement) = entry.fixed_target {
             self.run_state.master_deck.remove(deck_idx);
-            self.run_state.master_deck.push(replacement);
+            self.run_state.add_transformed_card_to_deck(replacement);
         } else if let Some(roll) = self.callbacks.roll_transform_replacement {
             let original = self.run_state.master_deck[deck_idx].card_id;
             if let Some(replacement) = roll(&mut self.run_state, original, entry.event_stream_roll)
             {
                 self.run_state.master_deck.remove(deck_idx);
-                self.run_state.master_deck.push(replacement);
+                self.run_state.add_transformed_card_to_deck(replacement);
             }
         }
         // C# applies the event's follow-up damage only after the picked
@@ -5007,8 +5020,10 @@ impl RunManager {
         let card = grant.options.remove(idx);
         grant.pick = grant.pick.saturating_sub(1);
         let done = grant.pick == 0 || grant.options.is_empty();
-        // C# `CardPileCmd.Add(card, PileType.Deck)` — default index -1 = tail.
-        self.run_state.master_deck.push(card);
+        // C# `CardPileCmd.Add(card, PileType.Deck)` — default index -1 = tail,
+        // with the deck-add hooks (sts2-agent fork, deck-add-hooks-transforms).
+        self.run_state
+            .add_card_to_deck(card, crate::relic_effects::AddSource::EventGain);
         if done {
             self.run_state.pending_card_grants.remove(0);
         }
