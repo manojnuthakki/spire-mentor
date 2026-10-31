@@ -1121,6 +1121,74 @@ pub fn roll_glass_eye_card_rewards(rs: &mut RunState) -> Vec<(Vec<CardId>, Vec<b
     out
 }
 
+/// `ColorfulPhilosophers::OfferRewards` (`ColorfulPhilosophers.cs`): three
+/// card rewards of 3 from the chosen character's pool, one per rarity of
+/// (Common, Uncommon, Rare), each `CardFactory.CreateForReward(owner, 3, new
+/// CardCreationOptions([pool], Other, Uniform, c => c.Rarity == r)
+/// .WithFlags(NoRarityModification | NoCardPoolModifications))`.
+/// `NoCardPoolModifications`: Dingy Rug and Prismatic Gem leave the pool as
+/// it is. `Uniform` rolls no rarity: each card is a `NextItem` on
+/// `PlayerRng.Rewards` over the pool's cards of that rarity less the
+/// reward's earlier picks, then (no `NoUpgradeRoll`) its upgrade `NextFloat`
+/// (act-scaled; never for a Rare). Then `Hook.TryModifyCardRewardOptions`
+/// (the late channel: the eggs). Returns each reward's ids and upgrade flags,
+/// in C# order (sts2-agent fork, pool-placeholders).
+#[must_use]
+pub fn roll_colorful_philosophers_card_rewards(
+    rs: &mut RunState,
+    pool_character: CharacterId,
+) -> Vec<(Vec<CardId>, Vec<bool>)> {
+    use sts2_core::card_rewards::{
+        combat_card_upgrade_base_chance, roll_for_upgrade_with_dotnet, RewardRarity,
+    };
+    const CARDS: usize = 3;
+    let act_index = rs.act_index.saturating_sub(1);
+    let ascension_level = rs.card_rarity_odds.ascension_level;
+    let pool = RewardPool::Pools {
+        character_ids: vec![pool_character],
+        include_colorless: false,
+    };
+    let mut out = Vec::with_capacity(3);
+    for rarity in [
+        RewardRarity::Common,
+        RewardRarity::Uncommon,
+        RewardRarity::Rare,
+    ] {
+        let mut chosen: Vec<CardId> = Vec::with_capacity(CARDS);
+        let mut upgraded: Vec<bool> = Vec::with_capacity(CARDS);
+        for _ in 0..CARDS {
+            let mut candidates = pool.candidates(reward_rarity_to_card_rarity(rarity));
+            candidates.retain(|id| !chosen.contains(id));
+            if candidates.is_empty() {
+                break;
+            }
+            let idx = rs
+                .rng
+                .rewards
+                .next_int_exclusive(0, candidates.len() as i32) as usize;
+            chosen.push(candidates[idx]);
+            upgraded.push(roll_for_upgrade_with_dotnet(
+                &mut rs.rng.rewards,
+                rarity,
+                act_index,
+                ascension_level,
+                combat_card_upgrade_base_chance(),
+            ));
+        }
+        let mut cards: Vec<sts2_core::cards::Card> = chosen
+            .iter()
+            .zip(&upgraded)
+            .filter_map(|(&id, &up)| card_pod_from_id(id, up))
+            .collect();
+        let _ = sts2_core::run_effects::dispatch_modify_card_reward_options_late(rs, &mut cards);
+        out.push((
+            cards.iter().map(|c| c.card_id).collect(),
+            cards.iter().map(|c| c.upgraded).collect(),
+        ));
+    }
+    out
+}
+
 /// The ordinal sort key C# uses for a character's `CardPoolModel` inside
 /// `StableShuffle` — the model `Id.Entry`, which is the slugified pool class
 /// name `<NAME>_CARD_POOL` (`Ironclad.CardPool => IroncladCardPool`,
@@ -2916,6 +2984,46 @@ mod tests {
             }
         }
         assert!(colorless > 0, "Dingy Rug's colorless cards are offered");
+    }
+
+    /// pool-placeholders (Colorful Philosophers): three rewards of 3 from the
+    /// chosen pool alone (`NoCardPoolModifications`: Dingy Rug adds nothing),
+    /// Common, Uncommon, Rare, each card a `NextItem` over that rarity less the
+    /// reward's earlier picks, then its upgrade `NextFloat` (act 2: a third of
+    /// the time a non-Rare upgrades; a Rare never).
+    #[test]
+    fn colorful_philosophers_rewards_draw_the_chosen_pool_with_upgrade_rolls() {
+        use sts2_core::card_rewards::{roll_for_upgrade_with_dotnet, RewardRarity};
+        let rarities = [
+            (CardRarity::Common, RewardRarity::Common),
+            (CardRarity::Uncommon, RewardRarity::Uncommon),
+            (CardRarity::Rare, RewardRarity::Rare),
+        ];
+        let mut upgrades = 0;
+        for seed in 0..12 {
+            for pool_char in [CharacterId::Silent, CharacterId::Defect] {
+                let mut rs = dingy_rug_state(seed);
+                rs.act_index = 2;
+                let mut rng = rs.rng.rewards.clone();
+                let rewards = roll_colorful_philosophers_card_rewards(&mut rs, pool_char);
+                assert_eq!(rewards.len(), 3);
+                for ((ids, up), (rarity, rr)) in rewards.iter().zip(rarities) {
+                    let mut want: Vec<CardId> = Vec::new();
+                    let mut want_up: Vec<bool> = Vec::new();
+                    for _ in 0..3 {
+                        let mut c = eligible_ids_for_rarity(&[pool_char], false, rarity);
+                        c.retain(|id| !want.contains(id));
+                        want.push(c[rng.next_int_exclusive(0, c.len() as i32) as usize]);
+                        want_up.push(roll_for_upgrade_with_dotnet(&mut rng, rr, 1, 0, 0.0));
+                    }
+                    assert_eq!(ids, &want, "seed {seed} {pool_char:?} {rarity:?}");
+                    assert_eq!(up, &want_up, "seed {seed} {pool_char:?} {rarity:?}");
+                    upgrades += up.iter().filter(|u| **u).count();
+                }
+                assert_eq!(rs.rng.rewards.counter(), rng.counter());
+            }
+        }
+        assert!(upgrades > 0, "act 2's upgrade roll upgrades some");
     }
 
     #[test]

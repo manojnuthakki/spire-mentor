@@ -820,67 +820,150 @@ pub const BYRDONIS_NEST: EventSpec = EventSpec {
 
 // ── ColorfulPhilosophers ─────────────────────────────────────────────
 
-fn philosopher_pool(state: &mut RunState) -> EventOutcome {
-    // Python: 3 CardReward instances (one per rarity) keyed to the
-    // chosen philosopher's character pool. Deferred — character_id /
-    // multi-rarity CardReward variants not landed yet. Queue 3
-    // placeholders.
+/// `ColorfulPhilosophers`' `Id.Entry`: names its own event stream.
+const COLORFUL_PHILOSOPHERS_STREAM: &str = "COLORFUL_PHILOSOPHERS";
+
+/// C# `CardPoolColorOrder` (`ColorfulPhilosophers.cs`): the character pools
+/// in the event's order, each with its option (keyed by the pool's
+/// `EnergyColorName`).
+const PHILOSOPHER_POOLS: [(sts2_core::potions::CharacterId, &str); 5] = [
+    (sts2_core::potions::CharacterId::Necrobinder, "necrobinder"),
+    (sts2_core::potions::CharacterId::Ironclad, "ironclad"),
+    (sts2_core::potions::CharacterId::Regent, "regent"),
+    (sts2_core::potions::CharacterId::Silent, "silent"),
+    (sts2_core::potions::CharacterId::Defect, "defect"),
+];
+
+/// C# `GenerateInitialOptions`: the pools of `CardPoolColorOrder` other than
+/// the owner's (every character pool is unlocked here, as Kaleidoscope's
+/// roll assumes), then `list.RemoveAt(Rng.NextInt(list.Count))` on the
+/// event's `Rng` until three are left. The event's `Rng` is read nowhere
+/// else, so a fresh stream at cursor 0 gives the same draws each time the
+/// options are built. sts2-agent fork (pool-placeholders).
+fn philosopher_option_ids(state: &RunState) -> Vec<&'static str> {
+    let mut ids: Vec<&'static str> = PHILOSOPHER_POOLS
+        .iter()
+        .filter(|(c, _)| *c != state.character_id)
+        .map(|(_, id)| *id)
+        .collect();
+    let mut rng = event_rng(state, COLORFUL_PHILOSOPHERS_STREAM);
+    while ids.len() > 3 {
+        let i = rng.next_int_exclusive(0, ids.len() as i32) as usize;
+        ids.remove(i);
+    }
+    ids
+}
+
+fn philosopher_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let ids = philosopher_option_ids(state);
+    default_option_info_from_spec(state, spec)
+        .into_iter()
+        .filter(|o| ids.contains(&o.option_id))
+        .collect()
+}
+
+/// C# `OfferRewards(pool)`: `RewardsCmd.OfferCustom` with three card rewards
+/// from the chosen pool, one per rarity
+/// ([`roll_colorful_philosophers_card_rewards`](crate::cards::spec_index::roll_colorful_philosophers_card_rewards)).
+fn philosopher_pool(
+    state: &mut RunState,
+    character: sts2_core::potions::CharacterId,
+) -> EventOutcome {
+    let rewards =
+        crate::cards::spec_index::roll_colorful_philosophers_card_rewards(state, character);
     if state.interactive_rewards {
-        let card = sts2_core::OfferedReward::Card {
-            options: None,
-            upgraded: Vec::new(),
-            no_upgrade_roll: false,
-        };
-        state.offer_custom_rewards(vec![card; 3], true);
-        return EventOutcome::finished("Received card rewards from philosopher pool (deferred).");
+        let set = rewards
+            .into_iter()
+            .map(|(options, upgraded)| sts2_core::OfferedReward::Card {
+                options: Some(options),
+                upgraded,
+                no_upgrade_roll: false,
+            })
+            .collect();
+        state.offer_custom_rewards(set, true);
+    } else {
+        for (options, upgraded) in rewards {
+            state
+                .pending_rewards
+                .push(Reward::Card(CardReward::from_resolved(options, upgraded)));
+        }
     }
-    for _ in 0..3 {
-        state
-            .pending_rewards
-            .push(Reward::Card(CardReward::empty()));
+    EventOutcome::finished("Received card rewards from a philosopher's pool.")
+}
+
+fn philosopher_necrobinder(state: &mut RunState) -> EventOutcome {
+    philosopher_pool(state, sts2_core::potions::CharacterId::Necrobinder)
+}
+
+fn philosopher_ironclad(state: &mut RunState) -> EventOutcome {
+    philosopher_pool(state, sts2_core::potions::CharacterId::Ironclad)
+}
+
+fn philosopher_regent(state: &mut RunState) -> EventOutcome {
+    philosopher_pool(state, sts2_core::potions::CharacterId::Regent)
+}
+
+fn philosopher_silent(state: &mut RunState) -> EventOutcome {
+    philosopher_pool(state, sts2_core::potions::CharacterId::Silent)
+}
+
+fn philosopher_defect(state: &mut RunState) -> EventOutcome {
+    philosopher_pool(state, sts2_core::potions::CharacterId::Defect)
+}
+
+const fn philosopher_option(
+    option_id: &'static str,
+    loc_key: &'static str,
+    handler: fn(&mut RunState) -> EventOutcome,
+) -> EventOptionSpec {
+    EventOptionSpec {
+        option_id,
+        loc_key,
+        default_label: "Philosopher",
+        default_description: "Card rewards from this character's pool",
+        default_vars: &[],
+        vars_fn: None,
+        title_vars_fn: None,
+        handler,
     }
-    EventOutcome::finished("Received card rewards from philosopher pool (deferred).")
 }
 
 const PHILOSOPHER_OPTIONS: &[EventOptionSpec] = &[
-    EventOptionSpec {
-        option_id: "pool_1",
-        loc_key: "",
-        default_label: "Philosopher 1",
-        default_description: "Card rewards from pool 1",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: philosopher_pool,
-    },
-    EventOptionSpec {
-        option_id: "pool_2",
-        loc_key: "",
-        default_label: "Philosopher 2",
-        default_description: "Card rewards from pool 2",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: philosopher_pool,
-    },
-    EventOptionSpec {
-        option_id: "pool_3",
-        loc_key: "",
-        default_label: "Philosopher 3",
-        default_description: "Card rewards from pool 3",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: philosopher_pool,
-    },
+    philosopher_option(
+        "necrobinder",
+        "COLORFUL_PHILOSOPHERS.pages.INITIAL.options.NECROBINDER",
+        philosopher_necrobinder,
+    ),
+    philosopher_option(
+        "ironclad",
+        "COLORFUL_PHILOSOPHERS.pages.INITIAL.options.IRONCLAD",
+        philosopher_ironclad,
+    ),
+    philosopher_option(
+        "regent",
+        "COLORFUL_PHILOSOPHERS.pages.INITIAL.options.REGENT",
+        philosopher_regent,
+    ),
+    philosopher_option(
+        "silent",
+        "COLORFUL_PHILOSOPHERS.pages.INITIAL.options.SILENT",
+        philosopher_silent,
+    ),
+    philosopher_option(
+        "defect",
+        "COLORFUL_PHILOSOPHERS.pages.INITIAL.options.DEFECT",
+        philosopher_defect,
+    ),
 ];
 
-/// `ColorfulPhilosophers` spec. Pin: `shared.py:618`.
+/// `ColorfulPhilosophers` spec. Pin: `shared.py:618`; C#
+/// `ColorfulPhilosophers.cs`: three of the other characters' pools
+/// ([`philosopher_generate_options`]).
 pub const COLORFUL_PHILOSOPHERS: EventSpec = EventSpec {
     id: EventId::ColorfulPhilosophers,
     python_name: "ColorfulPhilosophers",
     is_allowed: always_allowed,
-    generate_options: default_option_info_from_spec,
+    generate_options: philosopher_generate_options,
     options: PHILOSOPHER_OPTIONS,
 };
 
@@ -2361,6 +2444,66 @@ mod tests {
         assert!(opts[1].description.contains(&LOST_WISP_GOLD.to_string()));
     }
 
+    /// pool-placeholders: Colorful Philosophers offers three of the other
+    /// characters' pools in `CardPoolColorOrder` (Necrobinder, Ironclad,
+    /// Regent, Silent, Defect), keyed by the pool's `EnergyColorName`, one of
+    /// the four removed by the event's `Rng.NextInt(4)`; the chosen option
+    /// offers three card rewards from that pool (Common, Uncommon, Rare).
+    #[test]
+    fn colorful_philosophers_offers_three_other_character_pools() {
+        use sts2_core::potions::CharacterId;
+        let order = ["necrobinder", "ironclad", "regent", "silent", "defect"];
+        let mut removed_seen = std::collections::BTreeSet::new();
+        for seed in 0..24 {
+            let mut rs = RunState::new();
+            rs.rng.seed = seed;
+            rs.character_id = CharacterId::Ironclad;
+            let opts = (COLORFUL_PHILOSOPHERS.generate_options)(&rs, &COLORFUL_PHILOSOPHERS);
+            let ids: Vec<&str> = opts.iter().map(|o| o.option_id).collect();
+            let mut want: Vec<&str> = order.iter().copied().filter(|o| *o != "ironclad").collect();
+            let mut rng = sts2_core::dotnet_rng::Rng::with_name(seed, "COLORFUL_PHILOSOPHERS");
+            let removed = want.remove(rng.next_int_exclusive(0, 4) as usize);
+            removed_seen.insert(removed);
+            assert_eq!(ids, want, "seed {seed}");
+            for o in &opts {
+                assert_eq!(
+                    o.loc_key,
+                    format!(
+                        "COLORFUL_PHILOSOPHERS.pages.INITIAL.options.{}",
+                        o.option_id.to_uppercase()
+                    )
+                );
+                assert!(o.enabled);
+            }
+        }
+        assert_eq!(removed_seen.len(), 4, "each pool can be the one removed");
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        let opt = COLORFUL_PHILOSOPHERS
+            .options
+            .iter()
+            .find(|o| o.option_id == "defect")
+            .unwrap();
+        let outcome = (opt.handler)(&mut rs);
+        assert!(outcome.finished);
+        assert_eq!(rs.pending_rewards.len(), 3);
+        for (reward, rank) in rs.pending_rewards.iter().zip([2u8, 3, 4]) {
+            let Reward::Card(c) = reward else {
+                panic!("a card reward, got {reward:?}")
+            };
+            assert_eq!(c.options.len(), 3);
+            for id in &c.options {
+                assert_eq!(crate::cards::spec_index::card_rarity_rank_csharp(*id), rank);
+                assert!(
+                    crate::cards::spec_index::specs_for_character(CharacterId::Defect)
+                        .iter()
+                        .any(|f| f().id == *id)
+                );
+            }
+        }
+    }
+
     // ── Wave A coverage (bead sts2-rs-6ynt.4.4) ──────────────────────
 
     /// Spec sanity for every wave-A event: id+python_name agree;
@@ -2409,7 +2552,7 @@ mod tests {
                 &COLORFUL_PHILOSOPHERS,
                 EventId::ColorfulPhilosophers,
                 "ColorfulPhilosophers",
-                &["pool_1", "pool_2", "pool_3"],
+                &["necrobinder", "ironclad", "regent", "silent", "defect"],
             ),
             (
                 &COLOSSAL_FLOWER,

@@ -336,7 +336,7 @@ fn the_events_offer_their_rewards_as_one_set() {
     // with the fight room's rewards (tests/event_fight_unbridged.rs).
     assert_eq!(offered(EventId::PunchOff, "nab"), vec![relic]);
     assert_eq!(
-        offered(EventId::ColorfulPhilosophers, "pool_1").len(),
+        offered(EventId::ColorfulPhilosophers, "silent").len(),
         3,
         "three card rewards"
     );
