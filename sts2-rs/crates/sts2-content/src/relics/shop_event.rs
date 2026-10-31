@@ -1405,15 +1405,11 @@ fn listener_belt_buckle_before_combat_start(state: &mut CombatState) -> EffectRe
 /// (latch-guarded). Mirrors C# `BeltBuckle.AfterPotionUsed` (`if
 /// (IsInProgress && !Owner.Potions.Any()) ApplyDexterity();`).
 ///
-/// **Deferred (no channel at this pin):** C# also runs the
-/// `RemoveDexterity` (-2 Dex) path from `AfterPotionProcured` /
-/// `AfterPotionDiscarded` when the player *gains* a potion mid-combat
-/// (potion count crosses 0→1). There is no `after_potion_procured` /
-/// `after_potion_discarded` typed channel yet, so the only divergence is
-/// a player who procures a potion mid-combat without using it (rare):
-/// the +2 Dex is not retracted. Net is unaffected for the common
-/// start-empty / use-last-potion flows. File a follow-up bead if a
-/// procurement channel lands.
+/// C#'s `AfterPotionProcured` (the Dexterity taken back once the belt holds
+/// a potion) and `AfterPotionDiscarded` (given when a discard empties it)
+/// run at the engine's in-combat procure and discard sites through
+/// [`sts2_core::relic_effects::belt_buckle`], on the same latch (sts2-agent
+/// fork, belt-buckle).
 fn listener_belt_buckle_after_potion_used(
     state: &mut CombatState,
     _potion: sts2_core::potions::PotionKind,
@@ -5781,6 +5777,55 @@ mod tests {
             0,
             "no relic, no Dexterity",
         );
+    }
+
+    /// belt-buckle (sts2-agent fork): a potion procured in combat takes back
+    /// the Dexterity (C# `AfterPotionProcured` → `RemoveDexterity`): Alchemize,
+    /// Entropic Brew, the combat's random procure, Petrified Toad's rock; a
+    /// discard that empties the belt gives it (`AfterPotionDiscarded`).
+    #[test]
+    fn belt_buckle_follows_potions_procured_and_discarded_in_combat() {
+        use sts2_core::relic_effects::dispatch_before_combat_start;
+        crate::relics::dispatch::ensure_installed();
+        let procures: [fn(&mut CombatState); 3] = [
+            crate::potions::all::alchemize_procure_random_potion,
+            crate::potions::all::entropic_brew_fill_belt,
+            |s| {
+                let _ = s.procure_random_potion();
+            },
+        ];
+        for procure in procures {
+            let mut state = CombatState::default();
+            belt_buckle_setup(&mut state, true, &[]);
+            state.player.character = Some(sts2_core::potions::CharacterId::Ironclad);
+            let _ = dispatch_before_combat_start(&mut state);
+            assert_eq!(belt_buckle_player_dexterity(&state), BELT_BUCKLE_DEXTERITY);
+            procure(&mut state);
+            assert!(!state.player.potions.is_empty());
+            assert_eq!(belt_buckle_player_dexterity(&state), 0, "taken back");
+        }
+        // Petrified Toad's rock, procured after the buckle's combat start.
+        let mut state = CombatState::default();
+        belt_buckle_setup(&mut state, true, &[]);
+        state.relics.push(sts2_core::Relic {
+            id: std::num::NonZeroU32::new(2).expect("non-zero"),
+            kind: RelicKind::PetrifiedToad,
+            counter: 0,
+            is_wax: false,
+            is_melted: false,
+        });
+        let _ = dispatch_before_combat_start(&mut state);
+        assert_eq!(
+            state.player.potions.as_slice(),
+            [sts2_core::potions::PotionKind::PotionShapedRock]
+        );
+        assert_eq!(belt_buckle_player_dexterity(&state), 0);
+        // A discard that empties the belt gives it back, once.
+        let _ = state.player.remove_potion_at(0);
+        sts2_core::relic_effects::belt_buckle::after_potion_discarded(&mut state);
+        assert_eq!(belt_buckle_player_dexterity(&state), BELT_BUCKLE_DEXTERITY);
+        sts2_core::relic_effects::belt_buckle::after_potion_discarded(&mut state);
+        assert_eq!(belt_buckle_player_dexterity(&state), BELT_BUCKLE_DEXTERITY);
     }
 
     // -----------------------------------------------------------------

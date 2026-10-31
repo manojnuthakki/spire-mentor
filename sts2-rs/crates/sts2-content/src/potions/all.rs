@@ -526,6 +526,9 @@ pub fn alchemize_procure_random_potion(state: &mut CombatState) {
     if let Some(kind) = rolled {
         if state.player.potions.len() < state.player.effective_potion_slots() {
             state.player.potions.push(kind);
+            // C# `TryToProcure` → `Hook.AfterPotionProcured` (sts2-agent
+            // fork, belt-buckle).
+            sts2_core::relic_effects::belt_buckle::after_potion_procured(state);
         }
     }
 }
@@ -556,6 +559,9 @@ pub fn entropic_brew_fill_belt(state: &mut CombatState) {
             break;
         };
         state.player.potions.push(kind);
+        // C# `TryToProcure` → `Hook.AfterPotionProcured` (sts2-agent fork,
+        // belt-buckle).
+        sts2_core::relic_effects::belt_buckle::after_potion_procured(state);
     }
 }
 

@@ -3376,8 +3376,8 @@ impl RunManager {
     }
 
     /// Discard the potion at `slot` (C# `PotionModel.Discard`: the slot is
-    /// emptied, nothing else happens; Belt Buckle, the one discard listener,
-    /// isn't modelled by the engine). sts2-agent fork.
+    /// emptied, then `Hook.AfterPotionDiscarded`: Belt Buckle, the one
+    /// discard listener, in combat). sts2-agent fork.
     fn do_discard_potion(&mut self, slot: usize) -> ActionResult {
         if self.phase == Phase::Combat {
             let Some(combat) = self.combat.as_mut() else {
@@ -3387,6 +3387,7 @@ impl RunManager {
                 return ActionResult::InvalidForPhase;
             }
             let _ = combat.player.remove_potion_at(slot);
+            crate::relic_effects::belt_buckle::after_potion_discarded(combat);
         } else {
             if slot >= self.run_state.potions.len() {
                 return ActionResult::InvalidForPhase;

@@ -19,9 +19,14 @@ pub(crate) fn on_before_combat_start_petrified_toad(state: &mut CombatState) -> 
     }
     // First-free-slot insert (C# AddPotionInternal) — a belt with a hole
     // from a pre-combat drink gets the Rock in the HOLE, not appended.
-    let _ = state
+    if state
         .player
-        .add_potion_first_free_slot(crate::potions::PotionKind::PotionShapedRock);
+        .add_potion_first_free_slot(crate::potions::PotionKind::PotionShapedRock)
+    {
+        // C# `TryToProcure` → `Hook.AfterPotionProcured` (Belt Buckle's
+        // Dexterity goes; sts2-agent fork, belt-buckle).
+        crate::relic_effects::belt_buckle::after_potion_procured(state);
+    }
     EffectResult::Resolved
 }
 

@@ -6632,7 +6632,12 @@ impl CombatState {
         let pick = pool[self.rng.next_int_exclusive(0, pool.len() as i32) as usize];
         // First-free-slot insert (C# AddPotionInternal), not append — keeps
         // the visible belt in physical-slot order after mid-combat drinks.
-        self.player.add_potion_first_free_slot(pick)
+        let added = self.player.add_potion_first_free_slot(pick);
+        if added {
+            // C# `PotionCmd.TryToProcure` → `Hook.AfterPotionProcured`.
+            crate::relic_effects::belt_buckle::after_potion_procured(self);
+        }
+        added
     }
 
     /// Fill empty potion slots with random potions until the belt hits

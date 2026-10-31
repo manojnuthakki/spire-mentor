@@ -9,6 +9,7 @@ pub mod art_of_war;
 pub mod bag_of_marbles;
 pub mod bag_of_preparation;
 pub mod beating_remnant;
+pub mod belt_buckle;
 pub mod big_hat;
 pub mod big_mushroom;
 pub mod black_blood;
