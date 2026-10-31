@@ -235,6 +235,9 @@ mod tests {
         crate::cards::dispatch::ensure_installed();
         let mut rs = RunState::new();
         rs.interactive_card_removal = true;
+        // Two removable cards: one to choose (with one, C#'s FromDeckGeneric
+        // removes it without a choice; deck-removal-candidate-count).
+        rs.master_deck.push(sts2_core::cards::Card::pod_defaults());
         rs.master_deck.push(sts2_core::cards::Card::pod_defaults());
         let before = rs.master_deck.len();
         let out = (NEOWS_BLESSING.options[3].handler)(&mut rs);

@@ -5440,10 +5440,27 @@ impl RunState {
         // matching C#. Returns 0 removed-now; the run loop drains the queue
         // via `RemoveDeckCard` actions. Default (parity) mode falls through
         // to the front-of-deck auto-removal the Python pin uses.
+        //
+        // sts2-agent fork (deck-removal-candidate-count): C#
+        // `CardSelectCmd.FromDeckForRemoval` offers the removable cards only
+        // (`IsRemovable`: not Eternal) and `FromDeckGeneric` returns none when
+        // there is none, and every candidate without a choice when there are
+        // no more than `MinSelect` (these removals ask a fixed count, so no
+        // `RequireManualConfirmation`). Only a real choice is queued; a
+        // removal that completes here returns the count removed, so callers
+        // run their after-removal step at once.
         if self.interactive_card_removal {
-            let take = count.min(self.master_deck.len());
-            self.pending_deck_removals += u32::try_from(take).unwrap_or(u32::MAX);
-            return 0;
+            let offer = self.removal_offer_order();
+            if offer.len() > count {
+                self.pending_deck_removals += u32::try_from(count).unwrap_or(u32::MAX);
+                return 0;
+            }
+            let mut positions = offer;
+            positions.sort_unstable();
+            for &i in positions.iter().rev() {
+                self.master_deck.remove(i);
+            }
+            return positions.len();
         }
         let take = count.min(self.master_deck.len());
         self.master_deck.drain(0..take).count()

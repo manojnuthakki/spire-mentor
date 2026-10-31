@@ -471,14 +471,13 @@ fn field_of_man_sized_holes_resist(state: &mut RunState) -> EventOutcome {
     // front-removal — same shape as `wellspring_bathe` / `luminous_choir_reach`.
     use sts2_core::cards::CardId;
     let normality = crate::cards::spec_index::card_pod_from_id(CardId::Normality, false);
-    if state.interactive_card_removal {
-        state.pending_deck_removals += 2;
-        if let Some(card) = normality {
+    // A removal that completes at once (no more removable cards than asked;
+    // deck-removal-candidate-count) adds the curse at once too.
+    let _ = state.remove_cards_from_deck(2);
+    if let Some(card) = normality {
+        if state.interactive_card_removal && state.pending_deck_removals > 0 {
             state.pending_post_removal_cards.push(card);
-        }
-    } else {
-        let _ = state.remove_cards_from_deck(2);
-        if let Some(card) = normality {
+        } else {
             state.master_deck.push(card);
         }
     }
@@ -752,19 +751,15 @@ fn luminous_choir_reach(state: &mut RunState) -> EventOutcome {
     // Mirrors `wellspring_bathe` (shared_wave_b.rs).
     use sts2_core::cards::CardId;
     let spore_mind = crate::cards::spec_index::card_pod_from_id(CardId::SporeMind, false);
-    if state.interactive_card_removal {
-        // Surface a removal `card_select` (the run loop offers RemoveDeckCard per
-        // deck card while `pending_deck_removals > 0`); the deferred Spore Mind
-        // lands once both picks complete.
-        state.pending_deck_removals += 2;
-        if let Some(card) = spore_mind {
+    // Interactive: a removal `card_select` when there is a choice, the deferred
+    // Spore Mind landing once both picks complete; a removal that completes at
+    // once (deck-removal-candidate-count) or parity mode's deck-front removal
+    // adds the curse at once.
+    let _ = state.remove_cards_from_deck(2);
+    if let Some(card) = spore_mind {
+        if state.interactive_card_removal && state.pending_deck_removals > 0 {
             state.pending_post_removal_cards.push(card);
-        }
-    } else {
-        // Parity-fuzz / headless auto mode: remove from the deck front + add the
-        // curse immediately.
-        let _ = state.remove_cards_from_deck(2);
-        if let Some(card) = spore_mind {
+        } else {
             state.master_deck.push(card);
         }
     }
@@ -1454,6 +1449,13 @@ mod tests {
         use sts2_core::cards::CardId;
         let mut rs = RunState::new();
         rs.interactive_card_removal = true;
+        // More removable cards than asked, so the removal is a choice
+        // (deck-removal-candidate-count).
+        rs.master_deck = (0..3)
+            .map(|_| {
+                crate::cards::spec_index::card_pod_from_id(CardId::StrikeIronclad, false).unwrap()
+            })
+            .collect();
         let deck_before = rs.master_deck.len();
         let outcome = (LUMINOUS_CHOIR.options[0].handler)(&mut rs);
         assert!(outcome.finished);
@@ -1778,6 +1780,48 @@ mod tests {
         assert_eq!(
             rs.pending_deck_transforms[1].event_stream_roll,
             Some((MORPHIC_GROVE_STREAM, 1)),
+        );
+    }
+
+    // deck-removal-candidate-count: the removal counts removable cards, as
+    // C#'s FromDeckForRemoval does (none: nothing; no more than asked: all,
+    // without a choice), and the event's curse follows at once.
+
+    fn deck_of(ids: &[sts2_core::cards::CardId]) -> RunState {
+        crate::cards::dispatch::install_default_registry();
+        let mut rs = RunState::new();
+        rs.interactive_card_removal = true;
+        rs.master_deck = ids
+            .iter()
+            .map(|&id| crate::cards::spec_index::card_pod_from_id(id, false).unwrap())
+            .collect();
+        rs
+    }
+
+    fn ids(rs: &RunState) -> Vec<sts2_core::cards::CardId> {
+        rs.master_deck.iter().map(|c| c.card_id).collect()
+    }
+
+    #[test]
+    fn field_of_man_sized_holes_resist_with_one_removable_card_completes_at_once() {
+        use sts2_core::cards::CardId;
+        let mut rs = deck_of(&[CardId::AscendersBane, CardId::StrikeIronclad]);
+        let _ = field_of_man_sized_holes_resist(&mut rs);
+        assert_eq!(rs.pending_deck_removals, 0);
+        assert!(rs.pending_post_removal_cards.is_empty());
+        assert_eq!(ids(&rs), vec![CardId::AscendersBane, CardId::Normality]);
+    }
+
+    #[test]
+    fn luminous_choir_reach_with_only_eternal_curses_adds_spore_mind_at_once() {
+        use sts2_core::cards::CardId;
+        let mut rs = deck_of(&[CardId::AscendersBane, CardId::Greed]);
+        let _ = luminous_choir_reach(&mut rs);
+        assert_eq!(rs.pending_deck_removals, 0);
+        assert!(rs.pending_post_removal_cards.is_empty());
+        assert_eq!(
+            ids(&rs),
+            vec![CardId::AscendersBane, CardId::Greed, CardId::SporeMind]
         );
     }
 }

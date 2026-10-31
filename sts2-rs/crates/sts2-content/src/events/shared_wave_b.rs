@@ -2378,20 +2378,15 @@ fn wellspring_bathe(state: &mut RunState) -> EventOutcome {
     // via `pending_post_removal_cards` (drained when the removal resolves).
     use sts2_core::cards::CardId;
     let guilty = crate::cards::spec_index::card_pod_from_id(CardId::Guilty, false);
-    if state.interactive_card_removal {
-        // Surface a removal `card_select` (run loop offers RemoveDeckCard per
-        // deck card while `pending_deck_removals > 0`); the deferred Guilty
-        // lands once the pick completes.
-        state.pending_deck_removals += 1;
-        if let Some(card) = guilty {
+    // Interactive: a removal `card_select` when there is a choice, the deferred
+    // Guilty landing once the pick completes; a removal that completes at once
+    // (deck-removal-candidate-count) or parity mode's deck-front removal adds
+    // the Guilty at once.
+    let _ = state.remove_cards_from_deck(1);
+    if let Some(card) = guilty {
+        if state.interactive_card_removal && state.pending_deck_removals > 0 {
             state.pending_post_removal_cards.push(card);
-        }
-    } else {
-        // Parity-fuzz / headless auto mode: remove from the deck front + add the
-        // Guilty immediately (matches the non-interactive `remove_cards_from_deck`
-        // convention other events use).
-        let _ = state.remove_cards_from_deck(1);
-        if let Some(card) = guilty {
+        } else {
             state.master_deck.push(card);
         }
     }
@@ -2613,11 +2608,9 @@ fn zen_weaver_acupuncture(state: &mut RunState) -> EventOutcome {
 /// interactive `card_select` when the host is interactive, else remove from the
 /// deck front (the headless/parity-fuzz convention). No RNG — the player picks.
 fn zen_weaver_remove(state: &mut RunState, count: u32) {
-    if state.interactive_card_removal {
-        state.pending_deck_removals += count;
-    } else {
-        let _ = state.remove_cards_from_deck(count as usize);
-    }
+    // `remove_cards_from_deck` queues the choice (interactive) only when there
+    // are more removable cards than asked (deck-removal-candidate-count).
+    let _ = state.remove_cards_from_deck(count as usize);
 }
 
 const ZEN_WEAVER_OPTIONS: &[EventOptionSpec] = &[
@@ -3918,6 +3911,13 @@ mod tests {
         crate::cards::dispatch::ensure_installed();
         let mut rs = fresh_state();
         rs.interactive_card_removal = true;
+        // More removable cards than asked, so the removal is a choice
+        // (deck-removal-candidate-count).
+        rs.master_deck = (0..4)
+            .map(|_| {
+                crate::cards::spec_index::card_pod_from_id(CardId::StrikeIronclad, false).unwrap()
+            })
+            .collect();
         rs.pending_deck_removals = 2;
         let outcome = wellspring_bathe(&mut rs);
         assert!(outcome.finished);
@@ -4021,5 +4021,45 @@ mod tests {
             assert_eq!(spec.id.python_name(), expected_name);
             assert!(!spec.options.is_empty(), "{expected_name} has no options");
         }
+    }
+
+    // deck-removal-candidate-count: the removal counts removable cards, as
+    // C#'s FromDeckForRemoval does (none: nothing; no more than asked: all,
+    // without a choice), and the event's curse follows at once.
+
+    fn deck_of(ids: &[sts2_core::cards::CardId]) -> RunState {
+        crate::cards::dispatch::install_default_registry();
+        let mut rs = RunState::new();
+        rs.interactive_card_removal = true;
+        rs.master_deck = ids
+            .iter()
+            .map(|&id| crate::cards::spec_index::card_pod_from_id(id, false).unwrap())
+            .collect();
+        rs
+    }
+
+    fn ids(rs: &RunState) -> Vec<sts2_core::cards::CardId> {
+        rs.master_deck.iter().map(|c| c.card_id).collect()
+    }
+
+    #[test]
+    fn wellspring_bathe_with_only_eternal_curses_adds_guilty_at_once() {
+        use sts2_core::cards::CardId;
+        let mut rs = deck_of(&[CardId::Greed]);
+        let _ = wellspring_bathe(&mut rs);
+        assert_eq!(rs.pending_deck_removals, 0);
+        assert!(rs.pending_post_removal_cards.is_empty());
+        assert_eq!(ids(&rs), vec![CardId::Greed, CardId::Guilty]);
+    }
+
+    #[test]
+    fn zen_weaver_acupuncture_with_two_removable_cards_takes_them_without_a_choice() {
+        use sts2_core::cards::CardId;
+        let mut rs = deck_of(&[CardId::StrikeIronclad, CardId::Greed, CardId::Bash]);
+        rs.gold = 300;
+        let _ = zen_weaver_acupuncture(&mut rs);
+        assert_eq!(rs.pending_deck_removals, 0);
+        assert_eq!(ids(&rs), vec![CardId::Greed]);
+        assert_eq!(rs.gold, 50);
     }
 }
