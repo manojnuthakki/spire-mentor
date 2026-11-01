@@ -4570,6 +4570,9 @@ impl RunManager {
         // Deferring kept them out of the removal `card_select` pool so the
         // offering matched C#. Bead `sts2-rs-1hiht`.
         if self.run_state.pending_deck_removals == 0 {
+            // The filtered Amalgamator selection is complete. Its following
+            // add (and any hooks it opens) must not inherit the removal filter.
+            self.run_state.pending_basic_removal_tag = None;
             // The event's curse (`AddCurseToDeck`) goes in through the deck-add
             // hooks (event-deck-add-hooks).
             let cards = std::mem::take(&mut self.run_state.pending_post_removal_cards);

@@ -1152,6 +1152,13 @@ impl PyRunManager {
         emit_rm::card_removal_options(&self.inner)
     }
 
+    /// Exact master-deck indices of the removal offer. A filtered selection
+    /// can exclude one same-id copy while keeping another (Eternal / enchanted
+    /// Basics); reconstructing by id and upgrade flag loses that identity.
+    fn removal_select_deck_indices(&self) -> Vec<usize> {
+        self.inner.run_state.removal_offer_order()
+    }
+
     /// Append a card to the master deck by id (e.g. `"CARD.STRIKE"` or
     /// `"STRIKE"`). Bypasses the card-reward sampler entirely so a
     /// replay driver can inject the human's actual picks even when the

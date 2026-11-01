@@ -359,18 +359,23 @@ pub const ABYSSAL_BATHS: EventSpec = EventSpec {
 /// Remove up to `count` Basic, removable, `tag`-tagged cards from the deck
 /// — C# `Amalgamator.IsValid` (`Amalgamator.cs:69-80`): `Tags.Contains(tag)
 /// && Rarity == Basic && IsRemovable`. Returns how many were removed. C#
-/// has the player pick the 2 via `CardSelectCmd.FromDeckForRemoval`, but
-/// Basic Strikes/Defends are fungible (identical `CardId`), so removing the
-/// first `count` matches yields the exact deck multiset C# produces
-/// regardless of which instances the player chose. Synchronous (no select
-/// surface), consistent with the parity-mode auto-removal in
-/// [`RunState::remove_cards_from_deck`]; the filter keeps it correct in
-/// interactive mode too (the generic removal offer can't restrict to tag).
+/// has the player pick via `CardSelectCmd.FromDeckForRemoval`: upgrades and
+/// enchantments distinguish copies. Reuse the existing removal queue with
+/// its offer restricted by `IsValid`; zero/fewer/exact-count candidates
+/// resolve immediately. Noninteractive mode retains filtered first matches.
 fn amalgamator_remove_basic_tagged(
     state: &mut RunState,
     tag: sts2_core::cards::CardTag,
     count: usize,
 ) -> usize {
+    if state.interactive_card_removal {
+        state.pending_basic_removal_tag = Some(tag);
+        let removed = state.remove_cards_from_deck(count);
+        if state.pending_deck_removals == 0 {
+            state.pending_basic_removal_tag = None;
+        }
+        return removed;
+    }
     let rank = sts2_core::lookup_card_rarity_rank();
     let removable = sts2_core::lookup_card_removable();
     let is_basic = |id| rank.map_or(true, |f| f(id) == 1);
@@ -397,14 +402,26 @@ fn amalgamator_remove_basic_tagged(
 // `sts2-rs-RP28`.
 fn amalgamator_combine_strikes(state: &mut RunState) -> EventOutcome {
     amalgamator_remove_basic_tagged(state, sts2_core::cards::CardTag::Strike, 2);
-    bugslayer_add_card(state, sts2_core::cards::CardId::UltimateStrike);
+    amalgamator_add_after_removal(state, sts2_core::cards::CardId::UltimateStrike);
     EventOutcome::finished("Removed 2 Strikes, added Ultimate Strike.")
 }
 
 fn amalgamator_combine_defends(state: &mut RunState) -> EventOutcome {
     amalgamator_remove_basic_tagged(state, sts2_core::cards::CardTag::Defend, 2);
-    bugslayer_add_card(state, sts2_core::cards::CardId::UltimateDefend);
+    amalgamator_add_after_removal(state, sts2_core::cards::CardId::UltimateDefend);
     EventOutcome::finished("Removed 2 Defends, added Ultimate Defend.")
+}
+
+fn amalgamator_add_after_removal(state: &mut RunState, id: sts2_core::cards::CardId) {
+    if let Some(card) = crate::cards::spec_index::card_pod_from_id(id, false) {
+        if state.pending_deck_removals > 0 {
+            // As in Wellspring: CardPileCmd.Add and its hooks run only after
+            // the selected instances have left the deck (including Fysh gold).
+            state.pending_post_removal_cards.push(card);
+        } else {
+            state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
+        }
+    }
 }
 
 const AMALGAMATOR_OPTIONS: &[EventOptionSpec] = &[
@@ -2441,9 +2458,9 @@ mod tests {
     }
 
     /// Amalgamator CombineStrikes removes 2 Basic Strikes and adds Ultimate
-    /// Strike directly — net deck size −1, no phantom card reward. Basic
-    /// Strikes are fungible, so the resulting multiset matches C# regardless
-    /// of which the player picked.
+    /// Strike directly in noninteractive mode — net deck size −1, no
+    /// phantom card reward. Interactive instance selection is covered by
+    /// tests/amalgamator_selection.rs.
     #[test]
     fn amalgamator_combine_strikes_swaps_two_strikes_for_ultimate() {
         use sts2_core::cards::{CardId, CardTag};

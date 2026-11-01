@@ -1517,6 +1517,12 @@ pub struct RunState {
     /// `RemoveDeckCard` action per deck card while this is `> 0`.
     pub pending_deck_removals: u32,
 
+    /// Amalgamator's current removal is restricted to removable Basic cards
+    /// with this tag (`Amalgamator.IsValid`). Applies to both the offer and
+    /// its index resolution; cleared before the post-removal add. Other
+    /// removal callers leave this unset. sts2-agent fork, A6d1.
+    pub pending_basic_removal_tag: Option<crate::cards::CardTag>,
+
     /// Cards to append to [`Self::master_deck`] AFTER the current batch of
     /// interactive [`Self::pending_deck_removals`] fully drains (i.e. when
     /// the count next hits 0). Models C# events that do
@@ -2107,6 +2113,7 @@ impl Default for RunState {
             elite_combats_this_act: 0,
             interactive_card_removal: false,
             pending_deck_removals: 0,
+            pending_basic_removal_tag: None,
             pending_post_removal_cards: Vec::new(),
             pending_post_removal_hp_loss: 0,
             pending_post_removal_relic_cards: Vec::new(),
@@ -3244,8 +3251,15 @@ impl RunState {
     #[must_use]
     pub fn removal_offer_order(&self) -> Vec<usize> {
         let removable = crate::lookup_card_removable();
+        let rank = crate::lookup_card_rarity_rank();
         let mut order: Vec<usize> = (0..self.master_deck.len())
             .filter(|&i| removable.map_or(true, |f| f(&self.master_deck[i])))
+            .filter(|&i| {
+                self.pending_basic_removal_tag.map_or(true, |tag| {
+                    let card = &self.master_deck[i];
+                    card.has_tag(tag) && rank.map_or(true, |f| f(card.card_id) == 1)
+                })
+            })
             .collect();
         // Stable sort: Curse → key 0 (front, deck order preserved), else key 1
         // (deck order). `sort_by_key` is stable, matching C#'s OrderBy.
