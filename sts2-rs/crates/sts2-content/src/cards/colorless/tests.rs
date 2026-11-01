@@ -1745,6 +1745,309 @@ fn k2rzs_metamorphosis_base_generates_three_attacks() {
     );
 }
 
+// F6 step7 authority: Metamorphosis.cs OnPlay, CardFactory.GetForCombat,
+// CardModel.SetToFreeThisCombat and CardEnergyCost.GetWithModifiers.
+fn metamorphosis_state(
+    character: sts2_core::potions::CharacterId,
+    seed: i32,
+    upgraded: bool,
+) -> CombatState {
+    install_pool();
+    crate::cards::dispatch::install_default_registry();
+    crate::relics::dispatch::ensure_installed();
+    let (mut state, _) = fresh_state(CardId::Metamorphosis, 0, 0);
+    let _ = push_player(&mut state);
+    state.player.character = Some(character);
+    state.run_rng = sts2_core::run_rng_set::RunRngSet::new(seed);
+    state.cards[0] =
+        crate::cards::spec_index::card_pod_from_id(CardId::Metamorphosis, upgraded).unwrap();
+    state.cards[0].uid = CardUid::new(1).unwrap();
+    state.phase = sts2_core::CombatPhase::PlayerPlayPhase;
+    state
+}
+
+#[test]
+fn metamorphosis_free_base_and_upgrade_preserve_identities_insertion_and_rng() {
+    use sts2_core::potions::CharacterId;
+    for character in [
+        CharacterId::Ironclad,
+        CharacterId::Silent,
+        CharacterId::Defect,
+        CharacterId::Regent,
+        CharacterId::Necrobinder,
+    ] {
+        for upgraded in [false, true] {
+            let mut state = metamorphosis_state(character, 42, upgraded);
+            let sentinel = push_draw_card_id(&mut state, CardId::DefendIronclad);
+            let original = state.cards[1];
+            let count = if upgraded { 5 } else { 3 };
+            let pool: Vec<_> = super::helpers::combat_generatable_pool(character)
+                .iter()
+                .filter(|s| s.card_type == CardType::Attack)
+                .collect();
+            let mut expected_rng = state.run_rng.clone();
+            let expected_ids: Vec<_> = (0..count)
+                .map(|_| {
+                    pool[expected_rng
+                        .combat_card_generation
+                        .next_int_exclusive(0, pool.len() as i32) as usize]
+                        .id
+                })
+                .collect();
+            let mut expected_draw = vec![sentinel];
+            for i in 0..count {
+                let at = expected_rng.shuffle.next_int(0, expected_draw.len() as i32) as usize;
+                expected_draw.insert(at, CardUid::new(i as u32 + 3).unwrap());
+            }
+            assert_eq!(play_metamorphosis(&mut state, None), EffectResult::Resolved);
+            assert_eq!(state.player.draw.as_slice(), expected_draw.as_slice());
+            assert_eq!(
+                state.cards.len(),
+                count + 2,
+                "one arena instance per generated Attack"
+            );
+            assert_eq!(state.cards[1], original, "pre-existing cards unchanged");
+            assert_eq!(state.player.generated_cards_this_combat, count as u32);
+            assert_eq!(
+                format!("{:?}", state.run_rng),
+                format!("{:?}", expected_rng),
+                "only generation and insertion consume RNG"
+            );
+            for (card, id) in state.cards[2..].iter().zip(expected_ids) {
+                assert_eq!(card.card_id, id);
+                assert_eq!(card.card_type, CardType::Attack);
+                assert!(!card.upgraded);
+                assert_eq!(card.combat_var(VarKey::GeneratedInCombat), 1);
+                if !card.is_x_cost() {
+                    assert_eq!(card.cost, 0, "SetThisCombat(0) before insertion");
+                }
+                assert_eq!(sts2_core::effective_star_cost(card), 0);
+            }
+        }
+    }
+}
+
+#[test]
+fn metamorphosis_free_star_cost_and_cost_reducing_upgrade() {
+    use sts2_core::potions::CharacterId;
+    let mut star_seen = false;
+    let mut reduction_seen = false;
+    for seed in 0..100 {
+        for character in [CharacterId::Regent, CharacterId::Ironclad] {
+            let mut state = metamorphosis_state(character, seed, true);
+            play_metamorphosis(&mut state, None);
+            for card in &mut state.cards[1..] {
+                let base = crate::cards::spec_index::card_pod_from_id(card.card_id, false).unwrap();
+                let up = crate::cards::spec_index::card_pod_from_id(card.card_id, true).unwrap();
+                if sts2_core::effective_star_cost(&base) > 0 {
+                    star_seen = true;
+                    assert_eq!(
+                        sts2_core::effective_star_cost(card),
+                        0,
+                        "star-bearing generated Attacks are free too"
+                    );
+                    assert!(card.upgrade());
+                    assert_eq!(
+                        sts2_core::effective_star_cost(card),
+                        0,
+                        "upgrade cannot restore stars"
+                    );
+                } else if base.cost > 0 && up.cost < base.cost {
+                    reduction_seen = true;
+                    assert!(card.upgrade());
+                    assert_eq!(
+                        card.cost, 0,
+                        "absolute zero survives a cost-reducing upgrade without becoming X"
+                    );
+                    assert!(!card.is_x_cost());
+                }
+            }
+        }
+    }
+    assert!(
+        star_seen && reduction_seen,
+        "exercise real star and cost-reducing Attack upgrades"
+    );
+}
+
+#[test]
+fn metamorphosis_free_existing_generation_hooks_fire_once_per_inserted_card() {
+    use sts2_core::potions::CharacterId;
+    use sts2_core::{Power, PowerUid, Relic, RelicKind};
+    for upgraded in [false, true] {
+        let mut state = metamorphosis_state(CharacterId::Ironclad, 42, upgraded);
+        state
+            .relics
+            .push(Relic::new(NonZeroU32::new(1).unwrap(), RelicKind::Regalite));
+        let pid = PowerUid::new(1).unwrap();
+        state.powers.push(Power {
+            id: pid.0,
+            kind: PowerKind::Arsenal,
+            amount: 2,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state.player.powers.push(pid);
+        play_metamorphosis(&mut state, None);
+        let count = if upgraded { 5 } else { 3 };
+        assert_eq!(
+            state.player.block,
+            2 * count,
+            "Regalite sees every insertion exactly once"
+        );
+        assert_eq!(
+            state.player_power_amount(PowerKind::Strength),
+            2 * count,
+            "Arsenal sees every generation exactly once"
+        );
+        assert_eq!(state.player.draw.len(), count as usize);
+        assert_eq!(state.player.generated_cards_this_combat, count as u32);
+    }
+}
+
+#[test]
+fn metamorphosis_free_survives_draw_play_turn_and_reshuffle() {
+    use sts2_core::potions::CharacterId;
+    let mut state = (0..100)
+        .find_map(|seed| {
+            let mut state = metamorphosis_state(CharacterId::Ironclad, seed, false);
+            play_metamorphosis(&mut state, None);
+            state
+                .cards
+                .iter()
+                .any(|c| c.card_id == CardId::IronWave)
+                .then_some(state)
+        })
+        .expect("exercise a non-exhausting Attack without a selection");
+    state.player.exhaust.append(&mut state.player.play);
+    let generated: Vec<_> = state.player.draw.to_vec();
+    assert_eq!(state.draw_into_hand(3), 3);
+    let hand_index = state
+        .player
+        .hand
+        .iter()
+        .position(|uid| {
+            let card = &state.cards[uid.0.get() as usize - 1];
+            card.card_id == CardId::IronWave
+        })
+        .expect("seed generates a targeted non-X Attack");
+    let played = state.player.hand[hand_index];
+    state.player.energy = 0;
+    let _ = sts2_core::combat_loop::play_card(&mut state, hand_index as u8, Some(0));
+    assert!(
+        !state.player.hand.contains(&played),
+        "generated card plays with no energy"
+    );
+    assert_eq!(state.player.energy, 0);
+    assert_eq!(
+        state.cards[played.0.get() as usize - 1].cost,
+        0,
+        "play does not expire free cost"
+    );
+    let _ = sts2_core::combat_loop::end_turn_dispatch(&mut state);
+    for uid in generated {
+        let card = &state.cards[uid.0.get() as usize - 1];
+        assert_eq!(
+            card.cost, 0,
+            "free survives turn cleanup and discard reshuffle"
+        );
+        assert_eq!(sts2_core::effective_star_cost(card), 0);
+    }
+    assert!(
+        state.player.hand.contains(&played),
+        "next turn reshuffles and redraws the played card"
+    );
+    assert_eq!(
+        state.player.generated_cards_this_combat, 3,
+        "movement is not new generation"
+    );
+}
+
+#[test]
+fn metamorphosis_free_preserves_x_energy_payment() {
+    use sts2_core::potions::CharacterId;
+    let mut exercised = false;
+    for seed in 0..100 {
+        let mut state = metamorphosis_state(CharacterId::Ironclad, seed, true);
+        play_metamorphosis(&mut state, None);
+        let Some(uid) = state
+            .player
+            .draw
+            .iter()
+            .copied()
+            .find(|uid| state.cards[uid.0.get() as usize - 1].card_id == CardId::Whirlwind)
+        else {
+            continue;
+        };
+        assert!(
+            state.cards[uid.0.get() as usize - 1].is_x_cost(),
+            "authority bypasses local modifiers for X"
+        );
+        state.player.draw.retain(|x| *x != uid);
+        state.player.hand.push(uid);
+        state.player.exhaust.append(&mut state.player.play);
+        state.player.energy = 3;
+        let _ = sts2_core::combat_loop::play_card(&mut state, 0, None);
+        assert_eq!(state.player.energy, 0, "X still spends available energy");
+        assert_eq!(state.cards[uid.0.get() as usize - 1].energy_spent, 3);
+        exercised = true;
+        break;
+    }
+    assert!(exercised, "exercise generated Whirlwind");
+}
+
+#[test]
+fn metamorphosis_free_generated_instances_end_with_the_combat() {
+    use crate::monster_dispatch::MonsterSpawnArgs;
+    use crate::run_bridge::{enter_combat_from_roster, exit_combat};
+    use sts2_core::runstate::RoomType;
+    crate::cards::dispatch::install_default_registry();
+    crate::relics::dispatch::ensure_installed();
+    let mut run = sts2_core::RunState::new();
+    run.current_hp = 80;
+    run.max_hp = 80;
+    for id in [CardId::Metamorphosis, CardId::IronWave] {
+        run.master_deck
+            .push(crate::cards::spec_index::card_pod_from_id(id, false).unwrap());
+    }
+    let deck = run.master_deck.clone();
+    let roster = [(MonsterKind::Nibbit, MonsterSpawnArgs::None, 100)];
+    let mut combat = enter_combat_from_roster(&run, &roster, RoomType::Monster);
+    let source = combat
+        .player
+        .hand
+        .iter()
+        .copied()
+        .find(|uid| combat.cards[uid.0.get() as usize - 1].card_id == CardId::Metamorphosis)
+        .unwrap();
+    combat.player.hand.retain(|uid| *uid != source);
+    combat.player.play.push(source);
+    play_metamorphosis(&mut combat, None);
+    assert_eq!(combat.player.generated_cards_this_combat, 3);
+    assert_eq!(combat.cards.len(), 5);
+    combat.is_over = true;
+    combat.player_won = true;
+    exit_combat(&mut run, &combat);
+    assert_eq!(
+        run.master_deck, deck,
+        "neither generated cards nor combat costs enter the master deck"
+    );
+    let next = enter_combat_from_roster(&run, &roster, RoomType::Monster);
+    assert_eq!(
+        next.cards.len(),
+        2,
+        "fresh combat has no prior generated instances"
+    );
+    assert_eq!(next.player.generated_cards_this_combat, 0);
+    for card in &next.cards {
+        assert_eq!(card.combat_var(VarKey::CostAbsolutelySet), 0);
+        assert_eq!(card.combat_var(VarKey::StarCostFreeThisCombat), 0);
+        let native = crate::cards::spec_index::card_pod_from_id(card.card_id, false).unwrap();
+        assert_eq!(card.cost, native.cost);
+    }
+}
+
 /// Power + Expertise rider → Strength +2 and Dexterity +2 on self.
 #[test]
 fn play_mad_science_power_expertise_buffs_self() {
