@@ -2025,6 +2025,9 @@ fn apply_dealhploss(
             // damage), absorb through block (unless UNBLOCKABLE), and
             // write HP loss. Mirrors the read-only path of Python's
             // `apply_damage` for self-targeted unpowered hits.
+            if state.player.current_hp <= 0 {
+                return;
+            }
             let unblockable = props.contains(ValueProps::UNBLOCKABLE);
             let absorbed = if unblockable {
                 0
@@ -2069,6 +2072,7 @@ fn apply_dealhploss(
             } else {
                 0
             };
+            let hp_before = state.player.current_hp;
             state.player.current_hp -= modified;
             if state.player.current_hp < 0 {
                 state.player.current_hp = 0;
@@ -2119,13 +2123,23 @@ fn apply_dealhploss(
             // a Buffer-absorbed tick has `LoseHpInternal(0)` in C#, so
             // `UnblockedDamage == 0` and damage-received reactions stay
             // silent (bead `sts2-rs-ytgbq` follow-up).
-            if modified > 0 {
+            if modified > 0 && state.player.current_hp > 0 {
                 let dctx = DamageCtx {
                     dealer,
                     target: CreatureRef::Player,
                     props,
                 };
                 dispatch_after_damage_received(state, &dctx, modified);
+            }
+            // Red Skull is an HP-change reaction, not a received reaction:
+            // unlike Rupture/Inferno it also observes the fatal HP write.
+            if state.player.current_hp < hp_before
+                && crate::relic_effects::helpers::player_owns_relic(
+                    state,
+                    crate::RelicKind::RedSkull,
+                )
+            {
+                crate::relic_effects::helpers::red_skull_check_hp(state);
             }
             // Bead sts2-rs-v7isp: when a reflective Thorns / FlameBarrier
             // hit zeros the player's HP, flip combat-end state at the

@@ -55,7 +55,7 @@
   "status:409"
  ],
  "engine": {
-  "src_hash": "65ab4a31a706226e",
+  "src_hash": "4cf2dded742612e2",
   "version": "0.0.1"
  },
  "final_act": 1,
@@ -67,7 +67,7 @@
   "ppo_disabled": true,
   "saved_at": "2026-01-01T00:00:00Z"
  },
- "python": "3.14",
+ "python": "3.13",
  "reached_game_over": true,
  "requests": 212,
  "scenario": {

@@ -4930,6 +4930,10 @@ pub fn apply_damage_to_player(
     props: ValueProps,
     card: Option<crate::cards::CardId>,
 ) -> Option<StepResult> {
+    // CreatureCmd.Damage filters dead receivers before modifiers and hooks.
+    if state.player.current_hp <= 0 {
+        return None;
+    }
     let target_ref = CreatureRef::Player;
     let ctx = DamageCtx {
         dealer,
@@ -5136,6 +5140,7 @@ pub fn apply_damage_to_player(
     // the post-block step above. Consumed by TearAsunder `CalculatedHits`
     // and Spite `LostHpThisTurn`.
     let actual_hp_lost = hp_before_loss - state.player.current_hp;
+    let was_target_killed = hp_before_loss > 0 && state.player.current_hp <= 0;
     // Forensics only — see `damage_trace`. The enemy-side twin lives at the
     // `damage::apply_damage_with_final_impl` chokepoint; the player has its
     // own pipeline, so it needs its own row or a player-HP desync traces
@@ -5218,32 +5223,12 @@ pub fn apply_damage_to_player(
     // Bead `sts2-rs-6ynt.6.3` threads `modified_hp_loss` so Inferno's
     // post-walk reaction can gate on `damage > 0` (player-side
     // received-damage path).
-    hooks::dispatch_after_damage_received(state, &ctx, modified_hp_loss);
-    // Regent `ReflectPower.AfterDamageReceived` (C# ReflectPower.cs:24): when
-    // the player's block absorbs part of a POWERED attack, reflect the BLOCKED
-    // amount back at the dealer as Unpowered damage, dealt by the player. The
-    // generic `after_damage_received` listener arms can't host this — they have
-    // no blocked-amount channel — so it fires here at the player-received
-    // chokepoint with `absorbed` (= C# `result.BlockedDamage`) in scope, the
-    // same pattern as the NecroMastery reflect above. No-ops once the player is
-    // dead (C# `CreatureCmd.Damage` skips a dead dealer, CreatureCmd.cs:122).
-    if state.player.current_hp > 0 && state.player_power_amount(crate::PowerKind::Reflect) > 0 {
-        let reflect_amt = crate::powers::regent::reflect_damage_to_dealer(
-            absorbed,
-            !matches!(dealer, CreatureRef::Player),
-            props.is_powered(),
-        );
-        if reflect_amt > 0 {
-            hooks::apply_effect(
-                state,
-                hooks::Effect::DealHpLoss {
-                    dealer: CreatureRef::Player,
-                    target: dealer,
-                    amount: reflect_amt,
-                    props: ValueProps::UNPOWERED,
-                },
-            );
-        }
+    // Red Skull models AfterCurrentHpChanged via its existing HP helper.
+    // Preserve that reaction even when the received hook below is skipped.
+    if actual_hp_lost > 0
+        && crate::relic_effects::helpers::player_owns_relic(state, crate::RelicKind::RedSkull)
+    {
+        crate::relic_effects::helpers::red_skull_check_hp(state);
     }
     // Bead `sts2-rs-ybtmu`: pass the post-block `modified_hp_loss` residual
     // (not pre-block `final_damage`) so the PaperCuts / Envenom arms gate on
@@ -5300,6 +5285,39 @@ pub fn apply_damage_to_player(
                 was_block_broken: false,
             };
             let _ = crate::relic_effects::dispatch_after_damage_given(state, &dg_ctx);
+        }
+    }
+
+    // Given-side hooks precede received in CreatureCmd.Damage. A lethal
+    // result skips received unless an earlier reaction has healed it;
+    // Fairy/Lizard Tail prevention below does not retroactively invoke it.
+    if !was_target_killed || state.player.current_hp > 0 {
+        hooks::dispatch_after_damage_received(state, &ctx, modified_hp_loss);
+        // Regent `ReflectPower.AfterDamageReceived` (C# ReflectPower.cs:24): when
+        // the player's block absorbs part of a POWERED attack, reflect the BLOCKED
+        // amount back at the dealer as Unpowered damage, dealt by the player. The
+        // generic `after_damage_received` listener arms can't host this — they have
+        // no blocked-amount channel — so it fires here at the player-received
+        // chokepoint with `absorbed` (= C# `result.BlockedDamage`) in scope, the
+        // same pattern as the NecroMastery reflect above. No-ops once the player is
+        // dead (C# `CreatureCmd.Damage` skips a dead dealer, CreatureCmd.cs:122).
+        if state.player.current_hp > 0 && state.player_power_amount(crate::PowerKind::Reflect) > 0 {
+            let reflect_amt = crate::powers::regent::reflect_damage_to_dealer(
+                absorbed,
+                !matches!(dealer, CreatureRef::Player),
+                props.is_powered(),
+            );
+            if reflect_amt > 0 {
+                hooks::apply_effect(
+                    state,
+                    hooks::Effect::DealHpLoss {
+                        dealer: CreatureRef::Player,
+                        target: dealer,
+                        amount: reflect_amt,
+                        props: ValueProps::UNPOWERED,
+                    },
+                );
+            }
         }
     }
 

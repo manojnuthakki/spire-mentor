@@ -5634,6 +5634,83 @@ mod tests {
             .count()
     }
 
+    /// CreatureCmd.Damage skips received hooks for a killing result, but
+    /// blocked and zero-HP-loss powered hits still invoke Personal Hive.
+    #[test]
+    fn fidelity_hit_hooks_personal_hive_lethal_nonlethal_shuffle() {
+        use sts2_core::damage::apply_damage;
+        use sts2_core::hooks::{CreatureRef, ValueProps};
+
+        for (hp, block, damage, expected_dazed) in
+            [(3, 0, 4, 0), (4, 0, 3, 2), (4, 10, 3, 2), (4, 0, 0, 2)]
+        {
+            let mut state = CombatState::default();
+            let _ = state.init_player_creature();
+            let uid = spawn_real_entomancer(&mut state);
+            apply_power_to_creature(&mut state, uid, PowerKind::PersonalHive, 1);
+            let c = state.creatures.iter_mut().find(|c| c.id == uid.0).unwrap();
+            c.current_hp = hp;
+            c.block = block;
+            let shuffle = state.run_rng.shuffle.counter();
+            apply_damage(
+                &mut state,
+                CreatureRef::Player,
+                uid,
+                damage,
+                ValueProps::MOVE,
+                None,
+            );
+            assert_eq!(
+                draw_dazed_count(&state),
+                expected_dazed,
+                "hp={hp}, block={block}"
+            );
+            assert_eq!(
+                state.run_rng.shuffle.counter() - shuffle,
+                u32::try_from(expected_dazed).unwrap(),
+                "one insertion roll per Dazed, hp={hp}, block={block}"
+            );
+        }
+    }
+
+    #[test]
+    fn fidelity_hit_hooks_area_only_living_hive_consumes_shuffle() {
+        let mut state = CombatState::default();
+        let _ = state.init_player_creature();
+        let killed = spawn_real_entomancer(&mut state);
+        let survivor = spawn_real_entomancer(&mut state);
+        state
+            .creatures
+            .iter_mut()
+            .find(|c| c.id == killed.0)
+            .unwrap()
+            .current_hp = 3;
+        state
+            .creatures
+            .iter_mut()
+            .find(|c| c.id == survivor.0)
+            .unwrap()
+            .current_hp = 10;
+        let shuffle = state.run_rng.shuffle.counter();
+        sts2_core::card_effects::deal_damage_to_all_alive_enemies(
+            &mut state,
+            4,
+            sts2_core::hooks::ValueProps::MOVE,
+            None,
+        );
+        assert_eq!(draw_dazed_count(&state), 1);
+        assert_eq!(state.run_rng.shuffle.counter() - shuffle, 1);
+        assert_eq!(
+            state
+                .creatures
+                .iter()
+                .find(|c| c.id == survivor.0)
+                .unwrap()
+                .current_hp,
+            6
+        );
+    }
+
     /// **PersonalHive Dazed flood (powered player hit)** (`sts2-rs-ybtmu`):
     /// C# `PersonalHivePower.AfterDamageReceived` shoves `Amount` Dazed into
     /// the player's draw pile when the Entomancer takes a powered attack.

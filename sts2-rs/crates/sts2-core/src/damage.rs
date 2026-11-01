@@ -613,6 +613,10 @@ pub fn compute_modified_damage_flashing(
     props: ValueProps,
     card: Option<CardId>,
 ) -> i32 {
+    // CreatureCmd.Damage filters dead targets before modifiers or hooks.
+    if state.creatures[creature_index_for(state, target)].current_hp <= 0 {
+        return 0;
+    }
     let final_damage = compute_modified_damage(state, dealer, target, raw_damage, props, card);
     if crate::event_log::armed(state) {
         // Recomputing the relic-additive fold rather than threading it out of
@@ -748,6 +752,16 @@ fn apply_damage_with_final_impl(
     props: ValueProps,
     bypass_hp_loss_cap: bool,
 ) -> DamageOutcome {
+    // Retained corpses are not damage targets either. In particular, a
+    // multi-hit attack must not trigger their before-damage Thorns again.
+    if state.creatures[creature_index_for(state, target)].current_hp <= 0 {
+        return DamageOutcome {
+            hp_loss: 0,
+            blocked: 0,
+            overkill: 0,
+            total_damage: 0,
+        };
+    }
     let target_ref = CreatureRef::Enemy(target);
     let ctx = DamageCtx {
         dealer,
@@ -1128,7 +1142,6 @@ fn apply_damage_with_final_impl(
     // `target_ref` is always `CreatureRef::Enemy`, so the enemy-target
     // dispatches skip the player-target lanes' kinds in their liveness test
     // (J06).
-    hooks::dispatch_after_damage_received_enemy_target(state, &ctx, hp_loss);
     // Bead `sts2-rs-ybtmu`: pass the post-block `unblocked` residual (not
     // pre-block `final_damage`) so the Envenom / PaperCuts arms gate on C#'s
     // `UnblockedDamage > 0` — a fully-blocked powered hit triggers neither.
@@ -1172,6 +1185,13 @@ fn apply_damage_with_final_impl(
             };
             let _ = crate::relic_effects::dispatch_after_damage_given(state, &dg_ctx);
         }
+    }
+
+    // CreatureCmd.Damage always runs the given-side hooks, including lethal
+    // hits, then runs received only for a nonlethal result or a receiver
+    // already healed by an earlier reaction. Death prevention runs later.
+    if !just_died || state.creatures[creature_idx].current_hp > 0 {
+        hooks::dispatch_after_damage_received_enemy_target(state, &ctx, hp_loss);
     }
 
     // Bead `sts2-rs-rmrzx`: relic-side `AfterDeath` bus. C# fires
@@ -1449,6 +1469,193 @@ mod tests {
 
     fn cultist_uid() -> CreatureUid {
         CreatureUid::new(1).expect("non-zero")
+    }
+
+    fn hit_hook_scenario(kind: PowerKind) -> CombatState {
+        let mut state = vulnerable_scenario();
+        state.powers = crate::PowerStore::default();
+        state.powers.push(Power {
+            id: NonZeroU32::new(1).unwrap(),
+            kind,
+            amount: 5,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state
+    }
+
+    #[test]
+    fn fidelity_hit_hooks_thorns_reflects_lethal_hit_but_not_corpse_hits() {
+        let mut state = hit_hook_scenario(PowerKind::Thorns);
+        state.creatures[0].current_hp = 3;
+        assert_eq!(
+            apply_damage(
+                &mut state,
+                CreatureRef::Player,
+                cultist_uid(),
+                4,
+                ValueProps::MOVE,
+                None
+            ),
+            3
+        );
+        assert_eq!(
+            state.player.current_hp, 45,
+            "before-damage Thorns survives a lethal hit"
+        );
+        // The arena retains the corpse. Dismantle's second hit must not
+        // dispatch Thorns, consume block or create another damage event.
+        state.creatures[0].block = 7;
+        assert_eq!(
+            apply_damage(
+                &mut state,
+                CreatureRef::Player,
+                cultist_uid(),
+                4,
+                ValueProps::MOVE,
+                None
+            ),
+            0
+        );
+        assert_eq!(
+            state.player.current_hp, 45,
+            "a later corpse hit has no hooks"
+        );
+        assert_eq!(state.creatures[0].block, 7);
+    }
+
+    #[test]
+    fn fidelity_hit_hooks_flame_barrier_skips_lethal_received() {
+        for hp in [3, 5] {
+            let mut state = hit_hook_scenario(PowerKind::FlameBarrier);
+            state.creatures[0].current_hp = hp;
+            apply_damage(
+                &mut state,
+                CreatureRef::Player,
+                cultist_uid(),
+                4,
+                ValueProps::MOVE,
+                None,
+            );
+            assert_eq!(state.player.current_hp, if hp == 3 { 50 } else { 45 });
+        }
+    }
+
+    #[test]
+    fn fidelity_hit_hooks_player_lethal_received_is_skipped() {
+        let mut state = hit_hook_scenario(PowerKind::FlameBarrier);
+        state.creatures[0].powers.clear();
+        state.player.powers.push(PowerUid::new(1).unwrap());
+        crate::combat_loop::apply_damage_to_player(
+            &mut state,
+            CreatureRef::Enemy(cultist_uid()),
+            50,
+            ValueProps::MOVE,
+            None,
+        );
+        assert_eq!(state.player.current_hp, 0);
+        assert_eq!(
+            state.creatures[0].current_hp, 48,
+            "no fatal received-side retaliation"
+        );
+    }
+
+    #[test]
+    #[serial_test::serial(global_registry)]
+    fn fidelity_hit_hooks_fatal_received_relics_and_hp_change_are_distinct() {
+        crate::relic_effects::demon_tongue::install();
+        crate::relic_effects::red_skull::install();
+        for reflected in [false, true] {
+            let mut state = vulnerable_scenario();
+            let _ = state.init_player_creature();
+            for (id, kind) in [
+                (1, crate::RelicKind::DemonTongue),
+                (2, crate::RelicKind::RedSkull),
+            ] {
+                state.relics.push(crate::Relic {
+                    id: NonZeroU32::new(id).unwrap(),
+                    kind,
+                    counter: 0,
+                    is_wax: false,
+                    is_melted: false,
+                });
+            }
+            if reflected {
+                hooks::apply_effect(
+                    &mut state,
+                    hooks::Effect::DealHpLoss {
+                        dealer: CreatureRef::Enemy(cultist_uid()),
+                        target: CreatureRef::Player,
+                        amount: 50,
+                        props: ValueProps::UNPOWERED,
+                    },
+                );
+            } else {
+                crate::combat_loop::apply_damage_to_player(
+                    &mut state,
+                    CreatureRef::Enemy(cultist_uid()),
+                    50,
+                    ValueProps::MOVE,
+                    None,
+                );
+            }
+            assert_eq!(
+                state.player.current_hp, 0,
+                "Demon Tongue must not save a fatal hit"
+            );
+            assert_eq!(state.relics[0].counter, 0, "received relic never triggered");
+            assert_eq!(
+                state.relics[1].counter, 1,
+                "Red Skull observes the HP change even on death"
+            );
+            // A subsequent effect must not re-enter any damage stage on
+            // the dead player (the ordinary path would otherwise call
+            // received with WasTargetKilled=false and Demon Tongue heals).
+            state.player.block = 7;
+            if reflected {
+                hooks::apply_effect(
+                    &mut state,
+                    hooks::Effect::DealHpLoss {
+                        dealer: CreatureRef::Enemy(cultist_uid()),
+                        target: CreatureRef::Player,
+                        amount: 50,
+                        props: ValueProps::UNPOWERED,
+                    },
+                );
+            } else {
+                crate::combat_loop::apply_damage_to_player(
+                    &mut state,
+                    CreatureRef::Enemy(cultist_uid()),
+                    50,
+                    ValueProps::MOVE,
+                    None,
+                );
+            }
+            assert_eq!(state.player.current_hp, 0);
+            assert_eq!(
+                state.player.block, 7,
+                "corpse damage does not consume block"
+            );
+        }
+    }
+
+    #[test]
+    fn fidelity_hit_hooks_given_still_fires_on_lethal_hit() {
+        let mut state = hit_hook_scenario(PowerKind::PaperCuts);
+        let _ = state.init_player_creature();
+        crate::combat_loop::apply_damage_to_player(
+            &mut state,
+            CreatureRef::Enemy(cultist_uid()),
+            50,
+            ValueProps::MOVE,
+            None,
+        );
+        assert_eq!(state.player.current_hp, 0);
+        assert_eq!(
+            state.player.max_hp, 45,
+            "given-side Paper Cuts still observes the lethal result"
+        );
     }
 
     /// Build a state with a primary player at 50/50 and one Cultist at 48/48

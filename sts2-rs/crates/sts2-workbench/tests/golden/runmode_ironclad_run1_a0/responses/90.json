@@ -16,7 +16,7 @@
    "is_best": true,
    "losses": 22,
    "low_confidence": false,
-   "q": -0.0001,
+   "q": -0.0009,
    "q_saturated": false,
    "stable_idx": -1,
    "target_index": null,
