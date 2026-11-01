@@ -1229,8 +1229,8 @@ mod tests {
         );
     }
 
-    /// C# `AfterAddedToRoom` amounts that scale: CorpseSlug's Ravenous
-    /// (`CorpseSlug.cs:51`) and TestSubject's Enrage (`TestSubject.cs:88`).
+    /// C# `AfterAddedToRoom` amounts that scale: CorpseSlug's Ravenous,
+    /// TestSubject's Enrage and InfestedPrism's Vital Spark.
     /// `on_spawn_self_buffs` carries the A0 amount; `spawn_enemy` must swap
     /// in the DeadlyEnemies value at A9.
     #[test]
@@ -1257,6 +1257,7 @@ mod tests {
         for (kind, power, base, deadly) in [
             (MonsterKind::CorpseSlug, PowerKind::Ravenous, 4, 5),
             (MonsterKind::TestSubject, PowerKind::Enrage, 2, 3),
+            (MonsterKind::InfestedPrism, PowerKind::VitalSpark, 2, 3),
         ] {
             assert_eq!(
                 spawned_amount(kind, 8, power),

@@ -2715,6 +2715,55 @@ pub fn create_rocket_ai() -> MonsterAi {
 mod tests {
     use super::*;
 
+    // Installed DLL InfestedPrism.AfterAddedToRoom / PulsateMove and
+    // VitalSparkPower: DeadlyEnemies starts at A9, not ToughEnemies (A8).
+    #[test]
+    fn vital_spark_spawn_and_pulsate_taint_all_piles_at_a8_a9_boundary() {
+        use sts2_core::card_afflictions::{CardAffliction, CardAfflictionKind};
+        use sts2_core::cards::{Card, CardType};
+        use sts2_core::CardUid;
+        for (asc, amount) in [(8, 2), (9, 3), (10, 3)] {
+            let mut state = CombatState {
+                ascension: asc,
+                ..CombatState::default()
+            };
+            state.player.current_hp = 80;
+            state.player.max_hp = 80;
+            state.init_player_creature();
+            let owner = state.spawn_enemy(MonsterKind::InfestedPrism);
+            for n in 1..=5 {
+                state.cards.push(Card {
+                    uid: CardUid::new(n).unwrap(),
+                    card_type: CardType::Skill,
+                    ..Card::pod_defaults()
+                });
+            }
+            state.player.hand.push(CardUid::new(1).unwrap());
+            state.player.draw.push(CardUid::new(2).unwrap());
+            state.player.discard.push(CardUid::new(3).unwrap());
+            state.player.exhaust.push(CardUid::new(4).unwrap());
+            state.player.play.push(CardUid::new(5).unwrap());
+            let rng = (state.rng.clone(), state.run_rng.clone());
+            sts2_core::monster_power_effects::vital_spark_before_combat_start(&mut state);
+            for card in &state.cards {
+                assert_eq!(
+                    card.affliction,
+                    Some(CardAffliction::new(CardAfflictionKind::Tainted, amount)),
+                    "initial A{asc}"
+                );
+            }
+            infested_prism_pulsate_effect(&mut state, owner);
+            for card in &state.cards {
+                assert_eq!(
+                    card.affliction,
+                    Some(CardAffliction::new(CardAfflictionKind::Tainted, amount * 2)),
+                    "Pulsate A{asc}"
+                );
+            }
+            assert_eq!((state.rng, state.run_rng), rng);
+        }
+    }
+
     /// Bead `sts2-rs-z4jsg`: end-to-end LAY_EGGS → hatch lifecycle
     /// through real enemy turns. Locks three behaviors at once:
     ///   1. Mid-turn-summoned eggs do NOT get a phantom

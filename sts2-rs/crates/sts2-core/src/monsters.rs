@@ -1717,6 +1717,9 @@ impl MonsterKind {
             (MonsterKind::CorpseSlug, PowerKind::Ravenous) => Some(5),
             // C# `TestSubject.cs:88,179` `EnrageAmount => (.., 3, 2)`.
             (MonsterKind::TestSubject, PowerKind::Enrage) => Some(3),
+            // Installed DLL `InfestedPrism.VitalSparkAmount`: DeadlyEnemies,
+            // including its AfterAddedToRoom application (Pulsate uses it too).
+            (MonsterKind::InfestedPrism, PowerKind::VitalSpark) => Some(3),
             _ => None,
         }
     }
