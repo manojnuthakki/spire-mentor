@@ -1417,13 +1417,26 @@ impl RunManager {
         // always discarding belt slot 0; skippable, matching the C#
         // reward screen (the reward can simply be left unclaimed).
         if !self.run_state.pending_potion_swaps.is_empty() {
-            return std::iter::once(RunAction::PotionSwap { discard_slot: None })
+            let mut actions: Vec<_> = std::iter::once(RunAction::PotionSwap { discard_slot: None })
                 .chain(
                     (0..self.run_state.potions.len()).map(|slot| RunAction::PotionSwap {
                         discard_slot: Some(slot),
                     }),
                 )
                 .collect();
+            // C# PotionReward.OnSelect keeps a TooFull offer on the reward
+            // screen. Drinking is independent; a free slot permits claiming
+            // the same offer afterwards, without another discard.
+            if self.has_open_potion_slot() {
+                actions.push(RunAction::ClaimReward { idx: 0 });
+            }
+            let mut belt = Vec::new();
+            self.push_potion_actions(&mut belt);
+            actions.extend(
+                belt.into_iter()
+                    .filter(|a| matches!(a, RunAction::DrinkPotion { .. })),
+            );
+            return actions;
         }
         let mut v = self.phase_actions();
         self.push_potion_actions(&mut v);
@@ -3209,6 +3222,16 @@ impl RunManager {
 
     /// Claim one reward of the open set (C# `Reward.OnSelect`). sts2-agent fork.
     fn do_claim_reward(&mut self, idx: usize) -> ActionResult {
+        if let Some(&kind) = self.run_state.pending_potion_swaps.first() {
+            if idx != 0 || !self.has_open_potion_slot() {
+                return ActionResult::InvalidForPhase;
+            }
+            if crate::run_effects::dispatch_should_procure_potion(&mut self.run_state) {
+                let _ = self.run_state.add_potion_to_belt(kind);
+            }
+            self.run_state.pending_potion_swaps.remove(0);
+            return ActionResult::Advanced;
+        }
         let Some(reward) = self
             .reward_sets
             .last()
@@ -8623,6 +8646,61 @@ mod tests {
         assert_eq!(
             rm.run_state.potions_overflow_dropped, 0,
             "a completed swap loses nothing"
+        );
+    }
+
+    #[test]
+    fn pending_full_belt_reward_allows_drink_then_separate_claim() {
+        // C# Rewards/PotionReward.OnSelect leaves a TooFull reward unclaimed;
+        // PotionModel.OnUseWrapper removes a held potion independently.
+        use crate::potions::PotionKind;
+        let mut rm = RunManager::new(0, CharacterId::Ironclad);
+        rm.run_state.interactive_potions = true;
+        rm.run_state.interactive_potion_swap = true;
+        rm.run_state.max_potion_slots = 2;
+        rm.run_state.current_hp = 20;
+        rm.run_state.potions = vec![PotionKind::BloodPotion, PotionKind::FirePotion];
+        rm.run_state.pending_potion_swaps = vec![PotionKind::EnergyPotion];
+        let drink = RunAction::DrinkPotion {
+            potion_slot: 0,
+            target: None,
+        };
+        let combat_only = RunAction::DrinkPotion {
+            potion_slot: 1,
+            target: None,
+        };
+        assert!(!rm.get_available_actions().contains(&combat_only));
+        assert_eq!(rm.take_action(combat_only), ActionResult::InvalidForPhase);
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 0 }),
+            ActionResult::InvalidForPhase
+        );
+        assert!(rm.get_available_actions().contains(&drink));
+        assert!(!rm
+            .get_available_actions()
+            .contains(&RunAction::ClaimReward { idx: 0 }));
+        assert_eq!(rm.take_action(drink), ActionResult::Advanced);
+        assert!(rm.run_state.current_hp > 20);
+        assert_eq!(rm.run_state.potions, vec![PotionKind::FirePotion]);
+        assert_eq!(
+            rm.run_state.pending_potion_swaps,
+            vec![PotionKind::EnergyPotion]
+        );
+        assert!(rm
+            .get_available_actions()
+            .contains(&RunAction::ClaimReward { idx: 0 }));
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 0 }),
+            ActionResult::Advanced
+        );
+        assert_eq!(
+            rm.run_state.potions,
+            vec![PotionKind::EnergyPotion, PotionKind::FirePotion]
+        );
+        assert!(rm.run_state.pending_potion_swaps.is_empty());
+        assert_eq!(
+            rm.take_action(RunAction::ClaimReward { idx: 0 }),
+            ActionResult::InvalidForPhase
         );
     }
 

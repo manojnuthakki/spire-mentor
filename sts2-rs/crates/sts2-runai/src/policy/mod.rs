@@ -1866,6 +1866,7 @@ mod tests {
 
         let mut rm = new_run_manager_for_character(7, CharacterId::Ironclad);
         rm.run_state.interactive_potion_swap = true;
+        rm.run_state.max_potion_slots = 2;
         rm.run_state.potions.clear();
         assert!(rm
             .run_state
@@ -1918,6 +1919,7 @@ mod tests {
 
         let mut rm = new_run_manager_for_character(7, CharacterId::Ironclad);
         rm.run_state.interactive_potion_swap = true;
+        rm.run_state.max_potion_slots = 2;
         rm.run_state.potions.clear();
         assert!(rm
             .run_state
