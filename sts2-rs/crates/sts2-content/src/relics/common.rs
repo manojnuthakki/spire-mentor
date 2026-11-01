@@ -596,14 +596,14 @@ fn listener_whetstone(rs: &mut RunState) -> EffectResult {
 /// `Permafrost::after_card_played` — first Power-type card played per
 /// combat grants `owner.gain_block(6, unpowered=True)`. Python pin
 /// `sts2-rl-agent@01c094d:sts2_env/relics/common.py::Permafrost`
-/// (`BLOCK = 6`, `_activated_this_combat` latch reset on
-/// `after_combat_end`). The latch lives on
+/// (`BLOCK = 6` in that older port). The latch lives on
 /// [`sts2_core::Relic::counter`] (3nis pattern, same as
 /// FakeHappyFlower / EmberTea / TeaOfDiscourtesy): `0` = armed,
 /// `1` = fired. [`listener_permafrost_reset`] clears the counter
-/// before each combat start so the next combat re-arms — equivalent
-/// to Python's after-combat reset, just hooked to the symmetric
-/// channel that already exists in this crate. Bead `sts2-rs-lqpw`.
+/// during the existing next-combat setup. Installed v0.107.1
+/// Permafrost.cs resets on CombatRoom entry, including nested event
+/// fights; the setup path exposes no decision before this reset.
+/// Combat end and noncombat rooms must retain the latch.
 fn listener_permafrost(state: &mut CombatState, ctx: &CardEventCtx) -> EffectResult {
     let idx = state
         .relics
@@ -652,11 +652,9 @@ fn listener_permafrost(state: &mut CombatState, ctx: &CardEventCtx) -> EffectRes
     EffectResult::Resolved
 }
 
-/// `Permafrost::before_combat_start` — clear the once-per-combat
-/// latch. Mirrors Python's `after_combat_end: self._activated_this_combat =
-/// False`; we hook the symmetric pre-combat channel so the latch
-/// reset is observable on the very first dispatch of the next
-/// combat. Bead `sts2-rs-lqpw`.
+/// Represent Permafrost.cs's CombatRoom-entry reset during the existing
+/// combat setup (ordinary and event combats), before its first decision.
+/// There is deliberately no combat-end reset: rewards retain the latch.
 fn listener_permafrost_reset(state: &mut CombatState) -> EffectResult {
     let Some(idx) = state
         .relics

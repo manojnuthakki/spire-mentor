@@ -5050,13 +5050,30 @@ fn permafrost_attack_and_skill_do_not_trigger() {
 
 #[test]
 #[serial_test::serial(global_registry)]
-fn permafrost_after_combat_end_rearms() {
+fn permafrost_after_combat_end_retains_used_latch() {
     ensure_installed();
     let mut state = fresh_state_with_player(70, 70);
     give_player_relic(&mut state, RelicKind::Permafrost);
     set_permafrost_counter(&mut state, 1);
     let _ = dispatch_after_combat_end(&mut state);
-    assert_eq!(permafrost_counter(&state), 0, "combat-end resets flag");
+    assert_eq!(permafrost_counter(&state), 1, "combat-end retains flag");
+}
+
+#[test]
+#[serial_test::serial(global_registry)]
+fn permafrost_next_combat_rearms_first_power() {
+    ensure_installed();
+    let mut state = fresh_state_with_player(70, 70);
+    give_player_relic(&mut state, RelicKind::Permafrost);
+    set_permafrost_counter(&mut state, 1);
+    let _ = dispatch_before_combat_start(&mut state);
+    assert_eq!(permafrost_counter(&state), 0);
+    let uid = push_card(&mut state, 84, crate::cards::CardType::Power);
+    let _ = dispatch_after_card_played(&mut state, &make_card_ctx(uid));
+    assert_eq!(permafrost_counter(&state), 1);
+    assert_eq!(state.player.block, PERMAFROST_BLOCK);
+    let _ = dispatch_after_card_played(&mut state, &make_card_ctx(uid));
+    assert_eq!(state.player.block, PERMAFROST_BLOCK);
 }
 
 // -----------------------------------------------------------------

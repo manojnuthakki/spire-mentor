@@ -1670,6 +1670,124 @@ mod tests {
         );
     }
 
+    /// Installed v0.107.1 Permafrost.cs: AfterRoomEntered re-arms only a
+    /// CombatRoom; AfterCardPlayed consumes the first Power. Rewards and
+    /// noncombat rooms retain it. Exercise both actual combat-end branches,
+    /// their run write-back, and the existing next-combat setup path.
+    #[test]
+    fn permafrost_retains_used_and_unused_latches_through_victory_and_death() {
+        use sts2_core::combat_loop::check_combat_end;
+        use sts2_core::runstate::{Room, RoomType};
+        use sts2_core::{RelicId, RelicKind};
+        crate::relics::dispatch::ensure_installed();
+        for used in [false, true] {
+            for won in [false, true] {
+                let mut rs = fresh_run();
+                rs.relics.push(RelicId::Permafrost);
+                let mut state = enter_combat(&rs, select_first(act1_normal_pool()));
+                let relic = state
+                    .relics
+                    .iter_mut()
+                    .find(|r| r.kind == RelicKind::Permafrost)
+                    .expect("owned");
+                // Activation itself is covered by the ordinary card-play
+                // regressions in relics::common; isolate the lifecycle here.
+                relic.counter = i32::from(used);
+                if won {
+                    for uid in state.enemy_uids.clone() {
+                        sts2_core::creature_by_id_mut(&mut state.creatures, uid.0)
+                            .expect("enemy")
+                            .current_hp = 0;
+                    }
+                } else {
+                    state.player.current_hp = 0;
+                    state.sync_creature_current_hp_from_player();
+                }
+                let _ = check_combat_end(&mut state);
+                assert!(state.is_over);
+                assert_eq!(state.player_won, won);
+                assert_eq!(permafrost_latch(&state), i32::from(used));
+                let _ = check_combat_end(&mut state);
+                exit_combat(&mut rs, &state);
+                assert_eq!(rs.relic_counters[&RelicId::Permafrost], i32::from(used));
+                if !won {
+                    continue;
+                }
+                for room in [RoomType::RestSite, RoomType::Shop, RoomType::Event] {
+                    rs.enter_room(Room::new(room));
+                    assert_eq!(rs.relic_counters[&RelicId::Permafrost], i32::from(used));
+                }
+                let next = enter_combat(&rs, select_first(act1_normal_pool()));
+                assert_eq!(permafrost_latch(&next), 0, "armed before first decision");
+                abandon_combat(&mut rs, &next);
+                assert_eq!(rs.relic_counters[&RelicId::Permafrost], 0);
+            }
+        }
+    }
+
+    fn permafrost_latch(state: &CombatState) -> i32 {
+        state
+            .relics
+            .iter()
+            .find(|r| r.kind == sts2_core::RelicKind::Permafrost)
+            .expect("owned")
+            .counter
+    }
+
+    #[test]
+    fn permafrost_event_combat_rearms_and_flushes_existing_run_counter() {
+        use sts2_core::events::{BattlewornDummySetting, EventCombatRequest, EventEncounter};
+        use sts2_core::RelicId;
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = fresh_run();
+        rs.relics.push(RelicId::Permafrost);
+        rs.relic_counters.insert(RelicId::Permafrost, 1);
+        let request = EventCombatRequest::resuming(
+            EventEncounter::BattlewornDummy(BattlewornDummySetting::Setting1),
+            sts2_core::events::EventId::BattlewornDummy,
+        );
+        let state = build_event_combat(&mut rs, &request);
+        assert_eq!(permafrost_latch(&state), 0);
+        abandon_combat(&mut rs, &state);
+        assert_eq!(rs.relic_counters[&RelicId::Permafrost], 0);
+    }
+
+    #[test]
+    fn permafrost_acquisition_starts_unused_and_removal_drops_old_latch() {
+        use sts2_core::RelicId;
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = fresh_run();
+        rs.obtain_relic(RelicId::Permafrost);
+        assert_eq!(
+            rs.relic_counters
+                .get(&RelicId::Permafrost)
+                .copied()
+                .unwrap_or(0),
+            0
+        );
+        let mut state = enter_combat(&rs, select_first(act1_normal_pool()));
+        assert_eq!(permafrost_latch(&state), 0);
+        state
+            .relics
+            .iter_mut()
+            .find(|r| r.kind == sts2_core::RelicKind::Permafrost)
+            .expect("owned")
+            .counter = 1;
+        abandon_combat(&mut rs, &state);
+        assert_eq!(rs.relic_counters[&RelicId::Permafrost], 1);
+        assert!(rs.lose_relic(RelicId::Permafrost));
+        rs.obtain_relic(RelicId::Permafrost);
+        assert_eq!(
+            rs.relic_counters
+                .get(&RelicId::Permafrost)
+                .copied()
+                .unwrap_or(0),
+            0
+        );
+        let next = enter_combat(&rs, select_first(act1_normal_pool()));
+        assert_eq!(permafrost_latch(&next), 0);
+    }
+
     #[test]
     fn enter_combat_seeds_potion_belt_from_run_state() {
         // Bead `sts2-rs-01o`: potions held at the run level are seeded

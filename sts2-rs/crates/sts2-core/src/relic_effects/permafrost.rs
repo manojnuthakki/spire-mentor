@@ -5,8 +5,11 @@ use super::prelude::*;
 /// not _activated_this_combat: _activated_this_combat = True;
 /// owner.gain_block(6, unpowered=True)`
 /// (`sts2-rl-agent@01c094d:sts2_env/relics/common.py::Permafrost`).
-/// Per-combat armed flag lives in `Relic.counter` (0 = armed,
-/// 1 = consumed); `after_combat_end` resets to 0.
+/// The used latch lives in `Relic.counter` (0 = armed, 1 = consumed).
+/// Installed v0.107.1 Permafrost.cs resets it in AfterRoomEntered only
+/// for a CombatRoom, retaining it through rewards, noncombat rooms and
+/// death. The existing combat-setup bus re-arms it before the first
+/// decision, including event-nested combats; combat end must retain it.
 pub(crate) fn on_after_card_played_permafrost(
     state: &mut CombatState,
     ctx: &CardEventCtx,
@@ -35,9 +38,8 @@ pub(crate) fn on_after_card_played_permafrost(
     EffectResult::Resolved
 }
 
-/// `Permafrost.after_combat_end` — `_activated_this_combat = False`.
-/// Re-arms the first-power-per-combat flag for the next encounter.
-pub(crate) fn on_after_combat_end_permafrost(state: &mut CombatState) -> EffectResult {
+/// Represent the CombatRoom-entry reset on the existing setup path.
+pub(crate) fn on_before_combat_start_permafrost(state: &mut CombatState) -> EffectResult {
     let Some(r) = permafrost_relic_mut(state) else {
         return EffectResult::NotImplemented;
     };
@@ -50,9 +52,8 @@ pub(crate) fn install() {
         RelicId::Permafrost,
         on_after_card_played_permafrost as AfterCardPlayedFn,
     );
-    register_owned_after_combat_end(
+    register_before_combat_start(
         RelicId::Permafrost,
-        crate::RelicKind::Permafrost,
-        on_after_combat_end_permafrost as AfterCombatEndFn,
+        on_before_combat_start_permafrost as BeforeCombatStartFn,
     );
 }
