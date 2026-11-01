@@ -1414,7 +1414,8 @@ fn fire_after_power_applied_with(
 /// resulting [`Power`] instance. Mirrors [`apply_power_to_creature`]
 /// exactly except that the `applier` field is set on the new instance
 /// (or **overwritten latest-wins** when stacking into an existing
-/// instance of the same `kind`). No-op when `amount <= 0` or the
+/// instance of the same `kind`, except Hex keeps its original caster).
+/// No-op when `amount <= 0` or the
 /// target is dead/missing — matches the base helper's contract.
 ///
 /// Bead `sts2-rs-6ynt.6.7`: dedicated apply-with-applier surface so
@@ -1507,7 +1508,9 @@ pub fn apply_power_to_creature_with_applier(
     // Perf 2026-07-04: same O(1) absence gate as
     // `existing_power_uid_unioned` — a `present_kinds` miss proves the
     // merge scan finds nothing.
-    let existing_uid = if state.powers.present_kinds().contains(kind) {
+    let existing_uid = if kind == PowerKind::Hex {
+        existing_power_uid_unioned(state, creature_idx, target_uid, kind)
+    } else if state.powers.present_kinds().contains(kind) {
         state.creatures[creature_idx]
             .powers
             .iter()
@@ -1525,7 +1528,11 @@ pub fn apply_power_to_creature_with_applier(
         let mut remove_pid = None;
         if let Some(pow) = state.powers.get_mut_by_id(uid.0) {
             pow.amount = pow.amount.saturating_add(amount);
-            pow.applier = applier;
+            // Hex's death cleanup belongs to the original instance's caster.
+            // DLL PowerCmd.ModifyAmount never changes that instance's Applier.
+            if kind != PowerKind::Hex {
+                pow.applier = applier;
+            }
             // q6bix F-D: remove-at-0 mirror (see `apply_power_to_creature`).
             if pow.amount == 0 {
                 remove_pid = Some(uid.0);
@@ -2558,10 +2565,10 @@ pub fn spawn_wither_into_pile(state: &mut CombatState, pile: PileKind) -> CardUi
 /// card lands in any combat pile, regardless of which pile. The
 /// `spawn_card_into_*` helpers only ever materialize brand-new cards
 /// (`oldPile == null`), so the gate reduces to "is this a combat pile".
-/// Exhaust is not a combat pile for this purpose in C# (cards routed
-/// straight to Exhaust on creation are rare and not card-entered events),
-/// so it is excluded — matching the prior `spawn_card_into_hand`-only
-/// coverage plus Draw/Discard. Bead `sts2-rs-11ssi`: Regalite (+2 Block
+/// The existing funnel omits Exhaust for its other buses. Installed-DLL
+/// PileTypeExtensions.IsCombatPile includes Exhaust; Hex's scoped leg below
+/// covers that edge without changing unrelated generation hooks.
+/// Bead `sts2-rs-11ssi`: Regalite (+2 Block
 /// per owner card entering combat) and HungerPower were missing the
 /// Strangler-spawned status card because pile spawns bypassed this bus.
 fn fire_after_card_entered_combat(
@@ -2571,6 +2578,11 @@ fn fire_after_card_entered_combat(
     added_by_player: bool,
 ) {
     if matches!(pile, PileKind::Exhaust) {
+        if state.player_power_amount(PowerKind::Hex) > 0 {
+            crate::monster_power_effects::hex_player_card_entry(state, uid);
+        } else {
+            crate::monster_power_effects::hex_after_card_entered_combat(state, uid);
+        }
         return;
     }
     let _ = crate::relic_effects::dispatch_after_card_entered_combat(state, uid, added_by_player);
@@ -4612,6 +4624,12 @@ pub fn generate_free_attack_in_hand(state: &mut CombatState) {
     // directly pushing the sampled uid to hand.
     set_card_var(state, new_uid, crate::cards::VarKey::FreeThisTurn, 1);
     state.player.hand.push(new_uid);
+    // Crossbow's installed-DLL AddGeneratedCardsToCombat fires entry after
+    // insertion. Keep this correction Hex-specific; unrelated generation
+    // buses and the existing hand-cap behavior remain separate work.
+    if state.player_power_amount(PowerKind::Hex) > 0 {
+        crate::monster_power_effects::hex_player_card_entry(state, new_uid);
+    }
 }
 
 /// Content-side sampler signature for character-pool ethereal-only

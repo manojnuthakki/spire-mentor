@@ -109,6 +109,10 @@ pub fn dispatch_after_applied_for_power(
         ringing_after_applied(state);
         return EffectResult::Resolved;
     }
+    if kind == PowerKind::Hex && state.player.creature_uid == Some(owner) {
+        hex_after_applied(state);
+        return EffectResult::Resolved;
+    }
     if is_empty_after_applied_power() {
         return EffectResult::NotImplemented;
     }
@@ -192,27 +196,38 @@ pub fn dispatch_after_card_entered_combat_on_monster_powers(
     state: &mut CombatState,
     card_uid: CardUid,
 ) -> EffectResult {
-    // C# `SmoggyPower.AfterCardEnteredCombat` (`SmoggyPower.cs:39-45`) rides
-    // this same hook, but its listener sits on the PLAYER's mirror+legacy power
-    // union, which the registry walk below cannot see — see the SmoggyPower
-    // section at the bottom of this module for why. Run it as a dedicated leg
-    // BEFORE the empty-registry early-out so every call site of this bus (the
-    // `fire_after_card_entered_combat` bundle plus the four content sites that
-    // inline it) covers Smoggy without a per-site edit.
-    let smoggy = smoggy_after_card_entered_combat(state, card_uid);
-    // `TangledPower.AfterCardEnteredCombat` sits on the player too (same leg).
-    let tangled = tangled_after_card_entered_combat(state, card_uid);
-    let ringing = if state.player_power_amount(PowerKind::Ringing) > 0
-        && ring_if_unafflicted(state, card_uid)
-    {
-        EffectResult::Resolved
+    let player_legs = if state.player_power_amount(PowerKind::Hex) > 0 {
+        // Hex competes for the same single affliction slot as these existing
+        // player powers. Use their installed listener order, not a new-card
+        // Hex override that would steal an earlier parent's affliction.
+        hex_player_card_entry(state, card_uid)
     } else {
-        EffectResult::NotImplemented
-    };
-    let player_legs = if [smoggy, tangled, ringing].contains(&EffectResult::Resolved) {
-        EffectResult::Resolved
-    } else {
-        EffectResult::NotImplemented
+        // C# `SmoggyPower.AfterCardEnteredCombat` (`SmoggyPower.cs:39-45`) rides
+        // this same hook, but its listener sits on the PLAYER's mirror+legacy power
+        // union, which the registry walk below cannot see — see the SmoggyPower
+        // section at the bottom of this module for why. Run it as a dedicated leg
+        // BEFORE the empty-registry early-out so every call site of this bus (the
+        // `fire_after_card_entered_combat` bundle plus the four content sites that
+        // inline it) covers Smoggy without a per-site edit.
+        let smoggy = smoggy_after_card_entered_combat(state, card_uid);
+        // `TangledPower.AfterCardEnteredCombat` sits on the player too (same leg).
+        let tangled = tangled_after_card_entered_combat(state, card_uid);
+        let ringing = if state.player_power_amount(PowerKind::Ringing) > 0
+            && ring_if_unafflicted(state, card_uid)
+        {
+            EffectResult::Resolved
+        } else {
+            EffectResult::NotImplemented
+        };
+        let resolved = [smoggy, tangled, ringing].contains(&EffectResult::Resolved);
+        // Hexed's own card-entry hook runs after player powers. A stale clone
+        // initially blocks those powers, then loses Hexed; do not reafflict it.
+        let hexed = hex_after_card_entered_combat(state, card_uid);
+        if resolved || hexed == EffectResult::Resolved {
+            EffectResult::Resolved
+        } else {
+            EffectResult::NotImplemented
+        }
     };
     if is_empty_after_card_entered_combat_power() {
         return player_legs;
@@ -319,6 +334,10 @@ pub fn dispatch_after_removed_for_power(
     old_owner: CreatureUid,
     kind: PowerKind,
 ) -> EffectResult {
+    if kind == PowerKind::Hex && state.player.creature_uid == Some(old_owner) {
+        hex_after_removed(state);
+        return EffectResult::Resolved;
+    }
     if is_empty_after_removed_power() {
         return EffectResult::NotImplemented;
     }
@@ -466,6 +485,132 @@ fn all_player_card_uids(state: &CombatState) -> smallvec::SmallVec<[CardUid; 32]
     // 5619). Bead follow-up to `sts2-rs-mw4fy`.
     out.extend(state.player.play.iter().copied());
     out
+}
+
+// Installed DLL HexPower/Hexed. Hex owns no keyword bit: TryModifyKeywordsInCombat
+// grants Ethereal only while Hex is installed and the current affliction is Hexed.
+// Thus cleanup uses the existing single affliction slot and never strips keywords.
+fn hex_afflict_if_unafflicted(state: &mut CombatState, uid: CardUid, amount: i32) {
+    if let Some(card) = state.cards.get_mut(uid.get() as usize - 1) {
+        if card.affliction.is_none() {
+            let _ = card.set_affliction(crate::card_afflictions::CardAffliction::new(
+                crate::card_afflictions::CardAfflictionKind::Hexed,
+                amount,
+            ));
+        }
+    }
+}
+
+// PlayerCombatState.AllPiles uses Hand, Draw, Discard, Exhaust, Play. Keep
+// Hex's authoritative traversal without changing the other handlers' order.
+fn hex_card_uids(state: &CombatState) -> smallvec::SmallVec<[CardUid; 32]> {
+    state
+        .player
+        .hand
+        .iter()
+        .chain(&state.player.draw)
+        .chain(&state.player.discard)
+        .chain(&state.player.exhaust)
+        .chain(&state.player.play)
+        .copied()
+        .collect()
+}
+
+/// HexPower.AfterApplied, shared by the mirror-Creature and legacy player paths.
+/// Reapplication changes only the power amount; callers run this on fresh install.
+pub fn hex_after_applied(state: &mut CombatState) {
+    let amount = state.player_power_amount(PowerKind::Hex);
+    if amount > 0 {
+        for uid in hex_card_uids(state) {
+            hex_afflict_if_unafflicted(state, uid, amount);
+        }
+    }
+}
+
+/// HexPower.AfterRemoved clears only current Hexed in AllCards, including Play.
+pub(crate) fn hex_after_removed(state: &mut CombatState) {
+    for uid in hex_card_uids(state) {
+        if let Some(card) = state.cards.get_mut(uid.get() as usize - 1) {
+            if card
+                .affliction
+                .is_some_and(|a| a.kind == crate::card_afflictions::CardAfflictionKind::Hexed)
+            {
+                card.clear_affliction();
+            }
+        }
+    }
+}
+
+/// Removal paths call this before unlinking, while owner identity is available.
+/// It deliberately does not dispatch unrelated death/removal callbacks.
+pub(crate) fn hex_before_power_unlinked(state: &mut CombatState, uid: crate::PowerUid) {
+    if state.player_power_uids().contains(&uid)
+        && state
+            .powers
+            .get_by_id(uid.0)
+            .is_some_and(|p| p.kind == PowerKind::Hex)
+    {
+        hex_after_removed(state);
+    }
+}
+
+/// HexPower's owner-card entry and Hexed's own stale-entry cleanup. Moving,
+/// drawing and retaining existing cards never call this entry hook.
+pub(crate) fn hex_after_card_entered_combat(state: &mut CombatState, uid: CardUid) -> EffectResult {
+    let before = state
+        .cards
+        .get(uid.get() as usize - 1)
+        .and_then(|c| c.affliction);
+    let amount = state.player_power_amount(PowerKind::Hex);
+    if amount > 0 {
+        hex_afflict_if_unafflicted(state, uid, amount);
+    } else if let Some(card) = state.cards.get_mut(uid.get() as usize - 1) {
+        if card
+            .affliction
+            .is_some_and(|a| a.kind == crate::card_afflictions::CardAfflictionKind::Hexed)
+        {
+            card.clear_affliction();
+        }
+    }
+    if before
+        == state
+            .cards
+            .get(uid.get() as usize - 1)
+            .and_then(|c| c.affliction)
+    {
+        EffectResult::NotImplemented
+    } else {
+        EffectResult::Resolved
+    }
+}
+
+/// Existing player affliction entry legs in listener order, scoped to entry
+/// while Hex is active. Also used for Hex's Exhaust edge, without enabling
+/// unrelated relic/monster Exhaust buses that the existing funnel omits.
+pub fn hex_player_card_entry(state: &mut CombatState, uid: CardUid) -> EffectResult {
+    let kinds: smallvec::SmallVec<[PowerKind; 4]> = state
+        .player_power_uids()
+        .into_iter()
+        .filter_map(|u| state.powers.get_by_id(u.0).map(|p| p.kind))
+        .collect();
+    for kind in kinds {
+        match kind {
+            PowerKind::Hex => {
+                hex_after_card_entered_combat(state, uid);
+            }
+            PowerKind::Smoggy => {
+                smoggy_after_card_entered_combat(state, uid);
+            }
+            PowerKind::Tangled => {
+                tangled_after_card_entered_combat(state, uid);
+            }
+            PowerKind::Ringing => {
+                ring_if_unafflicted(state, uid);
+            }
+            _ => {}
+        }
+    }
+    EffectResult::Resolved
 }
 
 // ---------------------------------------------------------------------------
@@ -1209,6 +1354,370 @@ mod tests {
         state.cards[other.0.get() as usize - 1].affliction =
             Some(CardAffliction::new(CardAfflictionKind::Smog, 2));
         state
+    }
+
+    // Installed DLL HexPower/Hexed: the affliction owns no keyword bit. Hex
+    // supplies Ethereal dynamically, and only to cards actually carrying Hexed.
+    fn apply_test_hex(state: &mut CombatState, applier: Option<CreatureUid>, amount: i32) {
+        let owner = state.player.creature_uid.unwrap();
+        crate::card_effects::apply_power_to_creature_with_applier(
+            state,
+            owner,
+            PowerKind::Hex,
+            amount,
+            applier,
+        );
+    }
+
+    #[test]
+    fn hex_application_covers_all_five_piles_without_replacing_afflictions() {
+        let mut state = ringing_fixture();
+        // A removed arena card is not in PlayerCombatState.AllCards.
+        push_card(&mut state, 7, CardType::Skill);
+        state.player.draw.retain(|u| u.get() != 7);
+        state.cards[3].keyword_override = Some(crate::cards::KeywordOverride::ETHEREAL);
+        let rng = (state.rng.clone(), state.run_rng.clone());
+        apply_test_hex(&mut state, None, 2);
+        for card in &state.cards[..5] {
+            assert_eq!(
+                card.affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Hexed, 2))
+            );
+        }
+        assert_eq!(
+            state.cards[5].affliction,
+            Some(CardAffliction::new(CardAfflictionKind::Smog, 2))
+        );
+        assert!(state.cards[6].affliction.is_none());
+        assert_eq!(
+            state.cards[3].keyword_override,
+            Some(crate::cards::KeywordOverride::ETHEREAL)
+        );
+        assert_eq!((state.rng, state.run_rng), rng);
+    }
+
+    #[test]
+    fn hex_reapplication_preserves_original_applier_and_existing_card_amounts() {
+        for no_applier in [false, true] {
+            let mut state = ringing_fixture();
+            let first = state.spawn_enemy(crate::MonsterKind::Nibbit);
+            let second = state.spawn_enemy(crate::MonsterKind::Nibbit);
+            let original = (!no_applier).then_some(first);
+            apply_test_hex(&mut state, original, 2);
+            state.cards[0].clear_affliction();
+            apply_test_hex(&mut state, Some(second), 2);
+            let power = state
+                .powers
+                .iter()
+                .find(|p| p.kind == PowerKind::Hex)
+                .unwrap();
+            assert_eq!((power.amount, power.applier), (4, original));
+            assert!(
+                state.cards[0].affliction.is_none(),
+                "repeat does not run AfterApplied"
+            );
+            assert_eq!(state.cards[1].affliction.unwrap().stacks, 2);
+            let fresh = crate::card_effects::spawn_card_into_pile(
+                &mut state,
+                Card::pod_defaults(),
+                crate::card_effects::PileKind::Discard,
+            );
+            assert_eq!(
+                state.cards[fresh.get() as usize - 1].affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Hexed, 4))
+            );
+        }
+    }
+
+    #[test]
+    fn hex_new_cards_and_stale_clones_use_existing_entry_paths_in_every_pile() {
+        use crate::card_effects::PileKind;
+        for active in [false, true] {
+            for pile in [
+                PileKind::Hand,
+                PileKind::Draw,
+                PileKind::Discard,
+                PileKind::Exhaust,
+            ] {
+                let mut state = ringing_fixture();
+                if active {
+                    apply_test_hex(&mut state, None, 2);
+                }
+                for prior in [
+                    None,
+                    Some(CardAffliction::new(CardAfflictionKind::Hexed, 7)),
+                    Some(CardAffliction::new(CardAfflictionKind::Devoured, 3)),
+                ] {
+                    let mut card = Card::pod_defaults();
+                    card.keyword_override = Some(crate::cards::KeywordOverride::ETHEREAL);
+                    card.affliction = prior;
+                    let uid = crate::card_effects::spawn_card_into_pile(&mut state, card, pile);
+                    let expected = match prior {
+                        None if active => Some(CardAffliction::new(CardAfflictionKind::Hexed, 2)),
+                        Some(a) if a.kind == CardAfflictionKind::Hexed && !active => None,
+                        other => other,
+                    };
+                    let card = &state.cards[uid.get() as usize - 1];
+                    assert_eq!(card.affliction, expected, "active={active} pile={pile:?}");
+                    assert_eq!(
+                        card.keyword_override,
+                        Some(crate::cards::KeywordOverride::ETHEREAL)
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hex_keyword_requires_current_hexed_and_keeps_native_ethereal() {
+        let mut state = ringing_fixture();
+        apply_test_hex(&mut state, None, 2);
+        state.cards[0].affliction = None;
+        state.cards[2].keyword_override = Some(crate::cards::KeywordOverride::ETHEREAL);
+        assert!(!crate::combat_loop::card_is_ethereal_at_play(
+            &state,
+            &state.cards[0]
+        ));
+        assert!(crate::combat_loop::card_is_ethereal_at_play(
+            &state,
+            &state.cards[1]
+        ));
+        assert!(
+            !crate::combat_loop::card_is_ethereal_at_play(&state, &state.cards[5]),
+            "Smog is not Hexed"
+        );
+        let uid = state
+            .player_power_uids()
+            .into_iter()
+            .find(|u| state.powers.get_by_id(u.0).unwrap().kind == PowerKind::Hex)
+            .unwrap();
+        crate::hooks::apply_effects(
+            &mut state,
+            &[crate::hooks::Effect::RemovePower {
+                listener: crate::hooks::ListenerRef::Power(uid),
+            }],
+        );
+        assert!(crate::combat_loop::card_is_ethereal_at_play(
+            &state,
+            &state.cards[2]
+        ));
+        assert!(!crate::combat_loop::card_is_ethereal_at_play(
+            &state,
+            &state.cards[1]
+        ));
+    }
+
+    #[test]
+    fn hex_new_card_parent_ownership_follows_player_power_order_including_exhaust() {
+        use crate::card_effects::PileKind;
+        for parent in [PowerKind::Ringing, PowerKind::Tangled, PowerKind::Smoggy] {
+            for hex_first in [false, true] {
+                for pile in [PileKind::Hand, PileKind::Exhaust] {
+                    let mut state = ringing_fixture();
+                    let owner = state.player.creature_uid.unwrap();
+                    state.player.cards_played_this_turn[CardType::Skill.index()] = 1;
+                    if hex_first {
+                        apply_test_hex(&mut state, None, 2);
+                    }
+                    crate::card_effects::apply_power_to_creature(&mut state, owner, parent, 1);
+                    if !hex_first {
+                        apply_test_hex(&mut state, None, 2);
+                    }
+                    let mut card = Card::pod_defaults();
+                    card.card_type = if parent == PowerKind::Tangled {
+                        CardType::Attack
+                    } else {
+                        CardType::Skill
+                    };
+                    let uid = crate::card_effects::spawn_card_into_pile(&mut state, card, pile);
+                    let expected = if hex_first {
+                        CardAfflictionKind::Hexed
+                    } else {
+                        match parent {
+                            PowerKind::Ringing => CardAfflictionKind::Ringing,
+                            PowerKind::Tangled => CardAfflictionKind::Entangled,
+                            _ => CardAfflictionKind::Smog,
+                        }
+                    };
+                    assert_eq!(
+                        affliction_of(&state, uid),
+                        Some(expected),
+                        "{parent:?} {hex_first} {pile:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hex_actual_clone_effect_preserves_amount_and_clears_stale_entering_copies() {
+        use crate::hooks::{Effect, ListenerRef};
+        let mut state = ringing_fixture();
+        apply_test_hex(&mut state, None, 2);
+        state.cards[0].keyword_override = Some(crate::cards::KeywordOverride::ETHEREAL);
+        apply_test_hex(&mut state, None, 2);
+        let source = state.cards[0].uid;
+        crate::hooks::apply_effects(
+            &mut state,
+            &[Effect::CloneCardToHand {
+                card_uid: source,
+                count: 2,
+            }],
+        );
+        assert_eq!(state.cards.len(), 8);
+        for card in &state.cards[6..] {
+            assert_eq!(
+                card.affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Hexed, 2)),
+                "an inherited marker is not refreshed to current power amount4"
+            );
+            assert_eq!(
+                card.keyword_override,
+                Some(crate::cards::KeywordOverride::ETHEREAL)
+            );
+        }
+        let uid = state
+            .player_power_uids()
+            .into_iter()
+            .find(|u| state.powers.get_by_id(u.0).unwrap().kind == PowerKind::Hex)
+            .unwrap();
+        crate::hooks::apply_effects(
+            &mut state,
+            &[Effect::RemovePower {
+                listener: ListenerRef::Power(uid),
+            }],
+        );
+        assert!(state.cards[6..].iter().all(|c| c.affliction.is_none()));
+        // An imported stale template blocks other afflictions until its own
+        // newly-entering copies run Hexed.AfterCardEnteredCombat.
+        state.cards[0].affliction = Some(CardAffliction::new(CardAfflictionKind::Hexed, 7));
+        crate::hooks::apply_effects(
+            &mut state,
+            &[Effect::CloneCardToHand {
+                card_uid: source,
+                count: 2,
+            }],
+        );
+        assert_eq!(
+            state.cards[0].affliction.unwrap().stacks,
+            7,
+            "source did not enter again"
+        );
+        for card in &state.cards[8..] {
+            assert!(card.affliction.is_none());
+            assert_eq!(
+                card.keyword_override,
+                Some(crate::cards::KeywordOverride::ETHEREAL)
+            );
+        }
+    }
+
+    #[test]
+    fn hex_explicit_removal_and_amount_expiry_clear_only_hexed() {
+        use crate::hooks::{CreatureRef, Effect, ListenerRef};
+        for path in 0..5 {
+            let mut state = ringing_fixture();
+            apply_test_hex(&mut state, None, 2);
+            // Imported/persistent-mirror markers isolate removal from the
+            // separately tested application omission.
+            for card in &mut state.cards[..5] {
+                card.affliction = Some(CardAffliction::new(CardAfflictionKind::Hexed, 2));
+            }
+            state.cards[3].keyword_override = Some(crate::cards::KeywordOverride::ETHEREAL);
+            let uid = state
+                .player_power_uids()
+                .into_iter()
+                .find(|u| state.powers.get_by_id(u.0).unwrap().kind == PowerKind::Hex)
+                .unwrap();
+            let listener = ListenerRef::Power(uid);
+            let effect = match path {
+                0 => Effect::RemovePower { listener },
+                1 => Effect::DecrementPowerAmount {
+                    listener,
+                    delta: -1,
+                },
+                2 => Effect::TickPowerOrSkip {
+                    listener,
+                    delta: -1,
+                },
+                3 => Effect::ConsumePowerStack { listener },
+                _ => Effect::ApplyPower {
+                    target: CreatureRef::Player,
+                    kind: PowerKind::Hex,
+                    amount: -3,
+                    applier: None,
+                },
+            };
+            crate::hooks::apply_effects(&mut state, &[effect]);
+            if (1..=3).contains(&path) {
+                assert_eq!(state.player_power_amount(PowerKind::Hex), 1);
+                assert_eq!(
+                    state.cards[1].affliction.unwrap().stacks,
+                    2,
+                    "no affliction countdown"
+                );
+                crate::hooks::apply_effects(&mut state, &[effect]);
+            }
+            assert_eq!(state.player_power_amount(PowerKind::Hex), 0, "path={path}");
+            assert!(
+                state.cards[..5].iter().all(|c| c.affliction.is_none()),
+                "path={path}"
+            );
+            assert_eq!(
+                state.cards[5].affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Smog, 2))
+            );
+            assert_eq!(
+                state.cards[3].keyword_override,
+                Some(crate::cards::KeywordOverride::ETHEREAL)
+            );
+            apply_test_hex(&mut state, None, 2);
+            assert_eq!(
+                state.cards[1].affliction.unwrap().stacks,
+                2,
+                "fresh reapplication after removal"
+            );
+        }
+    }
+
+    #[test]
+    fn hex_caster_death_clears_markers_only_for_its_actual_applier() {
+        use crate::hooks::{CreatureRef, ValueProps};
+        for original in [None, Some(false), Some(true)] {
+            let mut state = ringing_fixture();
+            let first = state.spawn_enemy(crate::MonsterKind::Nibbit);
+            let other = state.spawn_enemy(crate::MonsterKind::Nibbit);
+            // A survivor keeps this a midfight cleanup, not a victory screen.
+            state.spawn_enemy(crate::MonsterKind::Nibbit);
+            let applier = original.map(|is_first| if is_first { first } else { other });
+            apply_test_hex(&mut state, applier, 2);
+            for card in &mut state.cards[..5] {
+                card.affliction = Some(CardAffliction::new(CardAfflictionKind::Hexed, 2));
+            }
+            state.cards[3].keyword_override = Some(crate::cards::KeywordOverride::ETHEREAL);
+            crate::damage::apply_damage(
+                &mut state,
+                CreatureRef::Player,
+                first,
+                9999,
+                ValueProps::UNPOWERED,
+                None,
+            );
+            let removed = original == Some(true);
+            assert_eq!(
+                state.player_power_amount(PowerKind::Hex),
+                if removed { 0 } else { 2 }
+            );
+            assert_eq!(state.cards[1].affliction.is_none(), removed);
+            assert_eq!(
+                state.cards[5].affliction.unwrap().kind,
+                CardAfflictionKind::Smog
+            );
+            assert_eq!(
+                state.cards[3].keyword_override,
+                Some(crate::cards::KeywordOverride::ETHEREAL)
+            );
+        }
     }
 
     fn apply_ringing(state: &mut CombatState) {

@@ -1422,7 +1422,8 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                                 // C#=0 Rust=1). A non-zero (negative) result
                                 // persists — Strength can legitimately go down.
                                 if pow.amount == 0
-                                    || (kind == PowerKind::VitalSpark && pow.amount < 0)
+                                    || (matches!(kind, PowerKind::VitalSpark | PowerKind::Hex)
+                                        && pow.amount < 0)
                                 {
                                     remove_pid = Some(power_uid.0);
                                 }
@@ -1470,6 +1471,10 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                             }
                         }
                         if let Some(pid) = remove_pid {
+                            crate::monster_power_effects::hex_before_power_unlinked(
+                                state,
+                                PowerUid(pid),
+                            );
                             state.powers.retain(|p| p.id != pid);
                             state.player.powers.retain(|u| u.0 != pid);
                             for c in &mut state.creatures {
@@ -1527,6 +1532,7 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                     }
                 }
                 if let Some(pid) = remove_pid {
+                    crate::monster_power_effects::hex_before_power_unlinked(state, PowerUid(pid));
                     state.powers.retain(|p| p.id != pid);
                     state.player.powers.retain(|u| u.0 != pid);
                     for c in &mut state.creatures {
@@ -1544,6 +1550,7 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
             // a small list either way.
             if let ListenerRef::Power(uid) = listener {
                 let pid = uid.0;
+                crate::monster_power_effects::hex_before_power_unlinked(state, uid);
                 let was_tangled = state
                     .powers
                     .get_by_id(pid)
@@ -1628,6 +1635,7 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                     }
                 }
                 if let Some(pid) = remove_pid {
+                    crate::monster_power_effects::hex_before_power_unlinked(state, PowerUid(pid));
                     state.powers.retain(|p| p.id != pid);
                     state.player.powers.retain(|u| u.0 != pid);
                     for c in &mut state.creatures {
@@ -1668,6 +1676,7 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                     }
                 }
                 if let Some(pid) = remove_pid {
+                    crate::monster_power_effects::hex_before_power_unlinked(state, PowerUid(pid));
                     state.powers.retain(|p| p.id != pid);
                     state.player.powers.retain(|u| u.0 != pid);
                     for c in &mut state.creatures {

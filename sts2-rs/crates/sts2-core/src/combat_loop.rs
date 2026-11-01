@@ -2487,24 +2487,10 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
     // exclusion is structurally empty here. Add the cross-check at the
     // same time as registering an ETHEREAL+turn-end-in-hand card.
     //
-    // Bead `sts2-rs-l7k3d`: HexPower (C# `HexPower.AfterApplied`) afflicts
-    // every player card with `Hexed`, which makes the card Ethereal. We
-    // model the NET OBSERVABLE rather than per-card afflictions (per the
-    // Tangled/Entangled precedent in `hooks.rs` — per-card afflictions are
-    // not parity-tracked): while the player has an active `Hex` stack,
-    // EVERY hand card is treated as Ethereal and expelled here at turn end.
-    // `HexPower` is a Single-stack Debuff that persists until the applier
-    // dies, so the deck progressively exhausts each turn the player ends
-    // with cards in hand. Source-of-truth: `HexPower.cs`.
-    // Perf 2026-07-04: `present_kinds` superset gate — no live Hex anywhere
-    // proves the uid walk below could never match (bit-identical skip).
-    let player_has_hex = state.powers.present_kinds().contains(crate::PowerKind::Hex)
-        && state.player.powers.iter().any(|puid| {
-            state
-                .powers
-                .get_by_id(puid.0)
-                .is_some_and(|p| p.kind == crate::PowerKind::Hex && p.amount > 0)
-        });
+    // Installed DLL HexPower.TryModifyKeywordsInCombat: only current Hexed
+    // cards gain Ethereal. Native/independent Ethereal remains independent;
+    // this one sweep resolves each card once through the existing exhaust bus.
+    let player_has_hex = state.player_power_amount(crate::PowerKind::Hex) > 0;
 
     // Collect-then-mutate avoids the borrow conflict between iterating
     // `state.player.hand` and mutating `state.player` via `move_card`.
@@ -2527,7 +2513,10 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
                 // falling back to the CardId registry.
                 crate::card_effects::card_ethereal_inst(c)
                     || c.combat_var(crate::cards::VarKey::EtherealThisCombat) != 0
-                    || player_has_hex
+                    || (player_has_hex
+                        && c.affliction.is_some_and(|a| {
+                            a.kind == crate::card_afflictions::CardAfflictionKind::Hexed
+                        }))
             })
         })
         .collect();
@@ -7078,15 +7067,18 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
 /// order is unchanged from the former inline body, so driving a surfaced
 /// choice first-legal reproduces the prior behavior byte-for-byte.
 /// Play-time Ethereal predicate for a card being played: its static/override
-/// keyword, the per-instance `EtherealThisCombat` flag, OR the player being
-/// Hexed (C# `HexPower.TryModifyKeywordsInCombat` grants Ethereal to every card
-/// while Hex is active). Shared by the manual (`play_card`) and auto-play
+/// keyword, the per-instance `EtherealThisCombat` flag, or current Hexed while
+/// the player has Hex (installed DLL HexPower.TryModifyKeywordsInCombat).
+/// Shared by the manual (`play_card`) and auto-play
 /// (`finish_auto_played_card`) SpiritOfAsh gate so both agree with the
 /// end-of-turn ethereal expel. Reads the Hex stack off the mirror+legacy union.
 pub fn card_is_ethereal_at_play(state: &CombatState, card: &crate::cards::Card) -> bool {
     crate::card_effects::card_ethereal_inst(card)
         || card.combat_var(crate::cards::VarKey::EtherealThisCombat) != 0
-        || state.player_power_amount(crate::PowerKind::Hex) > 0
+        || (card
+            .affliction
+            .is_some_and(|a| a.kind == crate::card_afflictions::CardAfflictionKind::Hexed)
+            && state.player_power_amount(crate::PowerKind::Hex) > 0)
 }
 
 /// Does a live `ReboundPower` redirect this play's Discard-bound result to the
@@ -13208,10 +13200,8 @@ mod tests {
     }
 
     /// Bead `sts2-rs-l7k3d`: while the player has an active `HexPower`
-    /// stack, the end-of-turn ethereal sweep treats EVERY hand card as
-    /// ethereal — non-ethereal cards expel to exhaust instead of flushing
-    /// to discard. Models the C# `HexPower` net observable (Hexed → all
-    /// cards Ethereal). Contrast with `end_turn_phase_two_flushes_hand_to_discard`,
+    /// stack and actual Hexed cards, the end-of-turn ethereal sweep expels
+    /// them to exhaust. Contrast with `end_turn_phase_two_flushes_hand_to_discard`,
     /// where the same non-ethereal cards flush to discard absent Hex.
     #[test]
     fn end_turn_phase_two_hex_expels_all_hand_cards_to_exhaust() {
@@ -13260,6 +13250,10 @@ mod tests {
         });
         state.player.powers.push(crate::PowerUid(pow_uid));
 
+        // The setup above imports a power directly, so apply its authoritative
+        // card state explicitly (the ordinary application path does this).
+        crate::monster_power_effects::hex_after_applied(&mut state);
+
         let result = end_player_turn_phase_two(&mut state);
 
         assert_eq!(result, StepResult::Advanced);
@@ -13273,6 +13267,60 @@ mod tests {
             state.player.discard.len(),
             0,
             "Hexed cards must NOT flush to discard"
+        );
+    }
+
+    #[test]
+    fn hex_ethereal_sweep_preserves_other_afflictions_and_resolves_each_card_once() {
+        use crate::card_afflictions::{CardAffliction, CardAfflictionKind};
+        let mut state = state_for_end_turn_phase_two(3);
+        state.player.current_hp = 80;
+        for n in 1..=3 {
+            let mut card = crate::cards::Card::pod_defaults();
+            card.uid = CardUid::new(n).unwrap();
+            state.cards.push(card);
+        }
+        let id = std::num::NonZeroU32::new(100).unwrap();
+        state.powers.push(crate::Power {
+            id,
+            kind: crate::PowerKind::Hex,
+            amount: 2,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state.player.powers.push(crate::PowerUid(id));
+        state.cards[0].affliction = Some(CardAffliction::new(CardAfflictionKind::Hexed, 2));
+        state.cards[1].affliction = Some(CardAffliction::new(CardAfflictionKind::Smog, 1));
+        state.cards[2].affliction = Some(CardAffliction::new(CardAfflictionKind::Hexed, 2));
+        state.cards[2].keyword_override = Some(crate::cards::KeywordOverride::ETHEREAL);
+        let result = end_player_turn_phase_two(&mut state);
+        assert_eq!(result, StepResult::Advanced);
+        assert_eq!(
+            state
+                .player
+                .exhaust
+                .iter()
+                .map(|u| u.get())
+                .collect::<Vec<_>>(),
+            vec![1, 3]
+        );
+        assert_eq!(
+            state
+                .player
+                .discard
+                .iter()
+                .map(|u| u.get())
+                .collect::<Vec<_>>(),
+            vec![2]
+        );
+        assert_eq!(
+            state.combat_log.cards_exhausted_this_turn, 2,
+            "native plus Hexed is one exhaust, not two"
+        );
+        assert_eq!(
+            state.cards[1].affliction.unwrap().kind,
+            CardAfflictionKind::Smog
         );
     }
 

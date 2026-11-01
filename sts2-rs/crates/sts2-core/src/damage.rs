@@ -69,7 +69,7 @@ pub(crate) fn remove_constrict_from_dead_applier(state: &mut CombatState, dead: 
 
 /// `HexPower.AfterDeath` (`HexPower.cs:37-43`): when the creature that
 /// APPLIED Hex (SpectralKnight) dies, the power removes itself (and with it
-/// the all-cards-Ethereal observable). Identical unlink shape to Constrict /
+/// its Hexed afflictions and their dynamic Ethereal). Identical unlink shape to Constrict /
 /// Shrink. Powers applied without an applier stamp are left alone. Sweep
 /// seed 4170 (bead `sts2-rs-l7k3d` follow-up).
 pub(crate) fn remove_hex_from_dead_applier(state: &mut CombatState, dead: CreatureUid) {
@@ -80,6 +80,7 @@ pub(crate) fn remove_hex_from_dead_applier(state: &mut CombatState, dead: Creatu
         .map(|p| p.id)
         .collect();
     for pid in ids {
+        crate::monster_power_effects::hex_before_power_unlinked(state, crate::PowerUid(pid));
         state.powers.retain(|p| p.id != pid);
         state.player.powers.retain(|u| u.0 != pid);
         for c in &mut state.creatures {

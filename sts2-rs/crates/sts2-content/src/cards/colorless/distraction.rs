@@ -31,6 +31,72 @@ pub(crate) fn play_distraction(state: &mut CombatState, _t: Option<CreatureUid>)
         } else {
             state.player.discard.push(uid);
         }
+        // Actual insertion is card entry in the installed DLL. Correct only
+        // Hex and its competition with existing parent afflictions here;
+        // this does not change Distraction's costs or other generation hooks.
+        if state.player_power_amount(sts2_core::PowerKind::Hex) > 0 {
+            sts2_core::monster_power_effects::hex_player_card_entry(state, uid);
+        }
     }
     EffectResult::Resolved
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sts2_core::card_afflictions::{CardAffliction, CardAfflictionKind};
+    use sts2_core::card_effects::{apply_power_to_creature, spawn_card_into_hand};
+    use sts2_core::cards::Card;
+    use sts2_core::PowerKind;
+
+    fn hex_state(hand: usize) -> CombatState {
+        crate::cards::dispatch::install_default_registry();
+        let mut state = CombatState::default();
+        state.player.character = Some(sts2_core::potions::CharacterId::Ironclad);
+        state.player.current_hp = 80;
+        state.player.max_hp = 80;
+        let owner = state.init_player_creature();
+        for _ in 0..hand {
+            spawn_card_into_hand(&mut state, Card::pod_defaults());
+        }
+        apply_power_to_creature(&mut state, owner, PowerKind::Hex, 2);
+        state
+    }
+
+    #[test]
+    fn hex_direct_distraction_generation_afflicts_hand_and_overflow_discard() {
+        for hand in [0, sts2_core::cards::HAND_LIMIT] {
+            let mut state = hex_state(hand);
+            assert_eq!(play_distraction(&mut state, None), EffectResult::Resolved);
+            let card = state.cards.last().unwrap();
+            assert_eq!(card.card_type, sts2_core::cards::CardType::Skill);
+            assert_eq!(
+                card.affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Hexed, 2))
+            );
+            assert_eq!(
+                state.player.hand.len(),
+                (hand + 1).min(sts2_core::cards::HAND_LIMIT)
+            );
+            assert_eq!(
+                state.player.discard.len(),
+                usize::from(hand == sts2_core::cards::HAND_LIMIT)
+            );
+        }
+    }
+
+    #[test]
+    fn hex_direct_crossbow_generator_afflicts_the_actual_sampled_attack() {
+        let mut state = hex_state(0);
+        sts2_core::card_effects::generate_free_attack_in_hand(&mut state);
+        assert_eq!(state.player.hand.len(), 1);
+        let uid = state.player.hand[0];
+        let card = &state.cards[uid.get() as usize - 1];
+        assert_eq!(card.card_type, sts2_core::cards::CardType::Attack);
+        assert_eq!(
+            card.affliction,
+            Some(CardAffliction::new(CardAfflictionKind::Hexed, 2))
+        );
+        assert_eq!(card.combat_var(sts2_core::cards::VarKey::FreeThisTurn), 1);
+    }
 }

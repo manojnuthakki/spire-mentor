@@ -88,6 +88,9 @@ pub(crate) fn apply_power_to_player_via_legacy_surface(
     if kind == PowerKind::Ringing {
         sts2_core::monster_power_effects::ringing_after_applied(state);
     }
+    if kind == PowerKind::Hex {
+        sts2_core::monster_power_effects::hex_after_applied(state);
+    }
 }
 
 /// Log a player-side power apply that came through THIS legacy surface.

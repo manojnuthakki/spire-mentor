@@ -342,18 +342,20 @@ fn turret_operator_reload_effect(state: &mut CombatState, owner: CreatureUid) {
 /// `PowerKind::Hex` stack is tracked here. Behavioral wiring is tracked by
 /// `sts2-rs-l7k3d`.
 fn spectral_knight_hex_effect(state: &mut CombatState, owner: CreatureUid) {
+    let fresh = state.player_power_amount(PowerKind::Hex) <= 0;
     apply_power_to_player_via_legacy_surface(state, PowerKind::Hex, 2);
-    // C# `HexPower.AfterDeath` (`HexPower.cs:37-43`) removes the power when
-    // its APPLIER dies — stamp the applier so the death path
-    // (`remove_hex_from_dead_applier`) can drop it (sweep seed 4170:
-    // killing the SpectralKnight left the player permanently Hexed in Rust).
-    if let Some(p) = state
-        .powers
-        .iter_mut()
-        .filter(|p| p.kind == PowerKind::Hex)
-        .last()
-    {
-        p.applier = Some(owner);
+    // Installed DLL PowerCmd.Apply reuses an existing Hex via ModifyAmount;
+    // only a fresh instance receives an applier. Keep its original caster.
+    if fresh {
+        let uid = state.player_power_uids().into_iter().find(|u| {
+            state
+                .powers
+                .get_by_id(u.0)
+                .is_some_and(|p| p.kind == PowerKind::Hex)
+        });
+        if let Some(p) = uid.and_then(|u| state.powers.get_mut_by_id(u.0)) {
+            p.applier = Some(owner);
+        }
     }
 }
 
@@ -6217,6 +6219,37 @@ mod tests {
             .find(|p| p.kind == PowerKind::Hex)
             .and_then(|p| p.applier);
         assert_eq!(applier, Some(owner), "Hex's applier stamped");
+    }
+
+    #[test]
+    fn spectral_knight_hex_legacy_application_afflicts_once_and_keeps_original_caster() {
+        use sts2_core::card_afflictions::{CardAffliction, CardAfflictionKind};
+        use sts2_core::card_effects::{spawn_card_into_pile, PileKind};
+        use sts2_core::cards::Card;
+        let mut state = CombatState::default();
+        state.player.current_hp = 80;
+        let first = state.spawn_enemy(sts2_core::MonsterKind::SpectralKnight);
+        let second = state.spawn_enemy(sts2_core::MonsterKind::SpectralKnight);
+        let uid = spawn_card_into_pile(&mut state, Card::pod_defaults(), PileKind::Discard);
+        spectral_knight_hex_effect(&mut state, first);
+        assert_eq!(
+            state.cards[uid.get() as usize - 1].affliction,
+            Some(CardAffliction::new(CardAfflictionKind::Hexed, 2))
+        );
+        spectral_knight_hex_effect(&mut state, second);
+        let power = state
+            .powers
+            .iter()
+            .find(|p| p.kind == PowerKind::Hex)
+            .unwrap();
+        assert_eq!((power.amount, power.applier), (4, Some(first)));
+        assert_eq!(
+            state.cards[uid.get() as usize - 1]
+                .affliction
+                .unwrap()
+                .stacks,
+            2
+        );
     }
 
     /// `slimed_berserker_vomit_ichor_effect` (line 561): adds 10 Slimed cards
