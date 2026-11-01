@@ -2091,6 +2091,37 @@ fn steam_eruption_death_interrupt(state: &mut CombatState, owner: sts2_core::Cre
             state_id: "ABOUT_TO_BLOW",
         }],
     );
+    // A6d9: CreatureCmd.KillWithoutCheckingWinCondition removes death-
+    // expiring powers AFTER AfterDeath, even though SteamEruption has
+    // revived this owner. Creature.RemoveAllPowersAfterDeath preserves the
+    // six production ShouldPowerBeRemovedAfterOwnerDeath=false overrides.
+    // The Giant's singleton encounter has no Illusion removal veto. Keep
+    // this correction in its existing interrupt, not the general death bus.
+    // Use RemovePower so AfterRemoved cleanup (e.g. VitalSpark) still runs.
+    let removals: smallvec::SmallVec<[_; 8]> = state
+        .creatures
+        .iter()
+        .find(|c| c.id == owner.0)
+        .into_iter()
+        .flat_map(|c| c.powers.iter())
+        .filter(|uid| {
+            state.powers.get_by_id(uid.0).is_some_and(|p| {
+                !matches!(
+                    p.kind,
+                    PowerKind::SteamEruption
+                        | PowerKind::Adaptable
+                        | PowerKind::Reattach
+                        | PowerKind::DieForYou
+                        | PowerKind::PainfulStabs
+                        | PowerKind::Minion
+                )
+            })
+        })
+        .map(|&uid| sts2_core::hooks::Effect::RemovePower {
+            listener: sts2_core::hooks::ListenerRef::Power(uid),
+        })
+        .collect();
+    sts2_core::hooks::apply_effects(state, &removals);
 }
 
 /// Idempotent installer for the SteamEruption death-interrupt. Called via
@@ -3003,6 +3034,141 @@ mod tests {
             "no victory while the interrupted giant lives at 999999999"
         );
         assert!(!state.is_over, "combat stays open");
+    }
+
+    /// A6d9: CreatureCmd.KillWithoutCheckingWinCondition runs death-power
+    /// removal even after SteamEruption's AfterDeath revives the Giant.
+    #[test]
+    fn waterfall_giant_first_death_removes_old_vulnerable_before_new_application() {
+        use sts2_core::card_effects::apply_power_to_creature;
+        use sts2_core::hooks::{CreatureRef, ValueProps};
+
+        for amount in [1, 2, 3, 4, 5, 6, 10] {
+            let (mut state, owner) = waterfall_giant_combat(20);
+            apply_power_to_creature(&mut state, owner, PowerKind::SteamEruption, 24);
+            apply_power_to_creature(&mut state, owner, PowerKind::Vulnerable, amount);
+            apply_power_to_creature(&mut state, owner, PowerKind::Strength, 7);
+            let rng = state.rng.clone();
+            let streams = state.run_rng.clone();
+            sts2_core::damage::apply_damage_with_final(
+                &mut state,
+                CreatureRef::Player,
+                owner,
+                999,
+                ValueProps::MOVE,
+            );
+            assert_eq!(
+                creature_power_amount(&state, owner, PowerKind::Vulnerable),
+                0
+            );
+            assert_eq!(creature_power_amount(&state, owner, PowerKind::Strength), 0);
+            // Bash's post-damage application is new, not added to old stacks.
+            apply_power_to_creature(&mut state, owner, PowerKind::Vulnerable, 3);
+            assert_eq!(
+                creature_power_amount(&state, owner, PowerKind::Vulnerable),
+                3
+            );
+            assert_eq!(
+                creature_power_amount(&state, owner, PowerKind::SteamEruption),
+                24
+            );
+            assert_eq!(state.creatures[0].intent, Some(Intent::Stun));
+            assert_eq!(state.rng, rng);
+            assert_eq!(state.run_rng, streams);
+        }
+    }
+
+    /// The installed DLL's death-survivor overrides are distinct from the
+    /// corpse-retention predicate. Remove through the existing cleanup path,
+    /// scoped to this owner; an unrelated arena entry must not be cleared.
+    #[test]
+    fn waterfall_giant_reset_retains_death_survivors_and_other_owners() {
+        use sts2_core::card_effects::apply_power_to_creature;
+        let (mut state, owner) = waterfall_giant_combat(20);
+        let retained = [
+            PowerKind::SteamEruption,
+            PowerKind::Adaptable,
+            PowerKind::Reattach,
+            PowerKind::DieForYou,
+            PowerKind::PainfulStabs,
+            PowerKind::Minion,
+        ];
+        for kind in retained {
+            apply_power_to_creature(&mut state, owner, kind, 3);
+        }
+        for kind in [
+            PowerKind::Strength,
+            PowerKind::Vulnerable,
+            PowerKind::Weak,
+            PowerKind::Artifact,
+            PowerKind::Nemesis,
+        ] {
+            apply_power_to_creature(&mut state, owner, kind, 2);
+        }
+        let sibling = CreatureUid::new(2).expect("nonzero");
+        let mut other = state.creatures[0].clone();
+        other.id = sibling.0;
+        other.powers.clear();
+        other.ai = None;
+        state.creatures.push(other);
+        state.enemy_uids.push(sibling);
+        apply_power_to_creature(&mut state, sibling, PowerKind::Vulnerable, 9);
+        state.init_player_creature();
+        sts2_core::hooks::apply_effects(
+            &mut state,
+            &[sts2_core::hooks::Effect::ApplyPower {
+                target: sts2_core::hooks::CreatureRef::Player,
+                kind: PowerKind::Strength,
+                amount: 4,
+                applier: None,
+            }],
+        );
+        state.creatures[0].current_hp = 0;
+        steam_eruption_death_interrupt(&mut state, owner);
+        for kind in retained {
+            assert_eq!(creature_power_amount(&state, owner, kind), 3, "{kind:?}");
+        }
+        assert_eq!(state.creatures[0].powers.len(), retained.len());
+        assert_eq!(
+            creature_power_amount(&state, sibling, PowerKind::Vulnerable),
+            9
+        );
+        assert_eq!(state.player_power_amount(PowerKind::Strength), 4);
+        assert_eq!(state.powers.len(), retained.len() + 2);
+    }
+
+    /// A revived first-lethal target remains eligible for the attack's
+    /// already-started damage-given callbacks (F6 killed-target preservation).
+    #[test]
+    fn waterfall_giant_reset_preserves_first_lethal_envenom_callback() {
+        use sts2_core::card_effects::apply_power_to_creature;
+        use sts2_core::hooks::{apply_effects, CreatureRef, Effect, ValueProps};
+        let (mut state, owner) = waterfall_giant_combat(20);
+        state.init_player_creature();
+        apply_power_to_creature(&mut state, owner, PowerKind::SteamEruption, 24);
+        apply_power_to_creature(&mut state, owner, PowerKind::Poison, 5);
+        apply_effects(
+            &mut state,
+            &[Effect::ApplyPower {
+                target: CreatureRef::Player,
+                kind: PowerKind::Envenom,
+                amount: 2,
+                applier: None,
+            }],
+        );
+        sts2_core::damage::apply_damage_with_final(
+            &mut state,
+            CreatureRef::Player,
+            owner,
+            999,
+            ValueProps::MOVE,
+        );
+        assert_eq!(
+            creature_power_amount(&state, owner, PowerKind::Poison),
+            2,
+            "old Poison removed; this lethal hit's Envenom still runs"
+        );
+        assert_eq!(state.player_power_amount(PowerKind::Envenom), 2);
     }
 
     /// Without SteamEruption stacks (killed before its first move ever
