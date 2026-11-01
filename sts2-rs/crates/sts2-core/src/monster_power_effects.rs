@@ -532,10 +532,8 @@ pub fn install_dampen_power_handlers() {
 //   * AfterCardPlayed         → stack TaintedPower on the player who played a
 //                               Tainted card (wired in `hooks`).
 //   * AfterRemoved            → clear every Tainted card affliction.
-//   * AfterPowerAmountChanged → re-sync card affliction amounts (DEFERRED: no
-//                               in-game mechanic changes VitalSpark's amount
-//                               mid-combat, so this hook is unreachable in the
-//                               single-player sim; see fidelity notes).
+//   * AfterPowerAmountChanged → re-sync existing Tainted amounts after Pulsate
+//                               (through the existing power-application hook).
 
 /// The first VitalSpark amount installed on `owner` (Counter stack), or 0.
 fn vital_spark_amount(state: &CombatState, owner: CreatureUid) -> i32 {
@@ -572,10 +570,52 @@ fn vital_spark_afflict_card(
     let Some(card) = state.cards.get_mut(idx) else {
         return;
     };
-    if only_if_unafflicted && card.affliction.is_some() {
+    if card.card_type != crate::cards::CardType::Skill {
         return;
     }
-    let _ = card.set_affliction(CardAffliction::new(CardAfflictionKind::Tainted, amount));
+    // CardCmd.Afflict + AfflictionModel.CanAfflict: Tainted stacks with itself
+    // at combat start, but never replaces another affliction. Card entry has
+    // the additional explicit Affliction == null guard in VitalSparkPower.
+    match card.affliction.as_mut() {
+        Some(a) if !only_if_unafflicted && a.kind == CardAfflictionKind::Tainted => {
+            a.stacks = a.stacks.saturating_add(amount);
+        }
+        Some(_) => {}
+        None => {
+            let _ = card.set_affliction(CardAffliction::new(CardAfflictionKind::Tainted, amount));
+        }
+    }
+}
+
+/// Installed DLL `VitalSparkPower.AfterPowerAmountChanged`: only the changed
+/// instance reacts (`power == this`), irrespective of the applier or delta.
+/// Reset existing Tainted markers in AllCards, including Play; do not afflict
+/// a previously unafflicted card or touch removed arena entries.
+pub(crate) fn vital_spark_after_amount_changed(state: &mut CombatState, owner: CreatureUid) {
+    use crate::card_afflictions::CardAfflictionKind;
+    let Some(amount) = state
+        .creatures
+        .iter()
+        .find(|c| c.id == owner.0)
+        .and_then(|c| {
+            c.powers
+                .iter()
+                .filter_map(|u| state.powers.get_by_id(u.0))
+                .find(|p| p.kind == PowerKind::VitalSpark)
+                .map(|p| p.amount)
+        })
+    else {
+        return;
+    };
+    for uid in all_player_card_uids(state) {
+        if let Some(card) = state.cards.get_mut(uid.0.get() as usize - 1) {
+            if let Some(a) = card.affliction.as_mut() {
+                if a.kind == CardAfflictionKind::Tainted {
+                    a.stacks = amount;
+                }
+            }
+        }
+    }
 }
 
 /// C# `VitalSparkPower.BeforeCombatStart`: for each VitalSpark instance, afflict
@@ -627,7 +667,10 @@ fn vital_spark_after_card_entered_combat(
 }
 
 /// C# `VitalSparkPower.AfterRemoved`: clear every ally card's Tainted affliction.
-fn vital_spark_after_removed(state: &mut CombatState, _old_owner: CreatureUid) -> EffectResult {
+pub(crate) fn vital_spark_after_removed(
+    state: &mut CombatState,
+    _old_owner: CreatureUid,
+) -> EffectResult {
     use crate::card_afflictions::CardAfflictionKind;
     let uids = all_player_card_uids(state);
     for uid in uids {
@@ -1175,6 +1218,215 @@ mod tests {
             PowerKind::Ringing,
             1,
         );
+    }
+
+    // Installed DLL: VitalSparkPower, Tainted, AfflictionModel.CanAfflict and
+    // PlayerCombatState.AllCards. Keep removed arena entries outside the walk.
+    fn vital_spark_fixture() -> (CombatState, CreatureUid) {
+        let mut state = CombatState::default();
+        state.player.current_hp = 80;
+        state.player.max_hp = 80;
+        state.init_player_creature();
+        let owner = state.spawn_enemy(crate::MonsterKind::Nibbit);
+        crate::card_effects::apply_power_to_creature(&mut state, owner, PowerKind::VitalSpark, 2);
+        for n in 1..=9 {
+            push_card(&mut state, n, CardType::Skill);
+        }
+        state.player.draw.clear();
+        state.player.hand.push(CardUid::new(1).unwrap());
+        state.player.draw.push(CardUid::new(2).unwrap());
+        state.player.discard.push(CardUid::new(3).unwrap());
+        state.player.exhaust.push(CardUid::new(4).unwrap());
+        state.player.play.push(CardUid::new(5).unwrap());
+        state
+            .player
+            .draw
+            .extend((6..=8).map(|n| CardUid::new(n).unwrap()));
+        state.cards[5].affliction = Some(CardAffliction::new(CardAfflictionKind::Smog, 7));
+        state.cards[6].affliction = Some(CardAffliction::new(CardAfflictionKind::Tainted, 5));
+        state.cards[7].card_type = CardType::Attack;
+        state.cards[8].affliction = Some(CardAffliction::new(CardAfflictionKind::Tainted, 9));
+        (state, owner)
+    }
+
+    #[test]
+    fn vital_spark_initial_taint_all_piles_preserves_other_afflictions_and_stacks_tainted() {
+        let (mut state, _) = vital_spark_fixture();
+        let rng = (state.rng.clone(), state.run_rng.clone());
+        vital_spark_before_combat_start(&mut state);
+        for card in &state.cards[..5] {
+            assert_eq!(
+                card.affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Tainted, 2))
+            );
+        }
+        assert_eq!(
+            state.cards[5].affliction,
+            Some(CardAffliction::new(CardAfflictionKind::Smog, 7))
+        );
+        assert_eq!(
+            state.cards[6].affliction,
+            Some(CardAffliction::new(CardAfflictionKind::Tainted, 7))
+        );
+        assert!(state.cards[7].affliction.is_none());
+        assert_eq!(state.cards[8].affliction.unwrap().stacks, 9); // removed, not AllCards
+        assert_eq!((state.rng, state.run_rng), rng);
+    }
+
+    #[test]
+    fn vital_spark_amount_change_resyncs_only_tainted_in_all_piles_on_both_apply_paths() {
+        for applier in [None, Some(false), Some(true)] {
+            let (mut state, owner) = vital_spark_fixture();
+            for card in &mut state.cards[..5] {
+                card.affliction = Some(CardAffliction::new(CardAfflictionKind::Tainted, 2));
+            }
+            let rng = (state.rng.clone(), state.run_rng.clone());
+            match applier {
+                None => crate::card_effects::apply_power_to_creature(
+                    &mut state,
+                    owner,
+                    PowerKind::VitalSpark,
+                    2,
+                ),
+                Some(player) => {
+                    let by = if player {
+                        state.player.creature_uid
+                    } else {
+                        Some(owner)
+                    };
+                    crate::card_effects::apply_power_to_creature_with_applier(
+                        &mut state,
+                        owner,
+                        PowerKind::VitalSpark,
+                        2,
+                        by,
+                    );
+                }
+            }
+            assert_eq!(vital_spark_amount(&state, owner), 4);
+            for card in state.cards[..5]
+                .iter()
+                .chain(std::iter::once(&state.cards[6]))
+            {
+                assert_eq!(
+                    card.affliction,
+                    Some(CardAffliction::new(CardAfflictionKind::Tainted, 4))
+                );
+            }
+            assert_eq!(
+                state.cards[5].affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Smog, 7))
+            );
+            assert!(state.cards[7].affliction.is_none());
+            assert_eq!(state.cards[8].affliction.unwrap().stacks, 9);
+            assert_eq!((state.rng, state.run_rng), rng);
+        }
+    }
+
+    #[test]
+    fn vital_spark_new_cards_use_current_amount_without_reafflicting_existing_markers() {
+        install_vital_spark_power_handlers();
+        let (mut state, owner) = vital_spark_fixture();
+        crate::card_effects::apply_power_to_creature(&mut state, owner, PowerKind::VitalSpark, 2);
+        for (n, ty, prior) in [
+            (10, CardType::Skill, None),
+            (11, CardType::Attack, None),
+            (
+                12,
+                CardType::Skill,
+                Some(CardAffliction::new(CardAfflictionKind::Smog, 7)),
+            ),
+            (
+                13,
+                CardType::Skill,
+                Some(CardAffliction::new(CardAfflictionKind::Tainted, 1)),
+            ),
+        ] {
+            let uid = push_card(&mut state, n, ty);
+            state.cards[n as usize - 1].affliction = prior;
+            let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, uid);
+        }
+        assert_eq!(
+            state.cards[9].affliction,
+            Some(CardAffliction::new(CardAfflictionKind::Tainted, 4))
+        );
+        assert!(state.cards[10].affliction.is_none());
+        assert_eq!(
+            state.cards[11].affliction,
+            Some(CardAffliction::new(CardAfflictionKind::Smog, 7))
+        );
+        assert_eq!(state.cards[12].affliction.unwrap().stacks, 1);
+        // Another power's change never resynchronizes the pre-existing marker.
+        crate::card_effects::apply_power_to_creature(&mut state, owner, PowerKind::Strength, 2);
+        assert_eq!(state.cards[12].affliction.unwrap().stacks, 1);
+    }
+
+    #[test]
+    fn vital_spark_removal_clears_only_tainted_in_all_piles() {
+        install_vital_spark_power_handlers();
+        let (mut state, owner) = vital_spark_fixture();
+        for card in &mut state.cards[..5] {
+            card.affliction = Some(CardAffliction::new(CardAfflictionKind::Tainted, 4));
+        }
+        let power = state
+            .creatures
+            .iter()
+            .find(|c| c.id == owner.0)
+            .unwrap()
+            .powers
+            .iter()
+            .copied()
+            .find(|u| {
+                state
+                    .powers
+                    .get_by_id(u.0)
+                    .is_some_and(|p| p.kind == PowerKind::VitalSpark)
+            })
+            .unwrap();
+        crate::hooks::apply_effects(
+            &mut state,
+            &[crate::hooks::Effect::RemovePower {
+                listener: crate::hooks::ListenerRef::Power(power),
+            }],
+        );
+        assert!(state.cards[..5].iter().all(|c| c.affliction.is_none()));
+        assert!(state.cards[6].affliction.is_none());
+        assert_eq!(
+            state.cards[5].affliction.unwrap().kind,
+            CardAfflictionKind::Smog
+        );
+        assert_eq!(state.cards[8].affliction.unwrap().stacks, 9);
+        let uid = push_card(&mut state, 10, CardType::Skill);
+        let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, uid);
+        assert!(state.cards[9].affliction.is_none());
+    }
+
+    #[test]
+    fn vital_spark_decreases_resync_and_zero_removes_only_tainted() {
+        install_vital_spark_power_handlers();
+        let (mut state, owner) = vital_spark_fixture();
+        for card in &mut state.cards[..5] {
+            card.affliction = Some(CardAffliction::new(CardAfflictionKind::Tainted, 2));
+        }
+        let effect = crate::hooks::Effect::ApplyPower {
+            target: crate::hooks::CreatureRef::Enemy(owner),
+            kind: PowerKind::VitalSpark,
+            amount: -1,
+            applier: None,
+        };
+        crate::hooks::apply_effects(&mut state, &[effect]);
+        assert_eq!(vital_spark_amount(&state, owner), 1);
+        assert!(state.cards[..5]
+            .iter()
+            .all(|c| c.affliction.unwrap().stacks == 1));
+        crate::hooks::apply_effects(&mut state, &[effect]);
+        assert_eq!(vital_spark_amount(&state, owner), 0);
+        assert!(state.cards[..5].iter().all(|c| c.affliction.is_none()));
+        assert_eq!(
+            state.cards[5].affliction.unwrap().kind,
+            CardAfflictionKind::Smog
+        );
+        assert_eq!(state.cards[8].affliction.unwrap().stacks, 9);
     }
 
     #[test]

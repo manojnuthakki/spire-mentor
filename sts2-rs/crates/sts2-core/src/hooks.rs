@@ -1421,7 +1421,9 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                                 // `PLAYER_STATE|end_turn` FLEX_POTION cluster,
                                 // C#=0 Rust=1). A non-zero (negative) result
                                 // persists — Strength can legitimately go down.
-                                if pow.amount == 0 {
+                                if pow.amount == 0
+                                    || (kind == PowerKind::VitalSpark && pow.amount < 0)
+                                {
                                     remove_pid = Some(power_uid.0);
                                 }
                             }
@@ -1456,6 +1458,16 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                             state.creatures[creature_idx]
                                 .powers
                                 .push(crate::PowerUid(new_id));
+                        }
+                        if kind == PowerKind::VitalSpark {
+                            crate::monster_power_effects::vital_spark_after_amount_changed(
+                                state, uid,
+                            );
+                            if remove_pid.is_some() {
+                                let _ = crate::monster_power_effects::vital_spark_after_removed(
+                                    state, uid,
+                                );
+                            }
                         }
                         if let Some(pid) = remove_pid {
                             state.powers.retain(|p| p.id != pid);
@@ -1541,6 +1553,12 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                         .powers
                         .get_by_id(pid)
                         .is_some_and(|p| p.kind == PowerKind::Ringing);
+                let vital_spark_owner = state
+                    .powers
+                    .get_by_id(pid)
+                    .filter(|p| p.kind == PowerKind::VitalSpark)
+                    .and_then(|_| state.creatures.iter().find(|c| c.powers.contains(&uid)))
+                    .map(|c| CreatureUid(c.id));
                 state.powers.retain(|p| p.id != pid);
                 state.player.powers.retain(|u| u.0 != pid);
                 for c in &mut state.creatures {
@@ -1552,6 +1570,9 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                 }
                 if was_player_ringing {
                     crate::monster_power_effects::ringing_after_removed(state);
+                }
+                if let Some(owner) = vital_spark_owner {
+                    let _ = crate::monster_power_effects::vital_spark_after_removed(state, owner);
                 }
             }
         }
@@ -16798,6 +16819,13 @@ dispatch_void_hook!(
 /// powers and reacts to power-application events (e.g. Vicious draws cards
 /// when the owner applies Vulnerable). Bead `sts2-rs-6ynt.6.2`.
 pub fn dispatch_after_power_applied(state: &mut CombatState, ctx: &PowerAppliedCtx) {
+    // This channel also carries AfterPowerAmountChanged. Vital Spark listens
+    // to its own changed instance, unlike the player-applied riders below.
+    if ctx.power_kind == PowerKind::VitalSpark {
+        if let Some(owner) = ctx.target.to_creature_uid(state) {
+            crate::monster_power_effects::vital_spark_after_amount_changed(state, owner);
+        }
+    }
     if ctx.delta <= 0 {
         return;
     }
