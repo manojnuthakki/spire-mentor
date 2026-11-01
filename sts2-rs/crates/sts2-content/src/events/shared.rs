@@ -50,18 +50,16 @@ fn lost_wisp_generate_options(_state: &RunState, _spec: &EventSpec) -> Vec<Event
     ]
 }
 
-/// `LostWisp::claim` — queue a `LOST_WISP` [`RelicReward`].
-///
-/// Python adds a `Decay` curse to the deck directly
-/// (`make_decay()` + `add_card_instance_to_deck`); the curse-add
-/// surface depends on a run-side deck-mutation API
-/// (`RunState.master_deck` is read-only today). Sub-bead
-/// `6ynt.4.deck-add` will retrofit the curse leg; until then the
-/// Rust branch ships the relic queue + a doc-pin divergence so the
-/// parity harness's future event-mode replay can detect the gap.
+/// `LostWisp.cs::Claim`: add Decay through `CardPileCmd.AddCursesToDeck`
+/// before obtaining Lost Wisp and finishing. The existing deck-add path runs
+/// the modification and after-add hooks; relic acquisition stays on the
+/// existing reward continuation (direct grants drain it in the same action).
 fn lost_wisp_claim(state: &mut RunState) -> EventOutcome {
+    let decay = crate::cards::spec_index::card_pod_from_id(sts2_core::cards::CardId::Decay, false)
+        .expect("Decay has a card spec");
+    state.add_card_to_deck(decay, sts2_core::relic_effects::AddSource::EventGain);
     state.offer_relic_rewards(RelicId::LostWisp, 1);
-    EventOutcome::finished("Gained Lost Wisp relic (Decay curse add deferred to 6ynt.4.deck-add).")
+    EventOutcome::finished("Added Decay and gained Lost Wisp relic.")
 }
 
 fn lost_wisp_search(state: &mut RunState) -> EventOutcome {
