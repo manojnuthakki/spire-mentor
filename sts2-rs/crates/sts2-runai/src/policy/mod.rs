@@ -1513,8 +1513,11 @@ impl<M: RunPolicy> RunPolicy for MctsCombatPolicy<M> {
             }
         }
         // GH #252 / #447 acquisition: a full-belt potion-reward swap.
-        // The engine emits ONLY `PotionSwap` actions while
-        // `pending_potion_swaps` is non-empty, decline listed first.
+        // Decline is listed first. A pending offer can also expose legal
+        // DrinkPotion / free-slot ClaimReward actions. This guard handles
+        // pure swap lists only; mixed lists fall through to the meta policy.
+        // Valuing those mixed alternatives is separate policy-consumer work
+        // (Lane F: oc-swap-mixed-actions), not an engine action restriction.
         //
         // WHO DECIDES is `potion_oc::swap_is_rule_side`. With an OC table
         // loaded the value rule resolves it here, above the meta policy —
