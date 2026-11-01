@@ -12,9 +12,9 @@ use sts2_core::{
 };
 
 use super::{
-    always_allowed, amalgamator_allowed, any_enchantable_deck_card, byrdonis_nest_allowed,
-    default_option_info_from_spec, option_title_vars, option_vars, punch_off_allowed,
-    two_page_option_info, EventOptionSpec, EventSpec,
+    always_allowed, amalgamator_allowed, byrdonis_nest_allowed, default_option_info_from_spec,
+    option_title_vars, option_vars, punch_off_allowed, two_page_option_info, EventOptionSpec,
+    EventSpec,
 };
 
 // ── LostWisp ─────────────────────────────────────────────────────────
@@ -1529,6 +1529,12 @@ fn souls_power_can_enchant(c: &sts2_core::cards::Card) -> bool {
         && sts2_core::card_effects::card_exhausts_inst(c)
 }
 
+/// C# `GraveOfTheForgotten.IsAllowed` / `HasEnchantableCards` use the
+/// same Souls eligibility as the Confront option, including own Exhaust.
+fn grave_allowed(state: &RunState) -> bool {
+    state.master_deck.iter().any(souls_power_can_enchant)
+}
+
 /// C# `GraveOfTheForgotten.GenerateInitialOptions`: without a deck card
 /// `SoulsPower.CanEnchant` accepts (`HasEnchantableCards`), Confront is the
 /// handler-less `CONFRONT_LOCKED`. sts2-agent fork.
@@ -1537,7 +1543,7 @@ fn grave_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOption
     super::lock_option_if(
         &mut opts,
         "confront",
-        !state.master_deck.iter().any(souls_power_can_enchant),
+        !grave_allowed(state),
         "GRAVE_OF_THE_FORGOTTEN.pages.INITIAL.options.CONFRONT_LOCKED",
     );
     opts
@@ -1547,7 +1553,7 @@ fn grave_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOption
 pub const GRAVE_OF_THE_FORGOTTEN: EventSpec = EventSpec {
     id: EventId::GraveOfTheForgotten,
     python_name: "GraveOfTheForgotten",
-    is_allowed: any_enchantable_deck_card,
+    is_allowed: grave_allowed,
     generate_options: grave_generate_options,
     options: GRAVE_OPTIONS,
 };
@@ -1977,6 +1983,32 @@ pub const PUNCH_OFF: EventSpec = EventSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn grave_allowed_requires_own_exhaust_and_souls_eligibility() {
+        use crate::cards::spec_index::card_pod_from_id;
+        use sts2_core::cards::CardId;
+        crate::cards::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.master_deck = vec![card_pod_from_id(CardId::StrikeIronclad, false).unwrap()];
+        assert!(!(GRAVE_OF_THE_FORGOTTEN.is_allowed)(&rs), "no own Exhaust");
+        rs.master_deck = vec![card_pod_from_id(CardId::Offering, false).unwrap()];
+        assert!((GRAVE_OF_THE_FORGOTTEN.is_allowed)(&rs));
+        assert!(grave_generate_options(&rs, &GRAVE_OF_THE_FORGOTTEN)[0].enabled);
+        rs.master_deck[0]
+            .enchantments
+            .push((sts2_core::cards::EnchantmentId::Swift, 1));
+        assert!(
+            !(GRAVE_OF_THE_FORGOTTEN.is_allowed)(&rs),
+            "already enchanted"
+        );
+        assert!(!grave_generate_options(&rs, &GRAVE_OF_THE_FORGOTTEN)[0].enabled);
+        rs.master_deck = vec![card_pod_from_id(CardId::Offering, false).unwrap()];
+        rs.master_deck[0].cost = -2;
+        assert!(!(GRAVE_OF_THE_FORGOTTEN.is_allowed)(&rs), "unplayable");
+        rs.master_deck.clear();
+        assert!(!(GRAVE_OF_THE_FORGOTTEN.is_allowed)(&rs));
+    }
 
     // ── Darv relic-pool roll (m3n0g.1) ──────────────────────────────────
 
