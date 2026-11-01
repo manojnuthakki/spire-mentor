@@ -4599,7 +4599,7 @@ impl RunManager {
 
     /// Resolve the FRONT pending full-belt potion-reward swap (GH #252).
     /// `Some(slot)` discards the held belt potion at `slot` and claims the
-    /// pending reward potion in its place (C# `DiscardPotionGameAction`
+    /// pending reward potion into the first empty physical slot (C# `DiscardPotionGameAction`
     /// followed by re-selecting the TooFull `PotionReward`); `None`
     /// declines — the reward potion is lost and counted in
     /// [`crate::runstate::RunState::potions_overflow_dropped`] (C#: the
@@ -4614,12 +4614,11 @@ impl RunManager {
             if slot >= self.run_state.potions.len() {
                 return ActionResult::InvalidForPhase;
             }
-            let kind = self.run_state.pending_potion_swaps.remove(0);
-            self.run_state.potions[slot] = kind;
-        } else {
-            self.run_state.pending_potion_swaps.remove(0);
-            self.run_state.potions_overflow_dropped += 1;
+            self.run_state.remove_potion_from_belt(slot);
+            return self.do_claim_reward(0);
         }
+        self.run_state.pending_potion_swaps.remove(0);
+        self.run_state.potions_overflow_dropped += 1;
         ActionResult::Advanced
     }
 
@@ -8702,6 +8701,63 @@ mod tests {
             rm.take_action(RunAction::ClaimReward { idx: 0 }),
             ActionResult::InvalidForPhase
         );
+    }
+
+    #[test]
+    fn pending_swap_procures_into_first_empty_slot_after_drink_and_discard() {
+        use crate::potions::PotionKind;
+        // Every removal pair, including a hole earlier than the discarded
+        // potion: compact visible indices must not become physical slots.
+        for drink_slot in 0..3 {
+            for discard_slot in 0..2 {
+                let mut rm = RunManager::new(0, CharacterId::Ironclad);
+                rm.run_state.interactive_potions = true;
+                rm.run_state.interactive_potion_swap = true;
+                rm.run_state.max_potion_slots = 3;
+                rm.run_state.potions = vec![PotionKind::BloodPotion; 3];
+                rm.run_state.pending_potion_swaps = vec![PotionKind::DexterityPotion];
+                assert_eq!(
+                    rm.take_action(RunAction::DrinkPotion {
+                        potion_slot: drink_slot,
+                        target: None,
+                    }),
+                    ActionResult::Advanced
+                );
+                let mut separate = rm.clone();
+                separate.run_state.remove_potion_from_belt(discard_slot);
+                assert_eq!(
+                    separate.take_action(RunAction::ClaimReward { idx: 0 }),
+                    ActionResult::Advanced
+                );
+                assert_eq!(
+                    rm.take_action(RunAction::PotionSwap {
+                        discard_slot: Some(discard_slot)
+                    }),
+                    ActionResult::Advanced
+                );
+                assert_eq!(
+                    rm.run_state.potions, separate.run_state.potions,
+                    "drink {drink_slot}, discard {discard_slot}"
+                );
+                assert_eq!(
+                    rm.run_state.potion_slot_indices, separate.run_state.potion_slot_indices,
+                    "physical slots: drink {drink_slot}, discard {discard_slot}"
+                );
+                assert!(rm.run_state.pending_potion_swaps.is_empty());
+                let first_hole = drink_slot.min(if discard_slot >= drink_slot {
+                    discard_slot + 1
+                } else {
+                    discard_slot
+                });
+                let pos = rm
+                    .run_state
+                    .potion_slot_indices
+                    .iter()
+                    .position(|&s| s as usize == first_hole)
+                    .unwrap();
+                assert_eq!(rm.run_state.potions[pos], PotionKind::DexterityPotion);
+            }
+        }
     }
 
     #[test]
