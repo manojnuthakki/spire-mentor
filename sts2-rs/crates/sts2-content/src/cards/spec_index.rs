@@ -1281,8 +1281,11 @@ pub fn roll_kaleidoscope_card_rewards(
             for (id, upgraded) in roll_reward_cards_base_odds(rs, 1, true, &pool) {
                 let mut one: Vec<sts2_core::cards::Card> =
                     card_pod_from_id(id, upgraded).into_iter().collect();
+                // Kaleidoscope's options carry no `IsCardReward`.
                 let _ =
-                    sts2_core::run_effects::dispatch_modify_card_reward_options_late(rs, &mut one);
+                    sts2_core::run_effects::dispatch_modify_card_reward_options_late_bare_creation(
+                        rs, &mut one,
+                    );
                 reward_cards.extend(one);
             }
         }

@@ -182,6 +182,10 @@ fn listener_silken_tress_card_reward(rs: &mut RunState, cards: &mut Vec<Card>) -
     if !rs.owns_active_relic(RelicId::SilkenTress) {
         return EffectResult::NotImplemented;
     }
+    // `SilkenTress.cs:53`: a creation without `IsCardReward` passes.
+    if rs.reward_hook_bare_creation {
+        return EffectResult::NotImplemented;
+    }
     // `IsUsed` gate (`SilkenTress.cs:57`): only the first card reward fires.
     if rs.relic_counters.get(&RelicId::SilkenTress).copied() == Some(1) {
         return EffectResult::NotImplemented;

@@ -261,3 +261,75 @@ fn kaleidoscope_rewards_run_the_late_reward_hooks() {
         }
     }
 }
+
+/// F5 step 6 review (F1): Kaleidoscope's per-card `CreateForReward` options
+/// lack `IsCardReward`, so Silver Crucible passes there and upgrades each of
+/// the two populated `CardReward`s whole: every upgradable card of both
+/// rewards upgraded, two of its three uses spent.
+#[test]
+fn kaleidoscope_spends_silver_crucible_once_per_reward() {
+    let mut rs = hooked_state();
+    rs.relics.clear();
+    rs.relics.push(RelicId::SilverCrucible);
+    rs.relics.push(RelicId::Kaleidoscope);
+    let rewards = sts2_content::cards::spec_index::roll_kaleidoscope_card_rewards(
+        &mut rs,
+        sts2_core::CharacterId::Ironclad,
+    );
+    assert_eq!(rewards.len(), 2);
+    for (ids, upgraded) in &rewards {
+        for (id, up) in ids.iter().zip(upgraded) {
+            let upgradable = sts2_content::cards::spec_index::card_pod_from_id(*id, true)
+                .is_some_and(|u| u.upgraded);
+            assert_eq!(*up, upgradable, "{id:?} upgraded by Silver Crucible");
+        }
+    }
+    let packed = rs
+        .relic_counters
+        .get(&RelicId::SilverCrucible)
+        .copied()
+        .unwrap_or(0);
+    assert_eq!(packed & 0xFF, 2, "one use for each populated reward");
+}
+
+/// F5 step 6 review (F2): no enchantment is `IsStackable`, so Wing Charm's
+/// whole-reward pass has no candidate once each card's own creation pass gave
+/// it Swift: Niche draws are the two pool shuffles' plus one for each card
+/// Swift can take, and no more.
+#[test]
+fn kaleidoscope_wing_charm_draws_once_per_eligible_card() {
+    let shuffles = {
+        let mut rs = hooked_state();
+        rs.relics.clear();
+        let before = rs.rng.niche.counter();
+        let _ = sts2_content::cards::spec_index::roll_kaleidoscope_card_rewards(
+            &mut rs,
+            sts2_core::CharacterId::Ironclad,
+        );
+        rs.rng.niche.counter() - before
+    };
+    let mut rs = hooked_state();
+    rs.relics.clear();
+    rs.relics.push(RelicId::WingCharm);
+    let before = rs.rng.niche.counter();
+    let rewards = sts2_content::cards::spec_index::roll_kaleidoscope_card_rewards(
+        &mut rs,
+        sts2_core::CharacterId::Ironclad,
+    );
+    let eligible = rewards
+        .iter()
+        .flat_map(|(ids, _)| ids.iter())
+        .filter(|id| {
+            let card = pod(**id);
+            sts2_content::cards::spec_index::spec_for_card_id(**id).is_some_and(|spec| {
+                sts2_content::enchantments::can_enchant_card(
+                    &spec,
+                    &card,
+                    sts2_core::cards::EnchantmentId::Swift,
+                )
+            })
+        })
+        .count() as u32;
+    assert!(eligible > 0);
+    assert_eq!(rs.rng.niche.counter() - before, shuffles + eligible);
+}

@@ -1136,6 +1136,23 @@ pub fn dispatch_modify_card_reward_options_late(
     }
 }
 
+/// The late card-reward hooks over a bare `CardFactory.CreateForReward`
+/// whose options lack `CardCreationFlags.IsCardReward` (C# Kaleidoscope's
+/// per-card creations): [`RunState::reward_hook_bare_creation`] is set for
+/// the dispatch, so `SilverCrucible` and `SilkenTress` pass (their C#
+/// `TryModifyCardRewardOptionsLate` returns false without the flag) while
+/// the rest (the eggs, Wing Charm, Fresnel Lens) run as for a reward.
+/// sts2-agent fork (F5 step 6 review).
+pub fn dispatch_modify_card_reward_options_late_bare_creation(
+    run_state: &mut RunState,
+    cards: &mut Vec<Card>,
+) -> EffectResult {
+    let prev = std::mem::replace(&mut run_state.reward_hook_bare_creation, true);
+    let result = dispatch_modify_card_reward_options_late(run_state, cards);
+    run_state.reward_hook_bare_creation = prev;
+    result
+}
+
 // `modify_card_being_added_to_deck` — fired by
 // `RunState::modify_card_being_added_to_deck` from the eventual port of
 // `RunState.add_card_instance_to_deck` before the card is appended.

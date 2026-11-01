@@ -1710,6 +1710,14 @@ pub struct RunState {
     /// `false` keeps the auto-collect path every parity test pins.
     pub interactive_rewards: bool,
 
+    /// Set only while the late card-reward hooks run over a bare
+    /// `CardFactory.CreateForReward` whose `CardCreationOptions` lack
+    /// `CardCreationFlags.IsCardReward` (Kaleidoscope's per-card creations);
+    /// the listeners that check the flag in C# (`SilverCrucible`,
+    /// `SilkenTress`) then pass. A populated `CardReward` (every other
+    /// dispatch) carries the flag. sts2-agent fork (F5 step 6 review).
+    pub reward_hook_bare_creation: bool,
+
     /// Reward sets offered through C# `RewardsCmd.OfferCustom` under
     /// [`Self::interactive_rewards`], in offer order, waiting for the run
     /// manager to roll and show them (`RunManager::reward_screen`). A
@@ -2113,6 +2121,7 @@ impl Default for RunState {
             pending_deck_enchants: Vec::new(),
             interactive_potion_swap: false,
             interactive_rewards: false,
+            reward_hook_bare_creation: false,
             offered_reward_sets: Vec::new(),
             room_extra_rewards: Vec::new(),
             interactive_potions: false,

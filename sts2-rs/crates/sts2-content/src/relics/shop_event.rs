@@ -4717,6 +4717,11 @@ fn listener_silver_crucible_modify_card_reward_options_late(
     if !rs.owns_active_relic(RelicId::SilverCrucible) {
         return EffectResult::NotImplemented;
     }
+    // `SilverCrucible.cs:104`: a creation without `IsCardReward` (Kaleidoscope's
+    // per-card `CreateForReward`) passes and spends no use.
+    if rs.reward_hook_bare_creation {
+        return EffectResult::NotImplemented;
+    }
     let packed = rs
         .relic_counters
         .get(&RelicId::SilverCrucible)

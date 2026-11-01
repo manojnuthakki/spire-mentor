@@ -51,9 +51,12 @@ pub fn can_enchant_card(spec: &CardSpec, card: &Card, enchantment: EnchantmentId
     if spec.keywords.contains(CardKeywords::UNPLAYABLE) {
         return false;
     }
-    // Single-enchantment-per-card rule: if the card already has at least
-    // one enchantment, only stacking the same one is permitted.
-    if !card.enchantments.is_empty() && !card.has_enchantment(enchantment) {
+    // `EnchantmentModel.CanEnchant`: a card with an enchantment takes another
+    // only when it is the same one and `IsStackable`; no enchantment overrides
+    // `IsStackable` (false), so an enchanted card takes none, its own included.
+    // sts2-agent fork (F5 step 6 review: Wing Charm's Swift on an already
+    // Swift reward card drew Niche over the wrong candidates).
+    if !card.enchantments.is_empty() {
         return false;
     }
 
@@ -486,14 +489,16 @@ mod tests {
     }
 
     #[test]
-    fn cannot_double_enchant_with_different_kinds() {
+    fn an_enchanted_card_takes_no_enchantment_its_own_included() {
+        // `EnchantmentModel.CanEnchant`: no enchantment is `IsStackable`.
         let mut c = strike_card();
         c.set_enchantment(EnchantmentId::Sharp, 1);
         let spec = basic_strike_spec();
-        // Same enchantment stacking is allowed.
-        assert!(can_enchant_card(&spec, &c, EnchantmentId::Sharp));
-        // Different kind is rejected.
+        assert!(!can_enchant_card(&spec, &c, EnchantmentId::Sharp));
         assert!(!can_enchant_card(&spec, &c, EnchantmentId::Favored));
+        let mut s = strike_card();
+        s.set_enchantment(EnchantmentId::Swift, 1);
+        assert!(!can_enchant_card(&spec, &s, EnchantmentId::Swift));
     }
 
     #[test]
