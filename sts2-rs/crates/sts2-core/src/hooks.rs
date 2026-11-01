@@ -1536,6 +1536,11 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                     .powers
                     .get_by_id(pid)
                     .is_some_and(|p| p.kind == PowerKind::Tangled);
+                let was_player_ringing = state.player_power_uids().contains(&uid)
+                    && state
+                        .powers
+                        .get_by_id(pid)
+                        .is_some_and(|p| p.kind == PowerKind::Ringing);
                 state.powers.retain(|p| p.id != pid);
                 state.player.powers.retain(|u| u.0 != pid);
                 for c in &mut state.creatures {
@@ -1544,6 +1549,9 @@ pub fn apply_effect(state: &mut CombatState, effect: Effect) {
                 // C# `TangledPower.AfterRemoved` clears the Entangled cards.
                 if was_tangled && state.player_power_amount(PowerKind::Tangled) <= 0 {
                     crate::monster_power_effects::tangled_after_removed(state);
+                }
+                if was_player_ringing {
+                    crate::monster_power_effects::ringing_after_removed(state);
                 }
             }
         }
@@ -7237,16 +7245,14 @@ pub fn after_turn_end(
             Some(effects)
         }
         PowerKind::Ringing => {
-            // C# `RingingPower.AfterTurnEnd`
-            // (../sts2-wiki/decompiled/v0.103.2/MegaCrit.Sts2.Core.Models.Powers/RingingPower.cs):
-            // `if side == base.Owner.Side { Flash(); PowerCmd.Remove(this); }`.
+            // C# `RingingPower.AfterSideTurnEnd` (installed v0.107.1 DLL):
+            // participants.Contains(Owner), folded onto the owner's side here.
             // Ringing is a single-stack Debuff applied to the PLAYER by
             // CeremonialBeast's BEAST_CRY; it afflicts the player's cards for one
             // turn and self-removes at the player's turn end. Without this Rust
             // accumulated a fresh Ringing every BeastCry (coverage seed 1536:
-            // player.powers had a lingering RINGING vs C#). The per-card Ringing
-            // affliction is not parity-tracked, so a plain RemovePower suffices
-            // (mirrors the Tangled arm above). Bead `sts2-rs-ringing-eot`.
+            // player.powers had a lingering RINGING vs C#). RemovePower also
+            // runs AfterRemoved's all-pile Ringing cleanup.
             let owner = owner_of_listener(state, listener)?;
             if creature_ref_side(owner) != ctx.side {
                 return None;

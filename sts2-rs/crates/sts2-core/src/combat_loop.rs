@@ -8443,8 +8443,8 @@ pub fn auto_play_n_from_draw_top(state: &mut CombatState, count: i32, force_exha
 ///   stale `chains_bound_card_played_this_turn` flag can't strand plays.
 /// * `SlothPower.ShouldPlay` (`SlothPower.cs:22-29`, bead `sts2-rs-ybtmu`):
 ///   at most `Amount` card plays per turn.
-/// * `RingingPower.ShouldPlay` (bead `sts2-rs-xk9yo`): exactly one card
-///   play per turn.
+/// * `RingingPower.ShouldPlay`: a Ringing-afflicted card is blocked once
+///   any owned card play has started this turn; other afflictions are exempt.
 /// * `VelvetChoker.ShouldPlay` (GH #742): at most six card plays per turn —
 ///   the relic half, [`hooks::relic_should_play_blocked`].
 /// * `SmoggyPower.ShouldPlay` (`SmoggyPower.cs:64-71`): a player-owned card
@@ -8513,16 +8513,13 @@ pub fn player_should_play_blocked(state: &CombatState, card: &crate::cards::Card
             return true;
         }
     }
-    if state.player.card_plays_started_this_turn >= 1 {
-        let player_has_ringing = state.player.powers.iter().any(|puid| {
-            state
-                .powers
-                .get_by_id(puid.0)
-                .is_some_and(|p| p.kind == crate::powers::PowerKind::Ringing)
-        });
-        if player_has_ringing {
-            return true;
-        }
+    if state.player.card_plays_started_this_turn >= 1
+        && card
+            .affliction
+            .is_some_and(|a| a.kind == crate::card_afflictions::CardAfflictionKind::Ringing)
+        && state.player_power_amount(crate::PowerKind::Ringing) > 0
+    {
+        return true;
     }
     false
 }

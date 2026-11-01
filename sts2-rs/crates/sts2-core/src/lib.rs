@@ -12863,20 +12863,10 @@ pub fn legal_actions(state: &CombatState) -> SmallVec<[Action; 16]> {
                 .any(|p| p.id == puid.0 && p.kind == crate::PowerKind::ChainsOfBinding)
         });
 
-    // Bead `sts2-rs-xk9yo`: mirror the `play_card` RingingPower gate
-    // (C# `RingingPower.ShouldPlay`) so the legal-action surface agrees with
-    // play resolution. Ringing afflicts every owned card; once the player has
-    // started any card play this turn, no further card is playable — net, one
-    // card per turn. Gated on the player actually owning the power so a stale
-    // marker can't strand plays after Ringing expires at turn end.
-    let ringing_blocks = state.powers.present_kinds().contains(PowerKind::Ringing)
-        && state.count_player_cards_played_this_turn(None) >= 1
-        && state.player.powers.iter().any(|puid| {
-            state
-                .powers
-                .iter()
-                .any(|p| p.id == puid.0 && p.kind == crate::PowerKind::Ringing)
-        });
+    // C# RingingPower.ShouldPlay scans STARTED plays (including an in-flight
+    // autoplay parent), and restricts only cards bearing the Ringing marker.
+    let ringing_blocks = state.player.card_plays_started_this_turn >= 1
+        && state.player_power_amount(PowerKind::Ringing) > 0;
 
     // Mirror the `play_card` SmoggyPower gate (C# `SmoggyPower.ShouldPlay`,
     // `MegaCrit.Sts2.Core.Models.Powers/SmoggyPower.cs:64-71` v0.107.1) so the
@@ -13035,9 +13025,11 @@ pub fn legal_actions(state: &CombatState) -> SmallVec<[Action; 16]> {
         if sloth_cap_reached || relic_blocks {
             continue;
         }
-        // Bead `sts2-rs-xk9yo`: skip every card once the player owns Ringing
-        // and has already played a card this turn (mirrors `play_card`).
-        if ringing_blocks {
+        if ringing_blocks
+            && card
+                .affliction
+                .is_some_and(|a| a.kind == crate::card_afflictions::CardAfflictionKind::Ringing)
+        {
             continue;
         }
         // Bead `sts2-rs-ybtmu`: skip a `Bound`-afflicted card once a

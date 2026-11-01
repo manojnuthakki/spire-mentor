@@ -85,6 +85,9 @@ pub(crate) fn apply_power_to_player_via_legacy_surface(
     }
     push_new_player_power(state, kind, amount);
     record_player_power_row(state, kind, amount);
+    if kind == PowerKind::Ringing {
+        sts2_core::monster_power_effects::ringing_after_applied(state);
+    }
 }
 
 /// Log a player-side power apply that came through THIS legacy surface.

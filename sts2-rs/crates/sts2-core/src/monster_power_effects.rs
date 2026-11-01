@@ -103,6 +103,12 @@ pub fn dispatch_after_applied_for_power(
     kind: PowerKind,
     applier: Option<CreatureUid>,
 ) -> EffectResult {
+    // Ringing can be installed on the player's mirror Creature as well as
+    // through the content's legacy player surface. Both use the same body.
+    if kind == PowerKind::Ringing && state.player.creature_uid == Some(owner) {
+        ringing_after_applied(state);
+        return EffectResult::Resolved;
+    }
     if is_empty_after_applied_power() {
         return EffectResult::NotImplemented;
     }
@@ -196,10 +202,17 @@ pub fn dispatch_after_card_entered_combat_on_monster_powers(
     let smoggy = smoggy_after_card_entered_combat(state, card_uid);
     // `TangledPower.AfterCardEnteredCombat` sits on the player too (same leg).
     let tangled = tangled_after_card_entered_combat(state, card_uid);
-    let player_legs = if tangled == EffectResult::Resolved {
-        tangled
+    let ringing = if state.player_power_amount(PowerKind::Ringing) > 0
+        && ring_if_unafflicted(state, card_uid)
+    {
+        EffectResult::Resolved
     } else {
-        smoggy
+        EffectResult::NotImplemented
+    };
+    let player_legs = if [smoggy, tangled, ringing].contains(&EffectResult::Resolved) {
+        EffectResult::Resolved
+    } else {
+        EffectResult::NotImplemented
     };
     if is_empty_after_card_entered_combat_power() {
         return player_legs;
@@ -230,7 +243,7 @@ pub fn dispatch_after_card_entered_combat_on_monster_powers(
                 .map(|p| (owner, p.kind))
         })
         .collect();
-    let mut any_resolved = smoggy == EffectResult::Resolved;
+    let mut any_resolved = player_legs == EffectResult::Resolved;
     for (owner, kind) in pairs {
         if let Some(handler) = lookup_after_card_entered_combat_for_power(kind) {
             if handler(state, owner, card_uid) == EffectResult::Resolved {
@@ -908,6 +921,43 @@ pub fn tangled_after_removed(state: &mut CombatState) {
     }
 }
 
+// RingingPower.cs and Afflictions/Ringing.cs (installed game DLL v0.107.1).
+// Ringing is a marker; all behavior belongs to the power. Use the existing
+// lifecycle/card-entry lanes, as Tangled does, without consuming any RNG.
+fn ring_if_unafflicted(state: &mut CombatState, card_uid: CardUid) -> bool {
+    use crate::card_afflictions::{CardAffliction, CardAfflictionKind};
+    let Some(card) = state.cards.get_mut(card_uid.0.get() as usize - 1) else {
+        return false;
+    };
+    if card.affliction.is_some() {
+        return false;
+    }
+    card.set_affliction(CardAffliction::new(CardAfflictionKind::Ringing, 1))
+}
+
+/// `RingingPower.AfterApplied`: only a fresh installation afflicts the
+/// owner's unafflicted cards, including the card currently in the Play pile.
+pub fn ringing_after_applied(state: &mut CombatState) {
+    for uid in all_player_card_uids(state) {
+        ring_if_unafflicted(state, uid);
+    }
+}
+
+/// `RingingPower.AfterRemoved`: clear only Ringing markers in every pile.
+pub fn ringing_after_removed(state: &mut CombatState) {
+    use crate::card_afflictions::CardAfflictionKind;
+    for uid in all_player_card_uids(state) {
+        if let Some(card) = state.cards.get_mut(uid.0.get() as usize - 1) {
+            if card
+                .affliction
+                .is_some_and(|a| a.kind == CardAfflictionKind::Ringing)
+            {
+                let _ = card.clear_affliction();
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Test-support: clear all registries (for nextest's process-global state)
 // ---------------------------------------------------------------------------
@@ -1084,6 +1134,209 @@ mod tests {
         state.cards[uid.0.get() as usize - 1]
             .affliction
             .map(|a| a.kind)
+    }
+
+    // RingingPower.cs / Afflictions/Ringing.cs, installed game DLL: all combat
+    // piles (including Play), no replacement of another affliction, and a
+    // started-play gate only for Ringing cards.
+    fn ringing_fixture() -> CombatState {
+        let mut state = CombatState::default();
+        state.player.current_hp = 80;
+        state.player.max_hp = 80;
+        state.init_player_creature();
+        for (i, ty) in [
+            CardType::Attack,
+            CardType::Skill,
+            CardType::Power,
+            CardType::Status,
+            CardType::Curse,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            push_card(&mut state, i as u32 + 1, ty);
+        }
+        state.player.draw.clear();
+        state.player.hand.push(CardUid::new(1).unwrap());
+        state.player.draw.push(CardUid::new(2).unwrap());
+        state.player.discard.push(CardUid::new(3).unwrap());
+        state.player.exhaust.push(CardUid::new(4).unwrap());
+        state.player.play.push(CardUid::new(5).unwrap());
+        let other = push_card(&mut state, 6, CardType::Skill);
+        state.cards[other.0.get() as usize - 1].affliction =
+            Some(CardAffliction::new(CardAfflictionKind::Smog, 2));
+        state
+    }
+
+    fn apply_ringing(state: &mut CombatState) {
+        crate::card_effects::apply_power_to_creature(
+            state,
+            state.player.creature_uid.unwrap(),
+            PowerKind::Ringing,
+            1,
+        );
+    }
+
+    #[test]
+    fn ringing_application_covers_all_piles_and_preserves_other_afflictions() {
+        for with_applier in [false, true] {
+            let mut state = ringing_fixture();
+            let rng_before = state.rng.clone();
+            let run_rng_before = state.run_rng.clone();
+            if with_applier {
+                let player = state.player.creature_uid.unwrap();
+                crate::card_effects::apply_power_to_creature_with_applier(
+                    &mut state,
+                    player,
+                    PowerKind::Ringing,
+                    1,
+                    Some(player),
+                );
+            } else {
+                apply_ringing(&mut state);
+            }
+            for card in &state.cards[..5] {
+                assert_eq!(
+                    card.affliction,
+                    Some(CardAffliction::new(CardAfflictionKind::Ringing, 1))
+                );
+            }
+            assert_eq!(
+                state.cards[5].affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Smog, 2))
+            );
+            state.cards[0].clear_affliction();
+            apply_ringing(&mut state);
+            assert_eq!(
+                state.cards[0].affliction, None,
+                "stacking does not rerun AfterApplied"
+            );
+            assert_eq!(state.rng, rng_before);
+            assert_eq!(state.run_rng, run_rng_before);
+        }
+    }
+
+    #[test]
+    fn ringing_card_entry_only_afflicts_new_unafflicted_cards_while_held() {
+        let mut state = ringing_fixture();
+        let before = push_card(&mut state, 7, CardType::Attack);
+        let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, before);
+        assert_eq!(affliction_of(&state, before), None);
+        apply_ringing(&mut state);
+        let during = push_card(&mut state, 8, CardType::Skill);
+        let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, during);
+        assert_eq!(
+            affliction_of(&state, during),
+            Some(CardAfflictionKind::Ringing)
+        );
+        let other = CardUid::new(6).unwrap();
+        let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, other);
+        assert_eq!(
+            state.cards[5].affliction,
+            Some(CardAffliction::new(CardAfflictionKind::Smog, 2))
+        );
+    }
+
+    #[test]
+    fn ringing_removal_and_owner_turn_end_clear_only_ringing_in_all_piles() {
+        use crate::hooks::{Effect, ListenerRef, TurnSideCtx};
+        for explicit in [false, true] {
+            let mut state = ringing_fixture();
+            apply_ringing(&mut state);
+            // Supply markers independently to exercise cleanup even if apply is broken.
+            for card in &mut state.cards[..5] {
+                card.affliction = Some(CardAffliction::new(CardAfflictionKind::Ringing, 1));
+            }
+            crate::hooks::dispatch_after_turn_end(
+                &mut state,
+                &TurnSideCtx {
+                    side: crate::Side::Enemy,
+                },
+            );
+            assert!(state.cards[..5].iter().all(|c| c.affliction.is_some()));
+            if explicit {
+                let uid = state
+                    .powers
+                    .iter()
+                    .find(|p| p.kind == PowerKind::Ringing)
+                    .unwrap()
+                    .id;
+                crate::hooks::apply_effects(
+                    &mut state,
+                    &[Effect::RemovePower {
+                        listener: ListenerRef::Power(crate::PowerUid(uid)),
+                    }],
+                );
+            } else {
+                crate::hooks::dispatch_after_turn_end(
+                    &mut state,
+                    &TurnSideCtx {
+                        side: crate::Side::Player,
+                    },
+                );
+            }
+            assert_eq!(state.player_power_amount(PowerKind::Ringing), 0);
+            assert!(state.cards[..5].iter().all(|c| c.affliction.is_none()));
+            assert_eq!(
+                state.cards[5].affliction,
+                Some(CardAffliction::new(CardAfflictionKind::Smog, 2))
+            );
+            let after = push_card(&mut state, 7, CardType::Attack);
+            let _ = dispatch_after_card_entered_combat_on_monster_powers(&mut state, after);
+            assert_eq!(affliction_of(&state, after), None);
+        }
+    }
+
+    #[test]
+    fn ringing_selective_legality_counts_started_not_completed_plays_on_both_surfaces() {
+        for legacy in [false, true] {
+            let mut state = CombatState {
+                phase: crate::CombatPhase::PlayerPlayPhase,
+                ..CombatState::default()
+            };
+            state.player.current_hp = 80;
+            state.player.max_hp = 80;
+            state.player.energy = 3;
+            state.init_player_creature();
+            state.spawn_enemy(crate::MonsterKind::Nibbit);
+            for n in 1..=3 {
+                let uid = push_card(&mut state, n, CardType::Skill);
+                state.player.hand.push(uid);
+                state.cards[n as usize - 1].target_type = crate::cards::TargetType::Self_;
+                state.cards[n as usize - 1].card_id = crate::cards::CardId::DefendIronclad;
+                state.cards[n as usize - 1].cost = 1;
+            }
+            state.player.draw.clear();
+            apply_ringing(&mut state);
+            if legacy {
+                let player = state.player.creature_uid.unwrap();
+                let powers = std::mem::take(
+                    &mut state
+                        .creatures
+                        .iter_mut()
+                        .find(|c| c.id == player.0)
+                        .unwrap()
+                        .powers,
+                );
+                state.player.powers.extend(powers);
+            }
+            state.cards[0].affliction = Some(CardAffliction::new(CardAfflictionKind::Ringing, 1));
+            state.cards[1].affliction = Some(CardAffliction::new(CardAfflictionKind::Bound, 3));
+            state.cards[2].affliction = None;
+            for started in [0, 1] {
+                state.player.card_plays_started_this_turn = started;
+                assert_eq!(state.player.cards_played_this_turn, [0; 5]); // in-flight parent
+                let legal = crate::legal_actions(&state);
+                for (index, card) in state.cards.iter().enumerate() {
+                    let blocked = index == 0 && started > 0;
+                    assert_eq!(
+                        crate::combat_loop::player_should_play_blocked(&state, card),
+                        blocked
+                    );
+                    assert_eq!(legal.iter().any(|a| matches!(a, crate::Action::PlayCard { hand_index, .. } if usize::from(*hand_index) == index)), !blocked);
+                }
+            }
+        }
     }
 
     /// C# `TangledPower.AfterApplied` (`TangledPower.cs:23-30`): every player

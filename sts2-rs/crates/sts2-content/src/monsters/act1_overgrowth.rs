@@ -3018,12 +3018,29 @@ mod tests {
     #[test]
     fn ceremonial_beast_beast_cry_effect_applies_ringing_to_player() {
         let mut state = CombatState::default();
+        let uid = sts2_core::CardUid::new(1).unwrap();
+        state.cards.push(sts2_core::cards::Card {
+            uid,
+            ..sts2_core::cards::Card::pod_defaults()
+        });
+        state.player.draw.push(uid);
         ceremonial_beast_beast_cry_effect(&mut state, CreatureUid::new(1).expect("nz"));
         assert_eq!(
             player_power_amount(&state, PowerKind::Ringing),
             1,
             "BEAST_CRY must apply Ringing 1 to the player (C# CeremonialBeast.BeastCryMove)"
         );
+        assert_eq!(
+            state.cards[0].affliction,
+            Some(sts2_core::card_afflictions::CardAffliction::new(
+                sts2_core::card_afflictions::CardAfflictionKind::Ringing,
+                1
+            ))
+        );
+        // AfterApplied runs only for a fresh power, never for a stack/update.
+        state.cards[0].clear_affliction();
+        ceremonial_beast_beast_cry_effect(&mut state, CreatureUid::new(1).unwrap());
+        assert_eq!(state.cards[0].affliction, None);
     }
 
     #[test]
