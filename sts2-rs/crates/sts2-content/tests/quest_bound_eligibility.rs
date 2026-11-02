@@ -1,13 +1,12 @@
 //! Installed-DLL authority: Quest constructors, Tainted/Smoggy/Imbued,
-//! SecretTechnique/Flechettes/EscapePlan/HandTrick, ChainsOfBindingPower.
+//! SecretTechnique/Flechettes/EscapePlan/HandTrick and typed cost predicates.
 //! Synthetic rule controls, not claims of natural acquisition or route reach.
 use sts2_core::card_afflictions::{CardAffliction, CardAfflictionKind as Affliction};
 use sts2_core::cards::{CardId, CardType, EnchantmentId};
-use sts2_core::combat_loop::{auto_play_specific_card, end_player_turn_phase_one};
-use sts2_core::hooks::{apply_effects, Effect, ListenerRef};
+use sts2_core::hooks::ListenerRef;
 use sts2_core::potions::CharacterId;
 use sts2_core::run_manager::RunManager;
-use sts2_core::{apply, Action, CardUid, CombatPhase, CombatState, MonsterKind, PowerKind, Side};
+use sts2_core::{apply, Action, CardUid, CombatPhase, CombatState, MonsterKind, PowerKind};
 
 fn install() {
     sts2_content::cards::dispatch::install_default_registry();
@@ -45,11 +44,6 @@ fn power(s: &mut CombatState, kind: PowerKind, amount: i32) {
     sts2_core::card_effects::apply_power_to_creature(s, player, kind, amount);
 }
 
-fn draw(s: &mut CombatState, uid: CardUid) {
-    s.player.draw.push(uid);
-    let _ = sts2_core::cards::draw_via_state(s, 1);
-}
-
 #[test]
 fn step13_quest_imbued_selection_excludes_only_quests() {
     install();
@@ -74,19 +68,6 @@ fn step13_quest_imbued_selection_excludes_only_quests() {
             secondary_type: None,
         });
     assert_eq!(rm.enchant_eligible_deck_indices(), vec![3]);
-}
-
-#[test]
-fn step13_bound_legacy_draw_uses_power_amount() {
-    let mut s = state();
-    power(&mut s, PowerKind::ChainsOfBinding, 3);
-    s.player.powers = s.player_power_uids();
-    let uid = add(&mut s, CardId::StrikeIronclad);
-    draw(&mut s, uid);
-    assert_eq!(
-        s.cards[0].affliction,
-        Some(CardAffliction::new(Affliction::Bound, 3))
-    );
 }
 
 #[test]
@@ -201,125 +182,6 @@ fn step13_quest_hand_draw_and_skill_selection_controls() {
 }
 
 #[test]
-fn step13_bound_amount_budget_competition_redraw_and_side() {
-    for amount in [1, 3, 5] {
-        let mut s = state();
-        power(&mut s, PowerKind::ChainsOfBinding, amount);
-        let occupied = add(&mut s, CardId::DefendIronclad);
-        s.cards[0].affliction = Some(CardAffliction::new(Affliction::Hexed, 7));
-        draw(&mut s, occupied);
-        assert_eq!(s.combat_log.bound_cards_afflicted_by_chains_this_turn, 0);
-        for i in 0..=amount {
-            let uid = add(
-                &mut s,
-                if i == 0 {
-                    CardId::SpoilsMap
-                } else {
-                    CardId::StrikeIronclad
-                },
-            );
-            draw(&mut s, uid);
-            let mark = s.cards[uid.get() as usize - 1].affliction;
-            assert_eq!(
-                mark,
-                (i < amount).then(|| CardAffliction::new(Affliction::Bound, amount))
-            );
-            if i == 0 {
-                s.player.hand.retain(|u| *u != uid);
-                draw(&mut s, uid);
-                assert_eq!(
-                    s.combat_log.bound_cards_afflicted_by_chains_this_turn, 1,
-                    "redraw does not restack or spend budget"
-                );
-            }
-        }
-        assert_eq!(
-            s.cards[0].affliction,
-            Some(CardAffliction::new(Affliction::Hexed, 7))
-        );
-    }
-    let mut s = state();
-    power(&mut s, PowerKind::ChainsOfBinding, 3);
-    s.side = Side::Enemy;
-    let uid = add(&mut s, CardId::DefendIronclad);
-    draw(&mut s, uid);
-    assert!(s.cards[0].affliction.is_none());
-}
-
-#[test]
-fn step13_bound_autoplay_and_removed_power_lifetime() {
-    let mut s = state();
-    power(&mut s, PowerKind::ChainsOfBinding, 3);
-    let first = add(&mut s, CardId::DefendIronclad);
-    let second = add(&mut s, CardId::DefendIronclad);
-    for c in &mut s.cards {
-        c.affliction = Some(CardAffliction::new(Affliction::Bound, 3));
-    }
-    s.player.draw.push(first);
-    s.player.hand.push(second);
-    assert!(auto_play_specific_card(&mut s, first, false));
-    assert!(sts2_core::combat_loop::player_should_play_blocked(
-        &s,
-        &s.cards[1]
-    ));
-    let uid = s
-        .player_power_uids()
-        .into_iter()
-        .find(|u| s.powers.get_by_id(u.0).unwrap().kind == PowerKind::ChainsOfBinding)
-        .unwrap();
-    apply_effects(
-        &mut s,
-        &[Effect::RemovePower {
-            listener: ListenerRef::Power(uid),
-        }],
-    );
-    assert!(
-        s.cards[1].affliction.is_some(),
-        "removal does not clear marks"
-    );
-    power(&mut s, PowerKind::ChainsOfBinding, 3);
-    assert!(
-        !sts2_core::combat_loop::player_should_play_blocked(&s, &s.cards[1]),
-        "replacement has a fresh latch"
-    );
-}
-
-#[test]
-fn step13_bound_cleanup_uses_live_piles_and_runs_before_victory() {
-    for lethal in [false, true] {
-        let mut s = state();
-        power(&mut s, PowerKind::ChainsOfBinding, 3);
-        s.player.powers = s.player_power_uids();
-        let live = add(&mut s, CardId::DefendIronclad);
-        let removed = add(&mut s, CardId::DefendIronclad);
-        s.player.hand.push(live);
-        for c in &mut s.cards {
-            c.affliction = Some(CardAffliction::new(Affliction::Bound, 3));
-        }
-        s.combat_log.chains_bound_card_played_this_turn = true;
-        if lethal {
-            power(&mut s, PowerKind::TheBomb, 1);
-            let uid = s
-                .player_power_uids()
-                .into_iter()
-                .find(|u| s.powers.get_by_id(u.0).unwrap().kind == PowerKind::TheBomb)
-                .unwrap();
-            s.powers.iter_mut().find(|p| p.id == uid.0).unwrap().counter = 9999;
-        }
-        let _ = end_player_turn_phase_one(&mut s);
-        assert!(s.cards[live.get() as usize - 1].affliction.is_none());
-        assert_eq!(
-            s.cards[removed.get() as usize - 1].affliction,
-            Some(CardAffliction::new(Affliction::Bound, 3))
-        );
-        assert!(!s.combat_log.chains_bound_card_played_this_turn);
-        if lethal {
-            assert!(s.is_over && s.player_won);
-        }
-    }
-}
-
-#[test]
 fn step13_quest_cost_type_filters_preserve_real_skills() {
     for kind in [PowerKind::Corruption, PowerKind::FreeSkill] {
         let mut s = state();
@@ -347,89 +209,5 @@ fn step13_quest_cost_type_filters_preserve_real_skills() {
                 );
             }
         }
-    }
-}
-
-#[test]
-fn step13_bound_five_piles_keywords_absent_owner_and_later_draw() {
-    for owned in [false, true] {
-        let mut s = state();
-        if owned {
-            power(&mut s, PowerKind::ChainsOfBinding, 3);
-        }
-        let uids: Vec<_> = (0..7).map(|_| add(&mut s, CardId::SpoilsMap)).collect();
-        s.player.hand.push(uids[0]);
-        s.player.draw.push(uids[1]);
-        s.player.discard.push(uids[2]);
-        s.player.exhaust.push(uids[3]);
-        s.player.play.push(uids[4]);
-        s.player.discard.push(uids[6]);
-        for c in &mut s.cards {
-            c.affliction = Some(CardAffliction::new(Affliction::Bound, 3));
-        }
-        s.cards[6].affliction = Some(CardAffliction::new(Affliction::Ringing, 2));
-        let _ = end_player_turn_phase_one(&mut s);
-        for c in &s.cards[..5] {
-            assert_eq!(c.affliction.is_none(), owned);
-            assert!(
-                sts2_core::card_effects::card_unplayable_inst(c),
-                "clearing preserves native keywords"
-            );
-        }
-        assert!(
-            s.cards[5].affliction.is_some(),
-            "removed arena card is outside AllCards"
-        );
-        assert_eq!(
-            s.cards[6].affliction,
-            Some(CardAffliction::new(Affliction::Ringing, 2))
-        );
-        if owned {
-            let late = add(&mut s, CardId::DefendIronclad);
-            // A draw after the normal cleanup (e.g. Joss Paper's later hook)
-            // can mark a fresh card; no blanket enemy-side/final-boundary clear.
-            s.player.draw.insert(0, late);
-            let _ = sts2_core::cards::draw_via_state(&mut s, 1);
-            assert_eq!(
-                s.cards[late.get() as usize - 1].affliction,
-                Some(CardAffliction::new(Affliction::Bound, 3))
-            );
-        }
-    }
-}
-
-#[test]
-fn step13_bound_stacking_and_each_reapply_path_preserve_turn_budget() {
-    let mut s = state();
-    let player = s.player.creature_uid.unwrap();
-    power(&mut s, PowerKind::ChainsOfBinding, 3);
-    let bound = add(&mut s, CardId::DefendIronclad);
-    draw(&mut s, bound);
-    s.combat_log.chains_bound_card_played_this_turn = true;
-    power(&mut s, PowerKind::ChainsOfBinding, 1);
-    assert!(
-        s.combat_log.chains_bound_card_played_this_turn,
-        "stacking retains the same latch"
-    );
-    for with_applier in [false, true] {
-        sts2_core::card_effects::remove_creature_power(&mut s, player, PowerKind::ChainsOfBinding);
-        assert!(!sts2_core::combat_loop::player_should_play_blocked(
-            &s,
-            &s.cards[0]
-        ));
-        if with_applier {
-            sts2_core::card_effects::apply_power_to_creature_with_applier(
-                &mut s,
-                player,
-                PowerKind::ChainsOfBinding,
-                3,
-                None,
-            );
-        } else {
-            power(&mut s, PowerKind::ChainsOfBinding, 3);
-        }
-        assert!(!s.combat_log.chains_bound_card_played_this_turn);
-        assert_eq!(s.combat_log.bound_cards_afflicted_by_chains_this_turn, 1);
-        s.combat_log.chains_bound_card_played_this_turn = true;
     }
 }

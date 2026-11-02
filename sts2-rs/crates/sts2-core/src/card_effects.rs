@@ -1073,11 +1073,6 @@ fn apply_power_to_creature_inner(
     }
 
     // 2. Otherwise allocate a new PowerUid and push.
-    // Chains' boolean belongs to this installed instance. Stacking keeps
-    // it; a genuinely fresh instance (including reapplication) starts clear.
-    if kind == PowerKind::ChainsOfBinding && state.player.creature_uid == Some(target_uid) {
-        state.combat_log.chains_bound_card_played_this_turn = false;
-    }
     let next_id_raw = state
         .powers
         .iter()
@@ -1569,9 +1564,6 @@ pub fn apply_power_to_creature_with_applier(
         .max()
         .map_or(1, |m| m.saturating_add(1));
     let new_id = NonZeroU32::new(next_id_raw).expect("power id non-zero");
-    if kind == PowerKind::ChainsOfBinding && state.player.creature_uid == Some(target_uid) {
-        state.combat_log.chains_bound_card_played_this_turn = false;
-    }
     state.powers.push(Power {
         id: new_id,
         kind,

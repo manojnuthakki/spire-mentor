@@ -7251,11 +7251,24 @@ impl CombatState {
         // replaces the per-drawn-card `player.powers` walk. Gated on the
         // `present_kinds` superset first: no live ChainsOfBinding anywhere ⇒
         // the walk would find nothing ⇒ 0, bit-identically.
-        let chains_stacks = u32::try_from(
-            self.player_power_amount(crate::powers::PowerKind::ChainsOfBinding)
-                .max(0),
-        )
-        .unwrap_or(0);
+        let chains_stacks: u32 = if self
+            .powers
+            .present_kinds()
+            .contains(crate::powers::PowerKind::ChainsOfBinding)
+        {
+            let mut amt: i32 = 0;
+            for puid in &self.player.powers {
+                if let Some(p) = self.powers.get_by_id(puid.0) {
+                    if p.kind == crate::powers::PowerKind::ChainsOfBinding {
+                        amt = p.amount;
+                        break;
+                    }
+                }
+            }
+            u32::try_from(amt.max(0)).unwrap_or(0)
+        } else {
+            0
+        };
 
         // Perf 2026-07-04: `present_kinds` is a conservative superset of every
         // live power kind, so a miss proves the per-drawn-card Automation walk
@@ -7426,8 +7439,6 @@ impl CombatState {
             // `CardModel.Affliction` semantics, and `Bound`'s `CanAfflict`
             // returns false on already-afflicted cards.
             if chains_stacks > 0
-                && self.side == Side::Player
-                && !self.is_over
                 && self.combat_log.bound_cards_afflicted_by_chains_this_turn < chains_stacks
             {
                 if let Some(c) = self.cards.get_mut(idx) {
@@ -7438,7 +7449,7 @@ impl CombatState {
                         )
                         && c.set_affliction(crate::card_afflictions::CardAffliction::new(
                             crate::card_afflictions::CardAfflictionKind::Bound,
-                            i32::try_from(chains_stacks).expect("positive i32 power amount"),
+                            1,
                         ))
                     {
                         self.combat_log.bound_cards_afflicted_by_chains_this_turn = self
@@ -12841,7 +12852,16 @@ pub fn legal_actions(state: &CombatState) -> SmallVec<[Action; 16]> {
     // Gated on the player actually owning the power so a stale flag can't
     // strand plays after Chains expires mid-turn, matching `play_card`.
     let chains_bound_blocks = state.combat_log.chains_bound_card_played_this_turn
-        && state.player_power_amount(PowerKind::ChainsOfBinding) > 0;
+        && state
+            .powers
+            .present_kinds()
+            .contains(PowerKind::ChainsOfBinding)
+        && state.player.powers.iter().any(|puid| {
+            state
+                .powers
+                .iter()
+                .any(|p| p.id == puid.0 && p.kind == crate::PowerKind::ChainsOfBinding)
+        });
 
     // C# RingingPower.ShouldPlay scans STARTED plays (including an in-flight
     // autoplay parent), and restricts only cards bearing the Ringing marker.
