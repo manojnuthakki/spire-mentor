@@ -4813,12 +4813,12 @@ fn osty_redirect_target(state: &CombatState, props: ValueProps) -> Option<Creatu
 ///
 /// This is [`apply_damage_to_player`]'s step 1, extracted verbatim and shared
 /// with it, so a previewed number and a delivered number cannot drift apart.
-/// `raw_damage` with the `relic_effects`-family additive folded in — the base
-/// the player-side `hooks::modify_damage` call actually receives.
+/// The `relic_effects`-family ordinary additive delta, kept separate from
+/// raw_damage so the card's enchantment stage cannot multiply that bonus.
 ///
 /// Extracted from [`preview_damage_to_player`] so that
 /// `apply_damage_to_player`'s `AfterModifyingDamageAmount` flashes can be
-/// selected against the SAME number the pipeline used. The cap stage's listener
+/// selected against the SAME staged inputs the pipeline used. The cap stage's listener
 /// selection is defined against the post-multiplicative amount, so a flash pass
 /// fed the un-folded raw damage would light the wrong powers on any board
 /// carrying a damage relic.
@@ -4827,7 +4827,7 @@ fn osty_redirect_target(state: &CombatState, props: ValueProps) -> Option<Creatu
 /// has a `creature_uid`, and before Phase-1 assigns one there is no slot for
 /// the relic registry to target, so the fold is genuinely empty.
 #[must_use]
-fn player_damage_base_after_relic_additive(
+fn player_damage_relic_additive(
     state: &CombatState,
     dealer: CreatureRef,
     raw_damage: i32,
@@ -4835,11 +4835,11 @@ fn player_damage_base_after_relic_additive(
     card: Option<crate::cards::CardId>,
 ) -> i32 {
     let Some(target_uid) = CreatureRef::Player.to_creature_uid(state) else {
-        return raw_damage;
+        return 0;
     };
     // J01b: a dead channel adds the additive identity `0`.
     if !relic_channel_live(state, PlannedChannel::ModifyDamageAdditive) {
-        return raw_damage;
+        return 0;
     }
     let md_ctx = crate::relic_effects::ModifyDamageCtx {
         dealer: dealer.to_creature_uid(state),
@@ -4856,9 +4856,7 @@ fn player_damage_base_after_relic_additive(
             })
         }),
     };
-    raw_damage.saturating_add(crate::relic_effects::dispatch_modify_damage_additive(
-        state, &md_ctx,
-    ))
+    crate::relic_effects::dispatch_modify_damage_additive(state, &md_ctx)
 }
 
 #[must_use]
@@ -4875,10 +4873,10 @@ pub fn preview_damage_to_player(
         target: target_ref,
         props,
     };
-    let previewed = hooks::modify_damage(
-        state,
-        player_damage_base_after_relic_additive(state, dealer, raw_damage, props, card),
-        &ctx,
+    let previewed = hooks::modify_damage_parts(state, &ctx).apply(
+        i64::from(raw_damage),
+        1,
+        player_damage_relic_additive(state, dealer, raw_damage, props, card),
     );
     // C# clamps the telegraph with `Math.Max(0, …)`; a fully-Weakened 1-damage
     // multi-hit really does display 0 (Exoskeleton, TrackerRubyRaider).
@@ -4966,7 +4964,8 @@ pub fn apply_damage_to_player(
         state,
         dealer,
         target_ref,
-        player_damage_base_after_relic_additive(state, dealer, raw_damage, props, card),
+        raw_damage,
+        player_damage_relic_additive(state, dealer, raw_damage, props, card),
         props,
     );
 

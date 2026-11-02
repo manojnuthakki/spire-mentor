@@ -11090,9 +11090,8 @@ fn hp_lost_power_stage_unscoped(
     (additive, mul, cap)
 }
 
-/// The three accumulators [`modify_damage`] folds, before any of them is
-/// applied to a base damage: the additive delta, the composed multiplier, and
-/// the running-minimum cap.
+/// The enchantment pre-stage and ordinary listener accumulators that
+/// [`modify_damage`] applies to a base damage, without intermediate rounding.
 ///
 /// Extracted so the cold [`damage_modifiers`] walk can reproduce the pipeline's
 /// intermediate values EXACTLY rather than recompute them — its cap-stage
@@ -11101,37 +11100,51 @@ fn hp_lost_power_stage_unscoped(
 /// would be a second thing to keep in step with this one.
 #[derive(Debug, Clone, Copy)]
 pub struct DamageParts {
-    /// Every listener's `modify_damage_additive`, plus the card
-    /// enchantment's, summed. `base_damage` is NOT included.
+    /// Card enchantment's additive stage, before all ordinary listeners.
+    pub enchant_additive: i32,
+    /// Card enchantment's multiplier, before all ordinary listeners.
+    pub enchant_mul: DamageMul,
+    /// Ordinary listeners' additive deltas. `base_damage` is NOT included.
     pub additive: i32,
-    /// Powers, then the relic registry, then the card enchantment, composed in
-    /// that order — the whole multiplicative stage as one unreduced rational.
+    /// Powers and relic registry, after the ordinary additive stage.
     pub mul: DamageMul,
     /// The minimum cap any listener asked for, or `i32::MAX` for "uncapped".
     pub cap: i32,
 }
 
+impl DamageParts {
+    /// v0.107.1 Hook.ModifyDamage / ModifyDamageInternal: enchant the base,
+    /// then add ordinary power/relic bonuses, then multiply. Keep every stage
+    /// rational until the damage boundary; registry additive callers already
+    /// have their exact card/target context and pass their ordinary delta here.
+    pub(crate) fn unrounded(self, base_num: i64, base_den: i64, registry_add: i32) -> (i64, i64) {
+        debug_assert!(base_den > 0);
+        let enchanted_num = base_num
+            .saturating_add(i64::from(self.enchant_additive).saturating_mul(base_den))
+            .saturating_mul(self.enchant_mul.num);
+        let enchanted_den = base_den.saturating_mul(self.enchant_mul.den);
+        let ordinary_add = self.additive.saturating_add(registry_add);
+        let num = enchanted_num
+            .saturating_add(i64::from(ordinary_add).saturating_mul(enchanted_den))
+            .saturating_mul(self.mul.num);
+        (num, enchanted_den.saturating_mul(self.mul.den))
+    }
+
+    pub(crate) fn apply(self, base_num: i64, base_den: i64, registry_add: i32) -> i32 {
+        let (num, den) = self.unrounded(base_num, base_den, registry_add);
+        DamageMul::ONE.apply_frac(num, den).min(self.cap).max(0)
+    }
+}
+
 #[must_use]
 pub fn modify_damage(state: &CombatState, base_damage: i32, ctx: &DamageCtx) -> i32 {
-    let DamageParts { additive, mul, cap } = modify_damage_parts(state, ctx);
-
-    // Step 1: additive (Strength, Vigor, ...).
-    let after_add = base_damage.saturating_add(additive);
-
-    // Step 3: single floor at end via div_euclid (matches math.floor).
-    let after_mul = mul.apply(after_add);
-
-    // Step 4: cap (Intangible's `min(damage, 1)`-ish).
-    let after_cap = after_mul.min(cap);
-
-    // Step 5: clamp to non-negative. Python writes `max(0, math.floor(...))`.
-    after_cap.max(0)
+    modify_damage_parts(state, ctx).apply(i64::from(base_damage), 1, 0)
 }
 
 /// [`modify_damage`]'s accumulation stage, without the base damage.
 ///
-/// Split out of `modify_damage` verbatim (steps 1-5 stayed there); the fold
-/// below never reads `base_damage`, which is what makes the split mechanical.
+/// The fold never reads `base_damage`. Enchantment deltas/multipliers are
+/// kept separate from ordinary listeners per v0.107.1 Hook.ModifyDamage.
 #[must_use]
 #[inline]
 pub fn modify_damage_parts(state: &CombatState, ctx: &DamageCtx) -> DamageParts {
@@ -11210,9 +11223,8 @@ pub fn modify_damage_parts(state: &CombatState, ctx: &DamageCtx) -> DamageParts 
     // convention `card_effects::originating_card_id` and the block pipeline
     // already use. Gated to player-dealt damage; enemy attacks never carry a
     // player card source. Bead `sts2-rs-enchant-damage-additive` (PARITY136).
-    // The multiplicative enchantments (Favored/Instinct → 2×, Corrupted → 1.5×)
-    // are wired alongside the additive below via `enchant_damage_multiplicative_x100`,
-    // composed into the `mul` fold (bead `sts2-rs-h9u-8`, GH #64 §5).
+    // Keep these separate: Hook.ModifyDamage enchants the base BEFORE
+    // ModifyDamageInternal runs ordinary additive/multiplicative listeners.
     //
     // C# applies the enchant additive purely off `cardSource` with no dealer
     // check, so Necrobinder card damage dealt FromOsty (Flatten/Snap/Unleash)
@@ -11223,13 +11235,12 @@ pub fn modify_damage_parts(state: &CombatState, ctx: &DamageCtx) -> DamageParts 
     let dealt_by_player_or_osty = matches!(ctx.dealer, CreatureRef::Player)
         || matches!(ctx.dealer, CreatureRef::Enemy(uid) if state.player.pet_uid == Some(uid));
     let mut enchant_mul = DamageMul::ONE;
+    let mut enchant_additive = 0;
     if dealt_by_player_or_osty {
         if let Some(card) = crate::card_effects::resolving_card_inst(state) {
             {
                 let powered = ctx.props.is_powered();
-                additive = additive.saturating_add(
-                    crate::enchantment_hooks::enchant_damage_additive(card, powered),
-                );
+                enchant_additive = crate::enchantment_hooks::enchant_damage_additive(card, powered);
                 // Favored/Instinct/Corrupted multiplicative (×100 fixed-point).
                 let x100 =
                     crate::enchantment_hooks::enchant_damage_multiplicative_x100(card, powered);
@@ -11251,12 +11262,15 @@ pub fn modify_damage_parts(state: &CombatState, ctx: &DamageCtx) -> DamageParts 
     } else {
         DamageMul::ONE
     };
-    // Compose the played card's enchantment multiplier (Favored/Instinct/Corrupted)
-    // into the same single-floor fold. `enchant_mul` is ONE (no-op) unless a
-    // player/Osty card source carries a multiplicative enchantment.
-    let mul = power_mul.compose(relic_mul).compose(enchant_mul);
+    let mul = power_mul.compose(relic_mul);
 
-    DamageParts { additive, mul, cap }
+    DamageParts {
+        enchant_additive,
+        enchant_mul,
+        additive,
+        mul,
+        cap,
+    }
 }
 
 /// Which powers `Hook.AfterModifyingDamageAmount` would fire on for this hit —
@@ -11308,6 +11322,7 @@ pub fn modify_damage_parts(state: &CombatState, ctx: &DamageCtx) -> DamageParts 
 pub fn damage_amount_flashes(
     state: &CombatState,
     base_damage: i32,
+    registry_add: i32,
     ctx: &DamageCtx,
 ) -> smallvec::SmallVec<[(CreatureRef, PowerKind); 4]> {
     let mut out: smallvec::SmallVec<[(CreatureRef, PowerKind); 4]> = smallvec::SmallVec::new();
@@ -11331,13 +11346,10 @@ pub fn damage_amount_flashes(
     }
 
     // Cap stage: `num` starts at the post-multiplicative amount, as a rational.
-    let DamageParts {
-        additive,
-        mul,
-        cap: folded_cap,
-    } = modify_damage_parts(state, ctx);
-    let after_add = i128::from(base_damage.saturating_add(additive));
-    let (mut num_n, mut num_d) = (after_add * i128::from(mul.num), i128::from(mul.den));
+    let parts = modify_damage_parts(state, ctx);
+    let folded_cap = parts.cap;
+    let (num, den) = parts.unrounded(i64::from(base_damage), 1, registry_add);
+    let (mut num_n, mut num_d) = (i128::from(num), i128::from(den));
     debug_assert!(num_d > 0, "DamageMul::den is constructed positive");
     let mut running_min = i32::MAX;
     for &(uid, owner) in &rows {
@@ -11439,8 +11451,10 @@ pub struct DamageModifier {
 /// the relic-registry multiplicative channel, neither of which is a listener)
 /// is folded into a single trailing [`DamageModifierSource::Other`] row,
 /// derived by subtracting/dividing the named rows out of `modify_damage_parts`
-/// — so the rows ALWAYS reconstruct the total, and a consumer that prints them
-/// can never show arithmetic that does not add up.
+/// — so the rows reconstruct the enemy intent total used by the wire.
+/// This flat display vocabulary does not express enchant-before-additive
+/// stages for arbitrary player cards; it is not a player damage calculator.
+/// The current consumer is enemy intent telemetry, with no card enchantment.
 ///
 /// Read-only and deliberately COLD — the wire serializer is the only caller.
 /// Modelled on [`damage_amount_flashes`], which walks the same listeners for
@@ -11507,8 +11521,12 @@ pub fn damage_modifier_breakdown(
     // `power_mul` accumulator `modify_damage_parts` builds (same listeners,
     // same order, identity rows compose away), so `parts.mul` divided by it is
     // the enchantment + relic-registry stages, exactly.
-    let DamageParts { additive, mul, .. } = modify_damage_parts(state, ctx);
-    let residual_add = additive.saturating_sub(named_add);
+    let parts = modify_damage_parts(state, ctx);
+    let residual_add = parts
+        .additive
+        .saturating_sub(named_add)
+        .saturating_add(parts.enchant_additive);
+    let mul = parts.mul.compose(parts.enchant_mul);
     // Guard the division: a ZERO multiplier anywhere makes both numerators 0
     // and the quotient meaningless. Nothing is left to attribute in that case
     // — the named row that zeroed it already explains the result.
@@ -11539,9 +11557,8 @@ pub fn damage_modifier_breakdown(
 /// in C# (`Thrash.cs:67`): `(int)(BaseValue × mul)` differs from
 /// `(int)(floor(BaseValue) × mul)` whenever `BaseValue` has a fractional part
 /// AND a multiplicative modifier (Shrink / Weak / Vulnerable) is live. Cold
-/// path (Thrash only), so the per-listener walk is duplicated rather than
-/// sharing [`modify_damage`]'s single-pass hot-path body. Bead
-/// `sts2-rs-thrash-decimal`.
+/// path (Thrash only); shares the integer path's staged accumulator so
+/// enchanted fractional attacks obey the same ordering and rounding.
 #[must_use]
 pub fn modify_damage_frac(
     state: &CombatState,
@@ -11549,29 +11566,7 @@ pub fn modify_damage_frac(
     base_den: i64,
     ctx: &DamageCtx,
 ) -> i32 {
-    let mut additive: i32 = 0;
-    let mut power_mul = DamageMul::ONE;
-    let mut cap: i32 = i32::MAX;
-    for listener in iter_power_listeners(state) {
-        additive = additive.saturating_add(modify_damage_additive(state, listener, ctx));
-        power_mul = power_mul.compose(modify_damage_multiplicative(state, listener, ctx));
-        cap = cap.min(modify_damage_cap(state, listener, ctx));
-    }
-    for listener in iter_relic_listeners(state) {
-        additive = additive.saturating_add(modify_damage_additive(state, listener, ctx));
-        power_mul = power_mul.compose(modify_damage_multiplicative(state, listener, ctx));
-        cap = cap.min(modify_damage_cap(state, listener, ctx));
-    }
-    let relic_mul = if relic_channel_live(state, PlannedChannel::ModifyDamageMultiplicative) {
-        crate::relic_effects::dispatch_modify_damage_multiplicative(state, ctx)
-    } else {
-        DamageMul::ONE
-    };
-    let mul = power_mul.compose(relic_mul);
-    // after_add = (base_num/base_den) + additive  →  rational over base_den.
-    let add_num = base_num.saturating_add(i64::from(additive).saturating_mul(base_den));
-    let after_mul = mul.apply_frac(add_num, base_den);
-    after_mul.min(cap).max(0)
+    modify_damage_parts(state, ctx).apply(base_num, base_den, 0)
 }
 
 /// Compute the player's OUTGOING modified attack damage as an un-floored

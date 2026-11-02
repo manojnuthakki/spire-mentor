@@ -564,13 +564,9 @@ pub fn compute_modified_damage(
     // `modify_damage` floors once at the end via `DamageMul::apply` (rational
     // `div_euclid`), matching Python's `math.floor` exactly.
     //
-    // Bead `sts2-rs-6jk` (j87-a): fold the relic_effects-family additive
-    // contribution INTO `raw_damage` before the hooks-family pipeline runs so
-    // multiplicative + cap + floor apply to the combined sum. Mirrors Python
-    // `hooks.py:79-82` where all `modify_damage_additive` owners sum to a
-    // single delta consumed by the multi-stage pipeline. Hooks-family relic
-    // listeners (legacy `iter_relic_listeners` arms) still run inside
-    // `hooks::modify_damage`; the two registries compose left-to-right.
+    // Registry relics contribute an ordinary additive delta. Keep it separate
+    // from the raw base: v0.107.1 Hook.ModifyDamage enchants that base first,
+    // then ModifyDamageInternal adds ordinary bonuses before mul/cap/floor.
     // J01b: a dead channel (no owned handler) folds to the additive identity
     // `0` without building the context.
     let relic_additive = if relic_channel_live(state, PlannedChannel::ModifyDamageAdditive) {
@@ -592,8 +588,9 @@ pub fn compute_modified_damage(
     } else {
         0
     };
-    let raw_damage_with_relic_additive = raw_damage.saturating_add(relic_additive);
-    hooks::modify_damage(state, raw_damage_with_relic_additive, &ctx)
+    // The registry delta is ordinary additive damage, AFTER the card's
+    // enchantment pre-stage (v0.107.1 Hook.ModifyDamage).
+    hooks::modify_damage_parts(state, &ctx).apply(i64::from(raw_damage), 1, relic_additive)
 }
 
 /// [`compute_modified_damage`], plus the `AfterModifyingDamageAmount` flashes
@@ -631,10 +628,16 @@ pub fn compute_modified_damage_flashing(
             card,
             card_uid: originating_card_uid(state, card),
         };
-        let base = raw_damage.saturating_add(
-            crate::relic_effects::dispatch_modify_damage_additive(state, &relic_additive_md_ctx),
+        let registry_add =
+            crate::relic_effects::dispatch_modify_damage_additive(state, &relic_additive_md_ctx);
+        flash_damage_amount_modifiers(
+            state,
+            dealer,
+            CreatureRef::Enemy(target),
+            raw_damage,
+            registry_add,
+            props,
         );
-        flash_damage_amount_modifiers(state, dealer, CreatureRef::Enemy(target), base, props);
     }
     final_damage
 }
@@ -643,13 +646,11 @@ pub fn compute_modified_damage_flashing(
 /// `PowerFlashed` half of `CreatureCmd.cs:262`, which sits between
 /// `Hook.ModifyDamage` and `Hook.BeforeDamageReceived`.
 ///
-/// Emission only. `base_after_relic_additive` must be the SAME number the hit's
-/// own `hooks::modify_damage` call received — i.e. `raw_damage` with the
-/// `relic_effects` additive already folded in — because the cap stage's
-/// listener selection is defined against the amount that pipeline produced.
-/// Passing the un-folded raw damage would light the wrong powers on any board
-/// carrying a damage relic. [`hooks::damage_amount_flashes`] carries the
-/// selection rule and the reasoning behind it.
+/// Emission only. `raw_damage` and `registry_add` must match the hit's own
+/// staged accumulator inputs: the card enchantment precedes the registry
+/// addition, and caps compare the unrounded result. Passing their combined
+/// sum would enchant the relic bonus too. [`hooks::damage_amount_flashes`]
+/// carries the selection rule and the reasoning behind it.
 ///
 /// Gated on the event log being armed, like `flash_power` itself — so under
 /// search this is one branch and no listener walk. That is why the selection
@@ -665,7 +666,8 @@ pub fn flash_damage_amount_modifiers(
     state: &mut CombatState,
     dealer: CreatureRef,
     target: CreatureRef,
-    base_after_relic_additive: i32,
+    raw_damage: i32,
+    registry_add: i32,
     props: ValueProps,
 ) {
     if !crate::event_log::armed(state) {
@@ -676,7 +678,7 @@ pub fn flash_damage_amount_modifiers(
         target,
         props,
     };
-    for (owner, kind) in hooks::damage_amount_flashes(state, base_after_relic_additive, &ctx) {
+    for (owner, kind) in hooks::damage_amount_flashes(state, raw_damage, registry_add, &ctx) {
         match owner {
             CreatureRef::Player => crate::event_log::flash_player_power(state, kind),
             CreatureRef::Enemy(uid) => crate::event_log::flash_power(state, uid, kind),
@@ -1280,8 +1282,8 @@ pub fn compute_modified_damage_frac(
         target: CreatureRef::Enemy(target),
         props,
     };
-    // Relic-additive (MiniatureCannon &c.) reads the integer base; fold it into
-    // the rational numerator over the same denominator before the pipeline.
+    // Preserve the registry's existing integer context (current handlers do
+    // not read base_damage); its delta enters AFTER the enchantment stage.
     let int_base = i32::try_from(base_num.div_euclid(base_den)).unwrap_or(i32::MAX);
     let relic_additive = if relic_channel_live(state, PlannedChannel::ModifyDamageAdditive) {
         let relic_additive_md_ctx = crate::relic_effects::ModifyDamageCtx {
@@ -1296,8 +1298,7 @@ pub fn compute_modified_damage_frac(
     } else {
         0
     };
-    let base_num = base_num.saturating_add(i64::from(relic_additive).saturating_mul(base_den));
-    hooks::modify_damage_frac(state, base_num, base_den, &ctx)
+    hooks::modify_damage_parts(state, &ctx).apply(base_num, base_den, relic_additive)
 }
 
 /// Fractional-base twin of [`apply_damage_full`]: composes
