@@ -1483,23 +1483,37 @@ pub const DROWNING_BEACON: EventSpec = EventSpec {
 // ── GraveOfTheForgotten ──────────────────────────────────────────────
 
 fn grave_confront(state: &mut RunState) -> EventOutcome {
-    // C# `GraveOfTheForgotten.Confront` (`GraveOfTheForgotten.cs:52-66`) does
-    // TWO things, NEITHER a card-reward choice:
-    //  1. `CardPileCmd.AddCurseToDeck<Decay>` — adds one specific Decay curse
-    //     directly to the deck (`CardPileCmd.cs:960-978`: CreateCard + Add).
-    //  2. `CardSelectCmd.FromDeckForEnchantment(SoulsPower, 1)` + `Enchant` —
-    //     ENCHANTS an existing deck card; it adds NO card.
-    // The old two `Reward::Card(empty)` placeholders surfaced two random 3-card
-    // ADD choices, inflating the deck by 2 vs C#. Add the Decay curse directly;
-    // the Souls-Power enchant needs an enchant-selection surface (not yet wired)
-    // so it's left unimplemented rather than faked with a phantom card-add —
-    // dropping the phantom keeps deck size correct. Bead `sts2-rs-RP27`.
+    // Installed GraveOfTheForgotten.Confront awaits the hooked Decay add
+    // BEFORE constructing the SoulsPower candidate list. Neither is a reward.
     if let Some(card) =
         crate::cards::spec_index::card_pod_from_id(sts2_core::cards::CardId::Decay, false)
     {
         state.add_card_to_deck(card, sts2_core::relic_effects::AddSource::EventGain);
     }
-    EventOutcome::finished("Added Decay to the deck (Soul's Power enchant deferred).")
+    let eligible = state
+        .master_deck
+        .iter()
+        .filter(|c| souls_power_can_enchant(c))
+        .count();
+    if state.interactive_card_transform && eligible > 1 {
+        state
+            .pending_deck_enchants
+            .push(sts2_core::PendingDeckEnchant {
+                enchantment: sts2_core::cards::EnchantmentId::SoulsPower,
+                amount: 1,
+                type_restriction: None,
+                secondary_type: None,
+            });
+    } else if let Some(card) = state
+        .master_deck
+        .iter_mut()
+        .find(|c| souls_power_can_enchant(c))
+    {
+        // FromDeckForEnchantment auto-takes all at <= MinSelect(1).
+        // The existing instance keyword reducer removes Exhaust for SoulsPower.
+        card.set_enchantment(sts2_core::cards::EnchantmentId::SoulsPower, 1);
+    }
+    EventOutcome::finished("Added Decay and enchanted a card with Soul's Power.")
 }
 
 fn grave_accept(state: &mut RunState) -> EventOutcome {
@@ -1538,7 +1552,8 @@ const GRAVE_OPTIONS: &[EventOptionSpec] = &[
 /// Exhaust keyword (`GetKeywordsWithSources(Local)`). sts2-agent fork.
 fn souls_power_can_enchant(c: &sts2_core::cards::Card) -> bool {
     use sts2_core::cards::CardType;
-    !matches!(c.card_type, CardType::Status | CardType::Curse)
+    !c.card_id.is_quest()
+        && !matches!(c.card_type, CardType::Status | CardType::Curse)
         && c.enchantments.is_empty()
         && (c.cost >= 0 || c.is_x_cost())
         && sts2_core::card_effects::card_exhausts_inst(c)

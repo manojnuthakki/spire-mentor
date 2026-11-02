@@ -2970,7 +2970,9 @@ fn enchant_card_type_restriction(
     use sts2_core::cards::{CardType, EnchantmentId};
     match ench {
         // Attack-only (Sharp/Momentum/… group in `can_enchant_card`).
-        EnchantmentId::Sharp | EnchantmentId::Momentum => (Some(CardType::Attack), None),
+        EnchantmentId::Sharp | EnchantmentId::Momentum | EnchantmentId::Instinct => {
+            (Some(CardType::Attack), None)
+        }
         // Skill-only.
         EnchantmentId::Imbued => (Some(CardType::Skill), None),
         // Attack OR Skill — RoyalStamp's RoyallyApproved.
@@ -3969,12 +3971,19 @@ fn listener_ninja_scroll(state: &mut CombatState, side: Side) -> EffectResult {
 /// `shop_event.py::TriBoomerang.after_obtained`,
 /// `enchant_selected_cards("Instinct", 1, 3, cards=candidates)`).
 /// Instinct (C# `Instinct.cs`) is a 2× powered-attack damage multiplier with
-/// no cost behavior. Direct-apply arm
-/// only — the `defer_followup_rewards` reward-queue arm lands later
-/// with umbrella `sts2-rs-01o`. Bead `sts2-rs-70anj.4`.
+/// no cost behavior. Installed TriBoomerang.AfterObtained awaits exactly
+/// three existing instances; <=3 eligible auto-take without a screen.
 fn listener_tri_boomerang(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::TriBoomerang) {
         return EffectResult::NotImplemented;
+    }
+    if try_queue_interactive_enchant(
+        rs,
+        sts2_core::cards::EnchantmentId::Instinct,
+        1,
+        TRI_BOOMERANG_CARDS,
+    ) {
+        return EffectResult::Resolved;
     }
     let _ = enchant_eligible_deck_cards(
         rs,

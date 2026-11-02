@@ -4880,6 +4880,10 @@ impl RunManager {
             front.is_some_and(|e| e.enchantment != crate::cards::EnchantmentId::Slither);
         let requires_block =
             front.is_some_and(|e| e.enchantment == crate::cards::EnchantmentId::Nimble);
+        // SoulsPower.CanEnchant reads only the card's own (upgrade-aware)
+        // Exhaust, not combat-global keyword grants (installed SoulsPower.cs).
+        let requires_own_exhaust =
+            front.is_some_and(|e| e.enchantment == crate::cards::EnchantmentId::SoulsPower);
         // C# `Spiral.CanEnchant`: a Basic card tagged Strike or Defend
         // (sts2-agent fork).
         let requires_basic_strike_defend =
@@ -4897,6 +4901,7 @@ impl RunManager {
                     && c.enchantments.is_empty()
                     && (c.cost >= 0 || (allow_x_cost && c.is_x_cost()))
                     && (!requires_block || c.base_block > 0)
+                    && (!requires_own_exhaust || crate::card_effects::card_exhausts_inst(c))
                     && (!requires_basic_strike_defend
                         || (rarity_rank.map_or(true, |f| f(c.card_id) == 1)
                             && (c.has_tag(crate::cards::CardTag::Strike)

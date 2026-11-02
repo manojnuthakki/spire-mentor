@@ -159,7 +159,10 @@ fn grave_one_candidate_auto_enchants_and_noninteractive_chooses_first() {
             1
         );
         assert!(!card_exhausts_inst(&rm.run_state.master_deck[0]));
-        assert_eq!(rm.run_state.master_deck.last().unwrap().card_id, CardId::Decay);
+        assert_eq!(
+            rm.run_state.master_deck.last().unwrap().card_id,
+            CardId::Decay
+        );
         if !interactive {
             assert!(card_exhausts_inst(&rm.run_state.master_deck[1]));
         }
@@ -168,7 +171,11 @@ fn grave_one_candidate_auto_enchants_and_noninteractive_chooses_first() {
 
 #[test]
 fn grave_empty_or_only_ineligible_deck_keeps_confront_locked() {
-    for deck in [vec![], vec![card(CardId::SpoilsMap, false)], vec![card(CardId::Decay, false)]] {
+    for deck in [
+        vec![],
+        vec![card(CardId::SpoilsMap, false)],
+        vec![card(CardId::Decay, false)],
+    ] {
         let mut rm = manager(true);
         rm.run_state.master_deck = deck.clone();
         rm.force_enter_room(ForcedRoom::Event(EventId::GraveOfTheForgotten));
@@ -220,7 +227,10 @@ fn tri_waits_for_three_exact_attack_instances_without_rng() {
     for d in [6, 1, 5] {
         expected[d].set_enchantment(EnchantmentId::Instinct, 1);
     }
-    assert_eq!(rm.run_state.master_deck, expected, "all other values unchanged");
+    assert_eq!(
+        rm.run_state.master_deck, expected,
+        "all other values unchanged"
+    );
     assert!(rm.run_state.pending_deck_enchants.is_empty());
     assert_eq!(rm.phase(), Phase::MapChoice);
     assert_eq!(format!("{:?}", rm.run_state.rng), rng);
