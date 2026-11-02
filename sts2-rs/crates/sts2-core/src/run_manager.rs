@@ -5380,6 +5380,11 @@ impl RunManager {
     ) -> Option<crate::RelicId> {
         self.phase = Phase::Treasure;
         let rolled = self.run_state.roll_treasure_relic_rarity();
+        // Legacy callback pools still follow RelicGrabBag's permanent
+        // act-3 chest rejection, before inspecting the rolled bucket.
+        for pool in [&mut *common, &mut *uncommon, &mut *rare] {
+            pool.retain(|&id| self.run_state.relic_passes_act3_chest_gate(id));
+        }
         let owned: std::collections::BTreeSet<crate::RelicId> =
             self.run_state.relics.iter().copied().collect();
         let pick_from = |pool: &mut Vec<crate::RelicId>| -> Option<crate::RelicId> {

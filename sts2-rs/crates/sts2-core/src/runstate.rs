@@ -3945,11 +3945,9 @@ impl RunState {
     /// undesired picks afterward, mirroring Python's
     /// `excluded_relic_ids` pattern at the call site.
     ///
-    /// Bead `sts2-rs-l9vkh` (P9.2.r). Mirrors Python
-    /// `pull_next_relic_reward_id` (`run_state.py:304-339`) minus
-    /// the `is_allowed` content-gate (no `RelicInstance::is_allowed`
-    /// in Rust at this pin; reintroduce when relic-prerequisite
-    /// modeling lands).
+    /// Includes the single-player act-3 chest gate from C#
+    /// `RelicModel.IsBeforeAct3TreasureChest`; disallowed entries are
+    /// permanently removed before selection, without another RNG read.
     pub fn pop_relic_from_grab_bag(&mut self, rarity: RelicRarity) -> Option<RelicId> {
         self.pop_relic_from_grab_bag_where(rarity, |_| true)
     }
@@ -3966,6 +3964,7 @@ impl RunState {
         rarity: RelicRarity,
         filter: impl Fn(RelicId) -> bool,
     ) -> Option<RelicId> {
+        self.remove_late_relics_from_player_bag();
         let (bucket, idx, picked) = self.find_relic_in_grab_bag(rarity, &filter, &[])?;
         match bucket {
             Some(bucket_rarity) => {
@@ -4019,7 +4018,12 @@ impl RunState {
         excluded: &[RelicId],
     ) -> Option<(Option<RelicRarity>, usize, RelicId)> {
         let owned: std::collections::BTreeSet<RelicId> = self.relics.iter().copied().collect();
-        let eligible = |id: &RelicId| !owned.contains(id) && !excluded.contains(id) && filter(*id);
+        let eligible = |id: &RelicId| {
+            self.relic_passes_act3_chest_gate(*id)
+                && !owned.contains(id)
+                && !excluded.contains(id)
+                && filter(*id)
+        };
         for &candidate_rarity in rarity.fallback_order() {
             let Some(bucket) = self.relic_grab_bag_by_rarity.get(&candidate_rarity) else {
                 continue;
@@ -4030,6 +4034,60 @@ impl RunState {
         }
         let idx = self.relic_grab_bag_fallback.iter().position(eligible)?;
         Some((None, idx, self.relic_grab_bag_fallback[idx]))
+    }
+
+    /// The seventeen v0.107.1 relic overrides delegating to
+    /// `RelicModel.IsBeforeAct3TreasureChest` (Models/Relics/*.cs).
+    /// This engine is single-player. C# counts each act's Ancient as a
+    /// floor, while `total_floor` counts map moves (the same adjustment
+    /// used by the Sim observation). This is a bounded floor predicate,
+    /// not a general prerequisite registry or a rule for obtaining a
+    /// predetermined relic. Multiplayer eligibility is not modeled here.
+    pub(crate) fn relic_passes_act3_chest_gate(&self, id: RelicId) -> bool {
+        !matches!(
+            id,
+            RelicId::AmethystAubergine
+                | RelicId::BookOfFiveRings
+                | RelicId::BowlerHat
+                | RelicId::DragonFruit
+                | RelicId::FrozenEgg
+                | RelicId::Girya
+                | RelicId::JuzuBracelet
+                | RelicId::LastingCandy
+                | RelicId::LuckyFysh
+                | RelicId::MealTicket
+                | RelicId::MoltenEgg
+                | RelicId::OldCoin
+                | RelicId::Planisphere
+                | RelicId::Shovel
+                | RelicId::ToxicEgg
+                | RelicId::WhiteBeastStatue
+                | RelicId::WhiteStar
+        ) || self.total_floor + i32::from(self.act_index) < 41
+    }
+
+    /// C# `RelicGrabBag.RemoveDisallowedRelicsFromDeques` prunes ALL
+    /// rarity buckets and the fallback, even if the caller's filter
+    /// rejects every remaining entry. Only the queried bag is pruned;
+    /// the shared bag loses the eventual player pick separately.
+    fn remove_late_relics_from_player_bag(&mut self) {
+        // Collect before mutating so the predicate reads the existing run
+        // fields without borrowing the buckets mutably at the same time.
+        let rejected: Vec<_> = self
+            .relic_grab_bag_by_rarity
+            .values()
+            .flatten()
+            .chain(&self.relic_grab_bag)
+            .chain(&self.relic_grab_bag_fallback)
+            .copied()
+            .filter(|&id| !self.relic_passes_act3_chest_gate(id))
+            .collect();
+        for bucket in self.relic_grab_bag_by_rarity.values_mut() {
+            bucket.retain(|id| !rejected.contains(id));
+        }
+        self.relic_grab_bag.retain(|id| !rejected.contains(id));
+        self.relic_grab_bag_fallback
+            .retain(|id| !rejected.contains(id));
     }
 
     /// Strip `relic_id` from every per-rarity bucket of the SHARED relic
@@ -4063,6 +4121,16 @@ impl RunState {
     /// exhausted bag returns `None` (C# `FallbackRelic` = Circlet, not
     /// modeled, consistent with the player-bag pop).
     pub fn pop_relic_from_shared_grab_bag(&mut self, rarity: RelicRarity) -> Option<RelicId> {
+        let rejected: Vec<_> = self
+            .shared_relic_grab_bag_by_rarity
+            .values()
+            .flatten()
+            .copied()
+            .filter(|&id| !self.relic_passes_act3_chest_gate(id))
+            .collect();
+        for bucket in self.shared_relic_grab_bag_by_rarity.values_mut() {
+            bucket.retain(|id| !rejected.contains(id));
+        }
         let owned: std::collections::BTreeSet<RelicId> = self.relics.iter().copied().collect();
         for &candidate_rarity in rarity.fallback_order() {
             let Some(bucket) = self
@@ -4095,15 +4163,14 @@ impl RunState {
     /// `None` when the chain + fallback are exhausted of eligible
     /// relics.
     ///
-    /// Like [`Self::pop_relic_from_grab_bag`], this omits C#'s
-    /// `IsAllowed(runState)` prerequisite gate (no relic-prerequisite
-    /// model at this pin). Bead `sts2-rs-jenwp` (M4 shop relic
-    /// identity).
+    /// Applies the same permanent act-3 chest rejection as the front
+    /// pull, before applying the shop's independent caller filter.
     pub fn pop_relic_from_grab_bag_back(
         &mut self,
         rarity: RelicRarity,
         filter: impl Fn(RelicId) -> bool,
     ) -> Option<(RelicId, RelicRarity)> {
+        self.remove_late_relics_from_player_bag();
         let owned: std::collections::BTreeSet<RelicId> = self.relics.iter().copied().collect();
         for &candidate_rarity in rarity.fallback_order() {
             let Some(bucket) = self.relic_grab_bag_by_rarity.get_mut(&candidate_rarity) else {
@@ -4333,11 +4400,9 @@ impl RunState {
     #[must_use]
     pub fn has_available_relics(&self) -> bool {
         let owned: std::collections::BTreeSet<RelicId> = self.relics.iter().copied().collect();
-        self.relic_grab_bag.iter().any(|id| !owned.contains(id))
-            || self
-                .relic_grab_bag_fallback
-                .iter()
-                .any(|id| !owned.contains(id))
+        let eligible = |id: &RelicId| !owned.contains(id) && self.relic_passes_act3_chest_gate(*id);
+        self.relic_grab_bag.iter().any(eligible)
+            || self.relic_grab_bag_fallback.iter().any(eligible)
     }
 
     pub fn generate_combat_card_rewards(
