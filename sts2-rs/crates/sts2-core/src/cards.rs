@@ -226,7 +226,7 @@ pub enum VarKey {
     /// modifier that a *foreign* producer had already applied when the state
     /// was reconstructed — the amount
     /// [`crate::CombatState::restore_wire_transient_costs_for_turn_start`]
-    /// adds back at each side's end-of-turn cleanup (historical method name).
+    /// adds back at the owner's next turn start.
     ///
     /// The engine banks its own such discounts per effect
     /// (`StompCostReductionThisTurn`, `PinpointCostReductionThisTurn`,

@@ -615,9 +615,23 @@ pub fn start_player_turn(state: &mut CombatState) -> StepResult {
     // into the live slot. Mirrors C#'s `RoundNumber == round - 1` scan key.
     state.combat_log.prev_round_last_attack_skill_played =
         state.combat_log.last_attack_skill_played.take();
-    // Cost banks expire in clear_per_turn_card_vars at each side's cleanup.
-    // Do not restore here: modifiers created by an enemy AfterTurnEnd hook
-    // are newer than that cleanup and remain live through this player start.
+    // Bead `sts2-rs-stomp`: undo Stomp's per-turn cost discount (C#
+    // `EnergyCost.AddThisTurn` resets at the owner's turn start). Restores
+    // each Stomp's cost by the amount shaved off last turn.
+    state.restore_stomp_costs_for_turn_start();
+    // Undo Pinpoint's per-turn Skill-cost discount (same C#
+    // `EnergyCost.AddThisTurn` reset shape as Stomp above).
+    state.restore_pinpoint_costs_for_turn_start();
+    // Bead `sts2-rs-2e9q2` follow-up: undo Snecko Oil's per-turn cost
+    // randomization (C# `EnergyCost.SetThisTurnOrUntilPlayed` reverts at the
+    // owner's turn start). Restores each randomized card to its base cost.
+    state.restore_snecko_costs_for_turn_start();
+    // Undo the this-turn discounts a FOREIGN producer had already applied
+    // when this state was reconstructed. The three restores above only know
+    // about discounts this engine itself banked; a state rebuilt mid-turn
+    // from a C# wire inherits the shaved cost with no bank behind it, so
+    // without this the discount never expires.
+    state.restore_wire_transient_costs_for_turn_start();
     // Bead `sts2-rs-x646`: reset the per-turn stars-gained tally.
     // Mirrors Python's `_stars_gained_this_turn = []` at the top of
     // `_start_player_turn` (`sts2-rl-agent@01c094d:sts2_env/core/
@@ -9927,19 +9941,6 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
 /// is per-card-instance and the arena already gates by live combat;
 /// staying arena-scoped avoids 5 pile-iterator allocations per turn-end.
 fn clear_per_turn_card_vars(state: &mut CombatState) {
-    // v0.107.1 CardEnergyCost.EndOfTurnCleanup removes EndOfTurn modifiers.
-    // CombatManager.FlushPlayerHand calls PlayerCombatState.EndOfTurnCleanup
-    // AFTER the hand flush/WLP choice and BEFORE AfterFlush/AfterTurnEnd.
-    // EndEnemyTurnInternal calls it again BEFORE enemy AfterTurnEnd. Thus
-    // late player autoplays create banks that expire at enemy cleanup; late
-    // enemy modifiers survive until player cleanup, not merely player start.
-    // Keep owned and reconstructed banks disjoint and retain their restore
-    // order, including wire until-played rebanking. Historical public method
-    // names are retained for callers; none of these calls belongs at start.
-    state.restore_stomp_costs_for_turn_start();
-    state.restore_pinpoint_costs_for_turn_start();
-    state.restore_snecko_costs_for_turn_start();
-    state.restore_wire_transient_costs_for_turn_start();
     for card in &mut state.cards {
         // Single-scan form of `if combat_var(k) != 0 { set_combat_var(k, 0) }`
         // (perf 2026-07-04): both `combat_var` and `set_combat_var` operate on
