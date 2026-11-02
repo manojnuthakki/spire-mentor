@@ -185,8 +185,9 @@ pub fn is_empty_after_card_entered_combat_power() -> bool {
 /// HungerPower).
 ///
 /// Iteration order: creatures in `state.creatures` index order, then
-/// powers in `Creature.powers` index order — deterministic and
-/// matches the existing iteration discipline of dispatchers like
+/// powers in `Creature.powers` index order. With Galvanic present, keep
+/// allies first and use the enemy roster's order, since its first eligible
+/// listener owns a new card's mark. Otherwise preserve the existing order of
 /// [`crate::lib::CombatState::get_random_enemy`]. Within a single
 /// creature only one listener per `PowerKind` fires (multi-stack
 /// powers are collapsed by the BTreeMap key — same convention as
@@ -229,7 +230,8 @@ pub fn dispatch_after_card_entered_combat_on_monster_powers(
             EffectResult::NotImplemented
         }
     };
-    if is_empty_after_card_entered_combat_power() {
+    let galvanic_present = state.powers.present_kinds().contains(PowerKind::Galvanic);
+    if is_empty_after_card_entered_combat_power() && !galvanic_present {
         return player_legs;
     }
     // Snapshot the (owner, kind) pairs first so the per-handler call
@@ -239,28 +241,43 @@ pub fn dispatch_after_card_entered_combat_on_monster_powers(
     // `(owner, puid)` pairs from `state.creatures`, then resolve each
     // `puid` against `state.powers` — avoids the double-borrow that
     // would otherwise happen when the inner closure captures `state`.
-    let owner_puids: Vec<(CreatureUid, crate::PowerUid)> = state
-        .creatures
-        .iter()
-        .filter(|c| c.current_hp > 0)
+    let ordered_creatures: smallvec::SmallVec<[&crate::Creature; 8]> = if galvanic_present {
+        galvanic_ordered_creatures(state).collect()
+    } else {
+        state.creatures.iter().collect()
+    };
+    let owner_puids: Vec<(CreatureUid, crate::PowerUid, bool)> = ordered_creatures
+        .into_iter()
+        .filter(|c| {
+            c.current_hp > 0 || (galvanic_present && !state.is_removed_corpse(CreatureUid(c.id)))
+        })
         .flat_map(|c| {
             let owner = CreatureUid(c.id);
-            c.powers.iter().copied().map(move |puid| (owner, puid))
+            let alive = c.current_hp > 0;
+            c.powers
+                .iter()
+                .copied()
+                .map(move |puid| (owner, puid, alive))
         })
         .collect();
     let pairs: Vec<(CreatureUid, PowerKind)> = owner_puids
         .into_iter()
-        .filter_map(|(owner, puid)| {
+        .filter_map(|(owner, puid, alive)| {
             state
                 .powers
                 .iter()
                 .find(|p| p.id == puid.0)
+                .filter(|p| alive || p.kind == PowerKind::Galvanic)
                 .map(|p| (owner, p.kind))
         })
         .collect();
     let mut any_resolved = player_legs == EffectResult::Resolved;
     for (owner, kind) in pairs {
-        if let Some(handler) = lookup_after_card_entered_combat_for_power(kind) {
+        if kind == PowerKind::Galvanic {
+            if galvanic_card_entry_for_owner(state, owner, card_uid) == EffectResult::Resolved {
+                any_resolved = true;
+            }
+        } else if let Some(handler) = lookup_after_card_entered_combat_for_power(kind) {
             if handler(state, owner, card_uid) == EffectResult::Resolved {
                 any_resolved = true;
             }
@@ -514,6 +531,118 @@ fn hex_card_uids(state: &CombatState) -> smallvec::SmallVec<[CardUid; 32]> {
         .chain(&state.player.play)
         .copied()
         .collect()
+}
+
+// Installed DLL GalvanicPower/Galvanized: combat start uses Afflict (same-kind
+// marks stack), while entry explicitly requires an empty affliction slot.
+// Galvanized has no expiry/removal hook and owns no keyword or applier state.
+fn galvanic_afflict_card(state: &mut CombatState, uid: CardUid, amount: i32, stack: bool) {
+    use crate::card_afflictions::{CardAffliction, CardAfflictionKind};
+    // CardCmd.Afflict skips an admitted combat card once combat is over.
+    // This is application-only; a damage callback already underway continues.
+    if state.is_over {
+        return;
+    }
+    let Some(card) = state.cards.get_mut(uid.get() as usize - 1) else {
+        return;
+    };
+    if card.card_type != crate::cards::CardType::Power || amount <= 0 {
+        return;
+    }
+    match card.affliction.as_mut() {
+        None => {
+            let _ =
+                card.set_affliction(CardAffliction::new(CardAfflictionKind::Galvanized, amount));
+        }
+        Some(a) if stack && a.kind == CardAfflictionKind::Galvanized => {
+            a.stacks = a.stacks.saturating_add(amount);
+        }
+        Some(_) => {}
+    }
+}
+
+fn galvanic_ordered_creatures(state: &CombatState) -> impl Iterator<Item = &crate::Creature> {
+    state
+        .creatures
+        .iter()
+        .filter(|c| !state.enemy_uids.contains(&CreatureUid(c.id)))
+        .chain(
+            state
+                .enemy_uids
+                .iter()
+                .filter_map(|uid| crate::creature_by_id(&state.creatures, uid.0)),
+        )
+}
+
+fn galvanic_owners(state: &CombatState) -> smallvec::SmallVec<[(CreatureUid, i32); 2]> {
+    galvanic_ordered_creatures(state)
+        .filter(|c| !state.is_removed_corpse(CreatureUid(c.id)))
+        .flat_map(|c| {
+            c.powers.iter().filter_map(|uid| {
+                state.powers.get_by_id(uid.0).and_then(|p| {
+                    (p.kind == PowerKind::Galvanic).then_some((CreatureUid(c.id), p.amount))
+                })
+            })
+        })
+        .collect()
+}
+
+/// Galvanic's mutable BeforeCombatStart leg, alongside VitalSpark's existing
+/// mutable leg. Traverse each owner's installed powers before the next owner.
+pub(crate) fn galvanic_before_combat_start(state: &mut CombatState) {
+    let owners = galvanic_owners(state);
+    if owners.is_empty() {
+        return;
+    }
+    let cards = hex_card_uids(state);
+    for (_, amount) in owners {
+        for uid in cards.iter().copied() {
+            galvanic_afflict_card(state, uid, amount, true);
+        }
+    }
+}
+
+fn galvanic_card_entry_for_owner(
+    state: &mut CombatState,
+    owner: CreatureUid,
+    uid: CardUid,
+) -> EffectResult {
+    if state.is_removed_corpse(owner) {
+        return EffectResult::NotImplemented;
+    }
+    let amount = state
+        .creatures
+        .iter()
+        .find(|c| c.id == owner.0)
+        .and_then(|c| {
+            c.powers
+                .iter()
+                .filter_map(|u| state.powers.get_by_id(u.0))
+                .find(|p| p.kind == PowerKind::Galvanic)
+                .map(|p| p.amount)
+        });
+    let Some(amount) = amount else {
+        return EffectResult::NotImplemented;
+    };
+    galvanic_afflict_card(state, uid, amount, false);
+    EffectResult::Resolved
+}
+
+/// Cover the existing Exhaust-entry omissions only while Galvanic is present.
+/// Player powers and the card's Hexed hook precede enemy powers in the DLL's
+/// IterateHookListeners. Keep that ownership order without enabling other
+/// omitted relic/monster generation buses.
+pub(crate) fn galvanic_exhaust_entry(state: &mut CombatState, uid: CardUid) {
+    if !state.powers.present_kinds().contains(PowerKind::Galvanic) {
+        return;
+    }
+    hex_player_card_entry(state, uid);
+    if state.player_power_amount(PowerKind::Hex) <= 0 {
+        hex_after_card_entered_combat(state, uid);
+    }
+    for (owner, _) in galvanic_owners(state) {
+        galvanic_card_entry_for_owner(state, owner, uid);
+    }
 }
 
 /// HexPower.AfterApplied, shared by the mirror-Creature and legacy player paths.
