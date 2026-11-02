@@ -2566,8 +2566,8 @@ pub fn spawn_wither_into_pile(state: &mut CombatState, pile: PileKind) -> CardUi
 /// `spawn_card_into_*` helpers only ever materialize brand-new cards
 /// (`oldPile == null`), so the gate reduces to "is this a combat pile".
 /// The existing funnel omits Exhaust for its other buses. Installed-DLL
-/// PileTypeExtensions.IsCombatPile includes Exhaust; the scoped Hex/Galvanic
-/// legs below cover their entry without enabling unrelated generation hooks.
+/// PileTypeExtensions.IsCombatPile includes Exhaust; Hex's scoped leg below
+/// covers that edge without changing unrelated generation hooks.
 /// Bead `sts2-rs-11ssi`: Regalite (+2 Block
 /// per owner card entering combat) and HungerPower were missing the
 /// Strangler-spawned status card because pile spawns bypassed this bus.
@@ -2578,9 +2578,7 @@ fn fire_after_card_entered_combat(
     added_by_player: bool,
 ) {
     if matches!(pile, PileKind::Exhaust) {
-        if state.powers.present_kinds().contains(PowerKind::Galvanic) {
-            crate::monster_power_effects::galvanic_exhaust_entry(state, uid);
-        } else if state.player_power_amount(PowerKind::Hex) > 0 {
+        if state.player_power_amount(PowerKind::Hex) > 0 {
             crate::monster_power_effects::hex_player_card_entry(state, uid);
         } else {
             crate::monster_power_effects::hex_after_card_entered_combat(state, uid);

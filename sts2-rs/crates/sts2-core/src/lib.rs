@@ -4710,12 +4710,9 @@ impl CombatState {
         // entering combat) and HungerPower were skipped for cards created via
         // this path (PrimalForce→GiantRock, Charge→MinionStrike, Regent /
         // Necrobinder transforms). Mirrors `card_effects::transform_card_in_place`
-        // and `fire_after_card_entered_combat`. The installed DLL includes
-        // Exhaust in combat piles; its scoped Galvanic leg covers that entry
-        // while the other existing Exhaust bus omissions stay separate.
-        if matches!(pile, crate::cards::PileKind::Exhaust) {
-            crate::monster_power_effects::galvanic_exhaust_entry(self, new_uid);
-        } else {
+        // and `fire_after_card_entered_combat`; Exhaust is not a card-entered
+        // event.
+        if !matches!(pile, crate::cards::PileKind::Exhaust) {
             let _ = crate::relic_effects::dispatch_after_card_entered_combat(self, new_uid, true);
             let _ =
                 crate::monster_power_effects::dispatch_after_card_entered_combat_on_monster_powers(

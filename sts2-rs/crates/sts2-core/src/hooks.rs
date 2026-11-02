@@ -14097,32 +14097,6 @@ pub(crate) fn grant_latched_skittish(state: &mut CombatState) {
 }
 
 pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
-    // Installed DLL Hook.AfterCardPlayed snapshots listeners before any body
-    // runs, then checks owner attachment before each callback. Keep only this
-    // Galvanic snapshot here: earlier player reactions can remove its power or
-    // kill an owner. Power removal alone does not invalidate a captured model.
-    let galvanic_listeners: SmallVec<[(CreatureUid, crate::PowerUid, i32); 2]> =
-        if power_kind_live(state, PowerKind::Galvanic) {
-            state
-                .enemy_uids
-                .iter()
-                .filter_map(|uid| crate::creature_by_id(&state.creatures, uid.0).map(|c| (*uid, c)))
-                .flat_map(|(owner, c)| {
-                    c.powers
-                        .iter()
-                        .filter_map(|uid| {
-                            state
-                                .powers
-                                .get_by_id(uid.0)
-                                .filter(|p| p.kind == PowerKind::Galvanic)
-                                .map(|p| (owner, *uid, p.amount))
-                        })
-                        .collect::<SmallVec<[_; 2]>>()
-                })
-                .collect()
-        } else {
-            SmallVec::new()
-        };
     // ── Read-only listener walk ─────────────────────────────────────────
     // Listener bodies are `() -> ()` no-ops at this pin (`noop_hook!`). Perf
     // (sts2-rs-05mjm / #51): the per-power walk over every player/ally/enemy
@@ -15066,30 +15040,53 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
     // old standalone block here ran after the enemy lanes (Slow/Oblivion/
     // Strangle), the wrong side of C#'s allies-before-enemies listener order.
 
-    // Installed v0.107.1 GalvanicPower.AfterCardPlayed: the actual marker is
-    // the predicate, not card type or the marker's amount. Each attached owner
-    // deals its current Amount, Unpowered|Move, with no dealer/card attribution.
-    // Power cards remain in CardStore after leaving Play and while choices or
-    // autoplay repeats finish, so their UID resolves the real current marker.
-    for (owner, power_uid, captured_amount) in galvanic_listeners {
-        if crate::creature_by_id(&state.creatures, owner.0).is_none()
-            || state.is_removed_corpse(owner)
-        {
-            continue;
-        }
-        if ctx
-            .card_uid
-            .and_then(|uid| state.cards.get(uid.get() as usize - 1))
-            .and_then(|card| card.affliction)
-            .is_some_and(|a| a.kind == crate::card_afflictions::CardAfflictionKind::Galvanized)
-        {
-            let amount = state
-                .powers
-                .get_by_id(power_uid.0)
-                .map_or(captured_amount, |p| p.amount);
+    // Galvanic (GlobeHead act-3 spawn-power): C# `GalvanicPower`
+    // (../sts2-wiki/decompiled/v0.103.2/MegaCrit.Sts2.Core.Models.Powers/GalvanicPower.cs).
+    // GalvanicPower has two behaviors: (1) at `BeforeCombatStart` (and on
+    // any later `AfterCardEnteredCombat`) it afflicts every player `Power`
+    // card with the `Galvanized` affliction (Amount=6); (2) at
+    // `AfterCardPlayed` (lines 50-57) it deals `base.Amount` (6) blockable
+    // self-damage to the player whenever the played card carries the
+    // `Galvanized` affliction:
+    //   `if (cardPlay.Card.Affliction is Galvanized)
+    //        CreatureCmd.Damage(context, cardPlay.Card.Owner.Creature,
+    //                           base.Amount, Unpowered | Move, …)`
+    // (no `Unblockable` flag, so the player's own block absorbs — Burn-class).
+    //
+    // Net-observable port (reference_card_affliction_powers_model_net_observable,
+    // the Tangled/Hex precedent): because *every* player Power card is
+    // Galvanized in C# (combat-start tagging + on-enter tagging), "the played
+    // card is Galvanized" is exactly equivalent to "the played card is a Power
+    // card, while a living GalvanicPower owner is in combat". We therefore gate
+    // the self-damage on `ctx.card_type == Power` + a living Galvanic owner,
+    // rather than threading the per-card `Galvanized` affliction (which would
+    // require a mutable `before_combat_start` tagging pass — a larger change).
+    // `dispatch_after_card_played` already fires AFTER the card body resolves,
+    // matching C#'s `AfterCardPlayed` timing. This is the directly-observable
+    // bug (DRUM_OF_BATTLE: player.hp 63 C# vs 69 Rust — the missing 6 self-damage).
+    //
+    // Galvanic only ever lives on a monster (GlobeHead applies it to self on
+    // spawn, see `MonsterKind::on_spawn_self_buffs`); iterating the whole arena
+    // is harmless. The damage is dealt for each living owner, matching C#'s
+    // per-power-instance `AfterCardPlayed` dispatch.
+    // present_kinds lane gate (perf): no live Galvanic ⇒ nothing to collect.
+    if is_power && power_kind_live(state, PowerKind::Galvanic) {
+        let galvanic_owners = state
+            .powers
+            .iter()
+            .filter(|p| p.kind == PowerKind::Galvanic && p.amount > 0)
+            .filter(|p| {
+                state
+                    .creatures
+                    .iter()
+                    .any(|c| c.powers.iter().any(|pu| pu.0 == p.id) && c.current_hp > 0)
+            })
+            .map(|p| p.amount)
+            .collect::<SmallVec<[i32; 2]>>();
+        for amount in galvanic_owners {
             let _ = crate::combat_loop::apply_damage_to_player(
                 state,
-                CreatureRef::Nobody,
+                CreatureRef::Player,
                 amount,
                 ValueProps::UNPOWERED.union(ValueProps::MOVE),
                 None,
@@ -21918,39 +21915,21 @@ mod tests {
         assert!(damage_modifier_breakdown(&state, &ctx).is_empty());
     }
 
-    fn galvanic_card_context(
-        state: &mut CombatState,
-        card_type: crate::cards::CardType,
-        marked: bool,
-    ) -> CardCtx {
-        let uid = CardUid::new(u32::try_from(state.cards.len() + 1).unwrap()).unwrap();
-        state.cards.push(crate::cards::Card {
-            uid,
-            card_type,
-            affliction: marked.then_some(crate::card_afflictions::CardAffliction::new(
-                crate::card_afflictions::CardAfflictionKind::Galvanized,
-                6,
-            )),
-            ..crate::cards::Card::pod_defaults()
-        });
-        state.player.play.push(uid);
-        CardCtx {
-            card_uid: Some(uid),
-            card_type: Some(card_type),
-            ..CardCtx::default()
-        }
-    }
-
-    /// Fresh DLL GalvanicPower predicate is the actual Galvanized marker.
-    /// Use a real stored card UID, as the play path does, instead of fabricating
-    /// only the type and relying on the old incorrect equivalence.
+    /// **GalvanicPower self-damage arm**: GlobeHead's `GalvanicPower(6)` deals
+    /// 6 blockable self-damage to the player on every Power card played
+    /// (C# `GalvanicPower.AfterCardPlayed`). A Power card triggers it; a Skill
+    /// does not. The directly-observable DRUM_OF_BATTLE divergence
+    /// (player.hp 63 C# vs 69 Rust). Bead `sts2-rs` GALVANIC_POWER.
     #[test]
     fn galvanic_self_damages_player_on_power_card_played() {
         use crate::cards::CardType;
         let (mut state, _enemy) = state_with_enemy_power(PowerKind::Galvanic, 6);
         state.player.current_hp = 69;
         state.player.max_hp = 80;
-        let ctx = galvanic_card_context(&mut state, CardType::Power, true);
+        let ctx = CardCtx {
+            card_type: Some(CardType::Power),
+            ..CardCtx::default()
+        };
         dispatch_after_card_played(&mut state, &ctx);
         assert_eq!(
             state.player.current_hp, 63,
@@ -21958,15 +21937,20 @@ mod tests {
         );
     }
 
-    /// An unmarked Skill does not trigger Galvanic. Marked non-Power controls
-    /// are separately covered by the lifecycle integration regressions.
+    /// **GalvanicPower filter**: a non-Power card (Skill / Attack) does NOT
+    /// trigger the Galvanic self-damage. Mirrors the C# `Galvanized` affliction
+    /// (only ever applied to Power cards) and the `card.Type == Power` net-
+    /// observable gate.
     #[test]
     fn galvanic_does_not_self_damage_on_skill_played() {
         use crate::cards::CardType;
         let (mut state, _enemy) = state_with_enemy_power(PowerKind::Galvanic, 6);
         state.player.current_hp = 69;
         state.player.max_hp = 80;
-        let ctx = galvanic_card_context(&mut state, CardType::Skill, false);
+        let ctx = CardCtx {
+            card_type: Some(CardType::Skill),
+            ..CardCtx::default()
+        };
         dispatch_after_card_played(&mut state, &ctx);
         assert_eq!(
             state.player.current_hp, 69,
@@ -21984,7 +21968,10 @@ mod tests {
         state.player.current_hp = 69;
         state.player.max_hp = 80;
         state.player.block = 6;
-        let ctx = galvanic_card_context(&mut state, CardType::Power, true);
+        let ctx = CardCtx {
+            card_type: Some(CardType::Power),
+            ..CardCtx::default()
+        };
         dispatch_after_card_played(&mut state, &ctx);
         assert_eq!(
             state.player.current_hp, 69,
