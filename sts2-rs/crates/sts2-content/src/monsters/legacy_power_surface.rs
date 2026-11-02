@@ -39,6 +39,9 @@ fn find_player_power(state: &CombatState, kind: PowerKind) -> Option<std::num::N
 /// freshly-applied Vulnerable / Weak / Frail skips its first turn-end
 /// decrement tick.
 fn push_new_player_power(state: &mut CombatState, kind: PowerKind, amount: i32) {
+    if kind == PowerKind::ChainsOfBinding {
+        state.combat_log.chains_bound_card_played_this_turn = false;
+    }
     let next_id_raw = state
         .powers
         .iter()

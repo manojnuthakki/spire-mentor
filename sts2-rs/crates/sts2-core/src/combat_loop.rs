@@ -2194,6 +2194,13 @@ fn end_player_turn_phase_one_after_auto_post_play_stampede(state: &mut CombatSta
         let _ = crate::relic_effects::dispatch_before_turn_end(state, Side::Player);
     }
 
+    // Chains' synchronous normal BeforeSideTurnEnd runs before the win
+    // check, including lethal TheBomb/Hailstorm turns. An awaited early
+    // selection must finish first; the resume path performs the same cleanup.
+    if state.pending_choice.is_none() {
+        chains_before_side_turn_end(state);
+    }
+
     // Step 3: combat-end re-check after listener walk. C# `EndPlayerTurn`
     // runs `if (await CheckWinCondition()) return;` here — the FULL
     // all-enemies-dead / player-dead evaluation, not a flag read. A
@@ -2235,38 +2242,30 @@ fn end_player_turn_phase_one_after_auto_post_play_stampede(state: &mut CombatSta
     finish_end_player_turn_phase_one(state)
 }
 
-/// Post-`before_turn_end` tail of [`end_player_turn_phase_one`]: the
-/// ChainsOfBinding `Bound`-clear sweep, the end-of-turn orb passives, and the
-/// `PlayerPlayPhase -> PlayerEndTurnPhaseOne` advance. Extracted (parity bug
-/// `combat_select_ironclad`) so the resume path
-/// ([`resume_end_turn_after_before_turn_end`]) can run it AFTER a
-/// `before_turn_end` auto-play's surfaced card-select resolves — matching C#'s
-/// awaited ordering, where these steps run only once the selection completes.
-fn finish_end_player_turn_phase_one(state: &mut CombatState) -> StepResult {
-    // Bead `sts2-rs-qjw41` (f933s follow-up): ChainsOfBindingPower
-    // `BeforeTurnEnd` — clear `Bound` from every player card. C#
-    // `ChainsOfBindingPower.cs` (v0.103.2) walks
-    // `player.PlayerCombatState.AllCards` and calls
-    // `CardCmd.ClearAffliction(item)` on any `Bound`-afflicted card.
-    // We only fire the sweep if the player currently has the power
-    // (matches the C# self-listener contract — a removed power runs
-    // no BeforeTurnEnd hook). Cheap early-out keeps the per-turn
-    // cost flat for combats without Chains.
-    // Perf 2026-07-04: `present_kinds` is a conservative superset of every
-    // live power kind, so a miss proves the uid walk below could never match
-    // — bit-identical skip on the (overwhelmingly common) no-Chains turn.
-    let player_has_chains = state
-        .powers
-        .present_kinds()
-        .contains(crate::powers::PowerKind::ChainsOfBinding)
-        && state.player.powers.iter().any(|puid| {
-            state
-                .powers
-                .get_by_id(puid.0)
-                .is_some_and(|p| p.kind == crate::powers::PowerKind::ChainsOfBinding)
-        });
+/// Installed ChainsOfBindingPower.BeforeSideTurnEnd: reset its latch and
+/// clear Bound on the owner's AllCards. Normal vanilla callbacks commute
+/// with this synchronous cleanup; early draws finish before it and later
+/// AfterTurnEnd draws may legitimately acquire fresh Bound. This local
+/// phase correction does not provide arbitrary subscriber lifetime support.
+fn chains_before_side_turn_end(state: &mut CombatState) {
+    let player_has_chains = state.player_power_amount(crate::PowerKind::ChainsOfBinding) > 0;
     if player_has_chains {
-        for card in &mut state.cards {
+        state.combat_log.chains_bound_card_played_this_turn = false;
+        // PlayerCombatState.AllCards is the five live piles, not the arena.
+        let uids: smallvec::SmallVec<[crate::CardUid; 32]> = state
+            .player
+            .hand
+            .iter()
+            .chain(&state.player.draw)
+            .chain(&state.player.discard)
+            .chain(&state.player.exhaust)
+            .chain(&state.player.play)
+            .copied()
+            .collect();
+        for uid in uids {
+            let Some(card) = state.cards.get_mut(uid.get() as usize - 1) else {
+                continue;
+            };
             if matches!(
                 card.affliction,
                 Some(crate::card_afflictions::CardAffliction {
@@ -2278,7 +2277,9 @@ fn finish_end_player_turn_phase_one(state: &mut CombatState) -> StepResult {
             }
         }
     }
+}
 
+fn finish_end_player_turn_phase_one(state: &mut CombatState) -> StepResult {
     // Step 3.5: end-of-turn orb passives. C# `CombatManager.EndPlayerTurn`
     // → `DoTurnEnd` fires `OrbQueue.BeforeTurnEnd` (each orb's
     // `BeforeTurnEndOrbTrigger` → `Passive`) FIRST — after the
@@ -2329,6 +2330,7 @@ fn finish_end_player_turn_phase_one(state: &mut CombatState) -> StepResult {
 /// the select not suspended it. Each sub-step guards its own combat-end
 /// short-circuit + phase advance, mirroring [`resume_wlp_retain_flush`].
 pub(crate) fn resume_end_turn_after_before_turn_end(state: &mut CombatState) -> StepResult {
+    chains_before_side_turn_end(state);
     // Finish phase one (the post-`before_turn_end` tail skipped at the suspend).
     let tail = finish_end_player_turn_phase_one(state);
     if !matches!(tail, StepResult::Advanced) {
@@ -6737,22 +6739,7 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
     cards::move_card(&mut state.player, card_uid, PileKind::Hand, PileKind::Play)
         .expect("hand_index validated above");
 
-    // Bead `sts2-rs-f0own` (f933s follow-up): C# ChainsOfBindingPower
-    // `BeforeCardPlayed` — if the just-committed card is Bound, set
-    // the per-turn flag so subsequent Bound plays this turn are
-    // rejected by the `ShouldPlay` guard above. Set unconditionally
-    // (not gated on `player_has_chains`) so a Bound card played in
-    // the same turn the power was removed still leaves the flag
-    // consistent — `reset_per_turn` clears it next turn.
-    if matches!(
-        card.affliction,
-        Some(crate::card_afflictions::CardAffliction {
-            kind: crate::card_afflictions::CardAfflictionKind::Bound,
-            ..
-        })
-    ) {
-        state.combat_log.chains_bound_card_played_this_turn = true;
-    }
+    chains_before_card_played(state, card_uid);
 
     // Bead `sts2-rs-z4jsg` / round-12 reorder: C# `Weighted.OnPlay`
     // (Afflictions/Weighted.cs:8-11) drains `Amount` EXTRA energy
@@ -8471,6 +8458,20 @@ pub fn auto_play_n_from_draw_top(state: &mut CombatState, count: i32, force_exha
 /// and reroutes blocked cards via `MoveToResultPileWithoutPlaying` (sweep
 /// seeds 3931/5571: a Ringing/Bound-blocked Cascade/Stampede auto-play
 /// actually resolved in Rust).
+fn chains_before_card_played(state: &mut CombatState, uid: crate::CardUid) {
+    // Called once for the original play on both entry paths, never for its
+    // replay duplicates (ChainsOfBindingPower.BeforeCardPlayed skips IsDupe).
+    if state.player_power_amount(crate::PowerKind::ChainsOfBinding) > 0
+        && state.cards.get(uid.get() as usize - 1).is_some_and(|c| {
+            c.affliction
+                .is_some_and(|a| a.kind == crate::card_afflictions::CardAfflictionKind::Bound)
+        })
+    {
+        state.combat_log.chains_bound_card_played_this_turn = true;
+    }
+}
+
+/// Shared ShouldPlay gates for native and autoplay entry paths.
 pub fn player_should_play_blocked(state: &CombatState, card: &crate::cards::Card) -> bool {
     if hooks::relic_should_play_blocked(state) {
         return true;
@@ -8482,16 +8483,9 @@ pub fn player_should_play_blocked(state: &CombatState, card: &crate::cards::Card
             ..
         })
     ) && state.combat_log.chains_bound_card_played_this_turn
+        && state.player_power_amount(crate::PowerKind::ChainsOfBinding) > 0
     {
-        let player_has_chains = state.player.powers.iter().any(|puid| {
-            state
-                .powers
-                .get_by_id(puid.0)
-                .is_some_and(|p| p.kind == crate::powers::PowerKind::ChainsOfBinding)
-        });
-        if player_has_chains {
-            return true;
-        }
+        return true;
     }
     // C# `SmoggyPower.ShouldPlay` (`SmoggyPower.cs:64-71`):
     // `card.Owner != Owner.Player ? true : !(card.Affliction is Smog)` — i.e.
@@ -9097,6 +9091,7 @@ pub(crate) fn resolve_auto_played_card_at_target(
         .map(|p| (p.id, p.kind, p.counter, p.skip_next_tick))
         .collect();
 
+    chains_before_card_played(state, top_uid);
     crate::hooks::dispatch_before_card_played_powers(
         state,
         auto_resolved_cost,
