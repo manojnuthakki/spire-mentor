@@ -1720,6 +1720,45 @@ mod tests {
         }
     }
 
+    #[test]
+    fn step13_quest_is_not_a_skill_for_smog_or_tainted() {
+        for id in [crate::cards::CardId::SpoilsMap, crate::cards::CardId::ByrdonisEgg,
+                   crate::cards::CardId::LanternKey] {
+            let (mut state, _owner) = vital_spark_fixture();
+            // Every live pile contains an obtainable Quest with its internal stand-in type.
+            for c in &mut state.cards[..5] {
+                c.card_id = id;
+            }
+            vital_spark_before_combat_start(&mut state);
+            assert!(state.cards[..5].iter().all(|c| c.affliction.is_none()));
+            // A real Skill remains eligible and keeps the accepted amount.
+            assert_eq!(state.cards[6].affliction.unwrap().stacks, 7);
+            give_player_smoggy(&mut state);
+            for n in 1..=5 {
+                assert!(!smog_afflict_if_unafflicted_skill(&mut state, CardUid::new(n).unwrap()));
+                vital_spark_afflict_card(&mut state, 3, CardUid::new(n).unwrap(), true);
+            }
+            assert!(state.cards[..5].iter().all(|c| c.affliction.is_none()));
+            let skill = push_card(&mut state, 10, CardType::Skill);
+            assert!(smog_afflict_if_unafflicted_skill(&mut state, skill));
+            assert_eq!(state.cards[9].affliction.unwrap().kind, CardAfflictionKind::Smog);
+        }
+    }
+
+    #[test]
+    fn step13_quest_smog_with_real_skill_control() {
+        for id in [crate::cards::CardId::SpoilsMap, crate::cards::CardId::ByrdonisEgg,
+                   crate::cards::CardId::LanternKey] {
+            let mut state = CombatState::default();
+            give_player_smoggy(&mut state);
+            let quest = push_card(&mut state, 1, CardType::Skill);
+            state.cards[0].card_id = id;
+            let skill = push_card(&mut state, 2, CardType::Skill);
+            assert!(!smog_afflict_if_unafflicted_skill(&mut state, quest));
+            assert!(smog_afflict_if_unafflicted_skill(&mut state, skill));
+        }
+    }
+
     fn apply_ringing(state: &mut CombatState) {
         crate::card_effects::apply_power_to_creature(
             state,
