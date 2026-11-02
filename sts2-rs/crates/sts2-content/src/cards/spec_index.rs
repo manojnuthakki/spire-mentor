@@ -1452,6 +1452,55 @@ fn roll_reward_cards_base_odds(
 /// `character` is the run character and is used only as the fallback when the
 /// original id has no registered spec (defensive; not reached at this pin).
 fn transform_replacement_pool(_character: CharacterId, original_id: CardId) -> Vec<CardId> {
+    // Installed v0.107.1 CardFactory.GetDefault/FilteredTransformationOptions:
+    // Curse/Status keep their own pool and bypass the ordinary rarity band.
+    // In particular, non-generatable curses remain available OUTSIDE combat.
+    // The shared STATUS_SPECS also contains legacy and event cards, so it is
+    // not the game's CurseCardPool/StatusCardPool ordered candidate list.
+    let special_pool: &[CardId] = match rarity_for_card_id(original_id) {
+        Some(CardRarity::Curse) => &[
+            CardId::AscendersBane,
+            CardId::BadLuck,
+            CardId::Clumsy,
+            CardId::CurseOfTheBell,
+            CardId::Debt,
+            CardId::Decay,
+            CardId::Doubt,
+            CardId::Enthralled,
+            CardId::Folly,
+            CardId::Greed,
+            CardId::Guilty,
+            CardId::Injury,
+            CardId::Normality,
+            CardId::PoorSleep,
+            CardId::Regret,
+            CardId::Shame,
+            CardId::SporeMind,
+            CardId::Writhe,
+        ],
+        Some(CardRarity::Status) => &[
+            CardId::Beckon,
+            CardId::Burn,
+            CardId::Dazed,
+            CardId::Debris,
+            CardId::FranticEscape,
+            CardId::Infection,
+            CardId::Wither,
+            CardId::Slimed,
+            CardId::Soot,
+            CardId::Toxic,
+            CardId::Void,
+            CardId::Wound,
+        ],
+        _ => &[],
+    };
+    if !special_pool.is_empty() {
+        return special_pool
+            .iter()
+            .copied()
+            .filter(|&id| id != original_id)
+            .collect();
+    }
     // Resolve the original card's own pool, mirroring C# `original.Pool`
     // (CardModel.cs:273-281) + the Event/Ancient/Token/Quest → ColorlessCardPool
     // override (CardFactory.cs:126-131).

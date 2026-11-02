@@ -744,6 +744,10 @@ pub struct PendingDeckTransform {
     /// `WhisperingHollow.Hug` fires `CreatureCmd.Damage(9, Unblockable)`
     /// only AFTER the picked card transforms. `0` = none.
     pub post_hp_loss: i32,
+    /// Astrolabe upgrades its freshly rolled replacement BEFORE the deck-add
+    /// hooks, independently of the original's upgrade/enchantment values.
+    /// Default false preserves every existing transform producer.
+    pub upgrade_replacement: bool,
 }
 
 /// One queued interactive deck-enchant pick (see

@@ -3577,64 +3577,54 @@ fn listener_miniature_tent_disable_remaining(
     Some(false)
 }
 
-/// `Astrolabe::after_obtained` — transform 3 random non-curse cards
-/// from the master deck into random Rare cards, then upgrade them.
-/// Python `shop_event.py::Astrolabe.after_obtained` at pin
-/// `01c094d:sts2_env/relics/shop_event.py:1002` calls
-/// `owner.transform_and_upgrade_cards(self.CARDS, cards=candidates)`
-/// (CARDS = 3); without the headless flag the path delegates to
-/// `_transform_and_upgrade_selected` over the candidate list head.
-///
-/// Self-gated on [`RunState::last_obtained_relic`] so the listener
-/// fires exactly once — on Astrolabe's own pickup — rather than on
-/// every subsequent relic acquisition (the `after_obtained` channel
-/// dispatcher walks ALL listeners on every pickup; see
-/// [`crate::run_effects::dispatch_after_obtained`] doc-comment).
-///
-/// Divergence from Python: the replacement pool collapses to a
-/// uniform Rare-rarity sample (`character = None`) for every chosen
-/// slot, because Rust has no `CardId -> CardSpec` lookup on the run
-/// side yet — Python preserves the original rarity bucket. Same
-/// shortcut used by `listener_arcane_scroll` / `listener_dusty_tome`.
-/// Bead `sts2-rs-70anj.3.9`.
+/// Installed v0.107.1 `Astrolabe.AfterObtained`: choose three transformable
+/// non-Quest deck instances, then for EACH chosen original in selection order:
+/// roll its own pool with Niche, upgrade the fresh replacement, transform it
+/// (remove original, append via add hooks). `FromDeckForTransformation`
+/// auto-selects all when at most three are eligible, including the empty case.
+/// Existing sequential transform picks carry the mandatory selection; Sim
+/// validates the whole submitted list before executing/remapping its instances.
 fn listener_astrolabe(rs: &mut RunState) -> EffectResult {
     if rs.last_obtained_relic != Some(RelicId::Astrolabe) {
         return EffectResult::NotImplemented;
     }
-    if rs.master_deck.is_empty() {
+    let candidates: Vec<_> = rs
+        .master_deck
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| {
+            !c.card_id.is_quest() && crate::cards::spec_index::card_is_removable_instance(c)
+        })
+        .map(|(i, c)| (i, c.card_id))
+        .collect();
+    if rs.interactive_card_transform && candidates.len() > ASTROLABE_CARDS {
+        rs.pending_deck_transforms
+            .extend(
+                (0..ASTROLABE_CARDS).map(|_| sts2_core::PendingDeckTransform {
+                    upgrade_replacement: true,
+                    ..Default::default()
+                }),
+            );
         return EffectResult::Resolved;
     }
-    // Candidate set: deck indices whose cards are transformable.
-    // Python skips curses/statuses; the Rust master_deck does not
-    // currently hold curses, so the filter degrades to "all indices"
-    // — but keep the structure so adding a real filter later is local.
-    let mut candidates: Vec<usize> = (0..rs.master_deck.len()).collect();
-    let take = ASTROLABE_CARDS.min(candidates.len());
-    // Partial Fisher-Yates draws `take` distinct deck indices using
-    // the rewards-RNG stream (same convention as `upgrade_random_cards`).
-    {
-        // Bead `sts2-rs-hm2eb` (943w7 Stage 3): dotnet `RunRngSet` reward
-        // stream, not the legacy Xoshiro `rewards_rng()` shim.
-        let rng = &mut rs.rng.rewards;
-        for i in 0..take {
-            let len_remaining = (candidates.len() - i) as i32;
-            let j = i + rng.next_int_exclusive(0, len_remaining) as usize;
-            candidates.swap(i, j);
+    // Automatic small-deck selection, or the noninteractive first-candidates
+    // fallback. Removing each original shifts the remaining originals by one;
+    // hook additions append at the tail and cannot change their relative slots.
+    let character = rs.character_id;
+    let mut removed = 0;
+    for (deck_idx, original) in candidates.into_iter().take(ASTROLABE_CARDS) {
+        if let Some(id) = crate::cards::spec_index::roll_transform_replacement_basic_niche(
+            rs, character, original,
+        ) {
+            if let Some(mut fresh) = crate::cards::spec_index::card_pod_from_id(id, false) {
+                if fresh.is_upgradable() {
+                    fresh.upgrade();
+                }
+                rs.master_deck.remove(deck_idx - removed);
+                removed += 1;
+                rs.add_transformed_card_to_deck(fresh);
+            }
         }
-    }
-    let chosen: Vec<usize> = candidates.iter().take(take).copied().collect();
-    for deck_idx in chosen {
-        let Some(new_id) = crate::cards::spec_index::random_card_from_rarity(
-            rs,
-            None,
-            crate::cards::CardRarity::Rare,
-        ) else {
-            continue;
-        };
-        let mut fresh = sts2_core::Card::pod_defaults();
-        fresh.card_id = new_id;
-        fresh.upgrade();
-        rs.master_deck[deck_idx] = fresh;
     }
     EffectResult::Resolved
 }

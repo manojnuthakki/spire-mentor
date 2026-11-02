@@ -4812,8 +4812,8 @@ impl RunManager {
     /// `CardKeyword.Eternal`, `AscendersBane.cs:12-17`; appended to the
     /// starter deck at Ascension 5+). This is load-bearing: an over-offer
     /// here shifts every later deck index, so a fixed-index pick lands on the
-    /// wrong card (PARITY127, Silent A5). Quest exclusion needs no analogue —
-    /// Rust has no Quest card type.
+    /// wrong card (PARITY127, Silent A5). Quest ids are excluded even though
+    /// their stand-in Rust card type can be Skill or Attack.
     ///
     /// `basic_only` entries (Wood Carvings) additionally filter to Basic
     /// rarity via the registered [`crate::lookup_card_rarity_rank`] fn (C#
@@ -4834,6 +4834,9 @@ impl RunManager {
             .iter()
             .enumerate()
             .filter(|(_, c)| {
+                if c.card_id.is_quest() {
+                    return false;
+                }
                 // C# `IsTransformable` in the Deck pile == `IsRemovable`:
                 // drop the Eternal curses (Ascender's Bane / Greed).
                 if let Some(f) = removable {
@@ -4932,8 +4935,12 @@ impl RunManager {
             self.run_state.add_transformed_card_to_deck(replacement);
         } else if let Some(roll) = self.callbacks.roll_transform_replacement {
             let original = self.run_state.master_deck[deck_idx].card_id;
-            if let Some(replacement) = roll(&mut self.run_state, original, entry.event_stream_roll)
+            if let Some(mut replacement) =
+                roll(&mut self.run_state, original, entry.event_stream_roll)
             {
+                if entry.upgrade_replacement && replacement.is_upgradable() {
+                    replacement.upgrade();
+                }
                 self.run_state.master_deck.remove(deck_idx);
                 self.run_state.add_transformed_card_to_deck(replacement);
             }
