@@ -7389,8 +7389,8 @@ impl CombatState {
                         // this is a flat `c.cost` overwrite (not a modifier
                         // stack like C#'s `EnergyCost`), the banked Stomp
                         // reduction would otherwise be re-added by
-                        // `restore_stomp_costs_for_turn_start` at the NEXT
-                        // turn start, leaving the card wrongly +K over its
+                        // `restore_stomp_costs_for_turn_start` at cleanup
+                        // (historical name), leaving the card wrongly +K over its
                         // base (e.g. a Stomp shaved on turn 0 by a
                         // DistilledChaos auto-played Attack, then drawn under
                         // Confused, resurfaced at cost 3+K on turn 1 and was
@@ -8082,7 +8082,7 @@ impl CombatState {
     /// and the shaved amount is banked per-card in
     /// [`VarKey::StompCostReductionThisTurn`] so
     /// [`Self::restore_stomp_costs_for_turn_start`] can undo it on the
-    /// owner's next turn — matching C#'s `AddThisTurn` auto-reset.
+    /// next end-of-turn cleanup — matching C#'s `AddThisTurn` expiry.
     ///
     /// Because the discount is applied to *every* Stomp (not just those in
     /// hand), a Stomp drawn later this turn already carries the reduced
@@ -8099,8 +8099,8 @@ impl CombatState {
 
     /// Shave 1 energy off every in-combat copy of `card_id` (clamped at 0)
     /// and bank the shaved amount per-card in `bank` so the matching
-    /// `restore_*_costs_for_turn_start` can undo it on the owner's next
-    /// turn — the shared mechanism behind the Stomp / Pinpoint dynamic
+    /// `restore_*_costs_for_turn_start` can undo it at end-of-turn cleanup
+    /// (historical method names) — the shared Stomp / Pinpoint mechanism
     /// discounts (C# `EnergyCost.AddThisTurn(-1)`).
     ///
     /// Runs on every Attack (Stomp) and every Skill (Pinpoint) play, so it
@@ -8162,9 +8162,9 @@ impl CombatState {
     }
 
     /// Undo the per-turn Stomp discount banked by
-    /// [`Self::discount_stomp_on_attack_played`]. Called at player-turn
-    /// start (mirrors C# `EnergyCost.AddThisTurn`'s reset-each-turn
-    /// semantics): restore each Stomp's cost by the banked amount and
+    /// [`Self::discount_stomp_on_attack_played`]. Called at each side's
+    /// end-of-turn cleanup (C# `CardEnergyCost.EndOfTurnCleanup`;
+    /// historical method name): restore each Stomp's banked amount and
     /// clear the slot. Bead `sts2-rs-stomp`.
     pub fn restore_stomp_costs_for_turn_start(&mut self) {
         self.restore_banked_costs_for_turn_start(
@@ -8231,9 +8231,9 @@ impl CombatState {
     }
 
     /// Undo the per-turn Pinpoint discount banked by
-    /// [`Self::discount_pinpoint_on_skill_played`]. Called at player-turn
-    /// start (mirrors C# `EnergyCost.AddThisTurn`'s reset-each-turn
-    /// semantics). Twin of [`Self::restore_stomp_costs_for_turn_start`].
+    /// [`Self::discount_pinpoint_on_skill_played`]. Called at each side's
+    /// end-of-turn cleanup. Twin of [`Self::restore_stomp_costs_for_turn_start`]
+    /// (both retain historical method names).
     pub fn restore_pinpoint_costs_for_turn_start(&mut self) {
         self.restore_banked_costs_for_turn_start(
             crate::cards::CardId::Pinpoint,
@@ -8243,8 +8243,8 @@ impl CombatState {
 
     /// Undo Snecko Oil's per-turn cost randomization banked by
     /// [`crate::cards::VarKey::SneckoCostDeltaThisTurn`]. Called at
-    /// player-turn start, mirroring C# `EnergyCost.SetThisTurnOrUntilPlayed`'s
-    /// auto-revert at the owner's next turn start: subtract the banked
+    /// each side's end-of-turn cleanup (historical method name), mirroring
+    /// C# `EnergyCost.SetThisTurnOrUntilPlayed`'s EndOfTurn expiry: subtract the banked
     /// delta to restore each card's pre-randomization cost and clear the
     /// slot. Bead `sts2-rs-2e9q2` follow-up.
     pub fn restore_snecko_costs_for_turn_start(&mut self) {
@@ -8292,22 +8292,12 @@ impl CombatState {
     /// state rebuilt mid-turn from a C# wire inherits an already-shaved cost
     /// with no bank behind it, so its discount would never expire — the
     /// reconstruction records the shave here instead, and this restores it at
-    /// the next player-turn start.
-    ///
-    /// Not literally C#'s boundary: `CardEnergyCost.EndOfTurnCleanup()` drops
-    /// the `EndOfTurn` modifiers when the turn ENDS, so between end-of-player-
-    /// turn and the next player-turn start this engine still holds the discount.
-    /// Deliberate, and the same convention as
-    /// [`Self::restore_snecko_costs_for_turn_start`] /
-    /// [`Self::restore_stomp_costs_for_turn_start`], which is why it is here and
-    /// not in the end-turn path — nothing between those two points can read a
-    /// card's cost (the player is not deciding, and the monster turn does not
-    /// price player cards), so the window is unobservable. Moving it would mean
-    /// moving all three.
+    /// each side's end-of-turn cleanup. The historical method name is retained.
+    /// Enemy-turn choices can observe costs between player cleanup and start.
     ///
     /// Disjoint from the per-effect banks by construction: this one covers
     /// what happened BEFORE the reconstruction, they cover what this engine
-    /// did AFTER it, so both firing at turn start restores the whole shave
+    /// did AFTER it, so both firing at cleanup restores the whole shave
     /// exactly once.
     pub fn restore_wire_transient_costs_for_turn_start(&mut self) {
         // Same fast absence gate as the Snecko restore: the bank has no
@@ -8377,7 +8367,7 @@ impl CombatState {
     /// hand card with `cost >= 0` (`!CostsX`), roll `Rng.CombatEnergyCosts
     /// .NextInt(4)` and bank `roll - prior_cost` in `SneckoCostDeltaThisTurn` so
     /// the temporary `SetThisTurnOrUntilPlayed` override reverts at the next
-    /// player-turn start (see [`Self::restore_snecko_costs_for_turn_start`]). The
+    /// end-of-turn cleanup (see [`Self::restore_snecko_costs_for_turn_start`]). The
     /// `combat_energy_costs` roll is consumed ONLY for cards that pass the guard,
     /// matching C#'s `Where(!CostsX)` before `NextInt`.
     ///
