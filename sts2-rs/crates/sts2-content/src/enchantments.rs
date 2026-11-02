@@ -45,7 +45,7 @@ use crate::cards::{CardKeywords, CardRarity, CardSpec};
 #[must_use]
 pub fn can_enchant_card(spec: &CardSpec, card: &Card, enchantment: EnchantmentId) -> bool {
     // Unplayable / status / curse / quest can never be enchanted.
-    if matches!(card.card_type, CardType::Status | CardType::Curse) {
+    if card.card_id.is_quest() || matches!(card.card_type, CardType::Status | CardType::Curse) {
         return false;
     }
     if spec.keywords.contains(CardKeywords::UNPLAYABLE) {

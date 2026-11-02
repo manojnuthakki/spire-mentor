@@ -715,7 +715,7 @@ fn vital_spark_afflict_card(
     let Some(card) = state.cards.get_mut(idx) else {
         return;
     };
-    if card.card_type != crate::cards::CardType::Skill {
+    if card.card_id.is_quest() || card.card_type != crate::cards::CardType::Skill {
         return;
     }
     // CardCmd.Afflict + AfflictionModel.CanAfflict: Tainted stacks with itself
@@ -917,7 +917,10 @@ fn smog_afflict_if_unafflicted_skill(state: &mut CombatState, card_uid: CardUid)
     let Some(card) = state.cards.get_mut(idx) else {
         return false;
     };
-    if card.affliction.is_some() || card.card_type != crate::cards::CardType::Skill {
+    if card.affliction.is_some()
+        || card.card_id.is_quest()
+        || card.card_type != crate::cards::CardType::Skill
+    {
         return false;
     }
     // `CardCmd.Afflict<Smog>(item, 1m)` — amount 1, matching the C# literal.
@@ -1722,8 +1725,11 @@ mod tests {
 
     #[test]
     fn step13_quest_is_not_a_skill_for_smog_or_tainted() {
-        for id in [crate::cards::CardId::SpoilsMap, crate::cards::CardId::ByrdonisEgg,
-                   crate::cards::CardId::LanternKey] {
+        for id in [
+            crate::cards::CardId::SpoilsMap,
+            crate::cards::CardId::ByrdonisEgg,
+            crate::cards::CardId::LanternKey,
+        ] {
             let (mut state, _owner) = vital_spark_fixture();
             // Every live pile contains an obtainable Quest with its internal stand-in type.
             for c in &mut state.cards[..5] {
@@ -1735,20 +1741,29 @@ mod tests {
             assert_eq!(state.cards[6].affliction.unwrap().stacks, 7);
             give_player_smoggy(&mut state);
             for n in 1..=5 {
-                assert!(!smog_afflict_if_unafflicted_skill(&mut state, CardUid::new(n).unwrap()));
+                assert!(!smog_afflict_if_unafflicted_skill(
+                    &mut state,
+                    CardUid::new(n).unwrap()
+                ));
                 vital_spark_afflict_card(&mut state, 3, CardUid::new(n).unwrap(), true);
             }
             assert!(state.cards[..5].iter().all(|c| c.affliction.is_none()));
             let skill = push_card(&mut state, 10, CardType::Skill);
             assert!(smog_afflict_if_unafflicted_skill(&mut state, skill));
-            assert_eq!(state.cards[9].affliction.unwrap().kind, CardAfflictionKind::Smog);
+            assert_eq!(
+                state.cards[9].affliction.unwrap().kind,
+                CardAfflictionKind::Smog
+            );
         }
     }
 
     #[test]
     fn step13_quest_smog_with_real_skill_control() {
-        for id in [crate::cards::CardId::SpoilsMap, crate::cards::CardId::ByrdonisEgg,
-                   crate::cards::CardId::LanternKey] {
+        for id in [
+            crate::cards::CardId::SpoilsMap,
+            crate::cards::CardId::ByrdonisEgg,
+            crate::cards::CardId::LanternKey,
+        ] {
             let mut state = CombatState::default();
             give_player_smoggy(&mut state);
             let quest = push_card(&mut state, 1, CardType::Skill);

@@ -5423,6 +5423,16 @@ pub fn modify_card_cost(
     };
     let power = state.powers.get_by_id(uid.0)?;
     let card_type = ctx.card_type?;
+    // Corruption/FreeSkill require the real Skill type. A Quest may be
+    // inspected in Hand without ever being playable.
+    let is_skill = card_type == CardType::Skill
+        && !ctx.card_id.is_some_and(CardId::is_quest)
+        && !ctx.card_uid.is_some_and(|u| {
+            state
+                .cards
+                .get(u.get() as usize - 1)
+                .is_some_and(|c| c.card_id.is_quest())
+        });
     // C# `FreeAttackPower` / `FreeSkillPower` / `FreePowerPower` /
     // `VeilpiercerPower` / `VoidFormPower` act only on a card whose pile is
     // Hand or Play (a card in the draw, discard or exhaust pile keeps its
@@ -5434,7 +5444,7 @@ pub fn modify_card_cost(
     };
     match power.kind {
         PowerKind::Corruption => {
-            if card_type == CardType::Skill {
+            if is_skill {
                 Some(CardCostMod::Override(0))
             } else {
                 None
@@ -5448,7 +5458,7 @@ pub fn modify_card_cost(
             }
         }
         PowerKind::FreeSkill => {
-            if power.amount > 0 && card_type == CardType::Skill && in_hand_or_play() {
+            if power.amount > 0 && is_skill && in_hand_or_play() {
                 Some(CardCostMod::Override(0))
             } else {
                 None

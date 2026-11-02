@@ -203,7 +203,7 @@ pub(crate) fn move_card_from_draw_to_hand_by_type(
         .copied()
         .filter(|uid| {
             let idx = uid.0.get() as usize - 1;
-            state.cards[idx].card_type == kind
+            !state.cards[idx].card_id.is_quest() && state.cards[idx].card_type == kind
         })
         .collect();
     // Mirror C# `FromCombatPile`'s `OrderBy(Rarity).ThenBy(Id)` Draw-pile

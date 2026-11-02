@@ -32,7 +32,8 @@ pub(crate) fn play_hand_trick(state: &mut CombatState, _t: Option<CreatureUid>) 
         .filter(|uid| {
             let idx = uid.0.get() as usize - 1;
             state.cards.get(idx).is_some_and(|c| {
-                c.card_type == CardType::Skill
+                !c.card_id.is_quest()
+                    && c.card_type == CardType::Skill
                     && !sts2_core::card_effects::card_sly(c.card_id)
                     && !state.player.sly_this_turn.contains(uid)
             })

@@ -14,7 +14,13 @@ pub(crate) fn preview_flechettes(
     _card: &Card,
     _target: Option<CreatureUid>,
 ) -> i32 {
-    i32::try_from(search_hand(state, |c| c.card_type == CardType::Skill).len()).unwrap_or(i32::MAX)
+    i32::try_from(
+        search_hand(state, |c| {
+            !c.card_id.is_quest() && c.card_type == CardType::Skill
+        })
+        .len(),
+    )
+    .unwrap_or(i32::MAX)
 }
 
 pub(crate) fn play_flechettes(

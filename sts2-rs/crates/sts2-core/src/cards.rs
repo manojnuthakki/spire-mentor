@@ -960,6 +960,13 @@ impl Card {
     /// Bead `sts2-rs-cd1zg` (7n7tb sub-2).
     #[must_use]
     pub fn set_affliction(&mut self, a: crate::card_afflictions::CardAffliction) -> bool {
+        // Installed Tainted.CanAfflictCardType is Skill-only. Quest cards
+        // use an internal Skill stand-in, but unrestricted afflictions
+        // (including Bound) still accept them.
+        if self.card_id.is_quest() && a.kind == crate::card_afflictions::CardAfflictionKind::Tainted
+        {
+            return false;
+        }
         if !crate::card_afflictions::CardAffliction::can_afflict_card_type(a.kind, self.card_type) {
             return false;
         }
@@ -1287,7 +1294,9 @@ impl Card {
     #[inline]
     #[must_use]
     pub const fn is_x_cost(&self) -> bool {
-        self.cost == -1 && !matches!(self.card_type, CardType::Curse | CardType::Status)
+        self.cost == -1
+            && !self.card_id.is_quest()
+            && !matches!(self.card_type, CardType::Curse | CardType::Status)
     }
 }
 

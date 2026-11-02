@@ -18,7 +18,7 @@ pub(crate) fn play_escape_plan(state: &mut CombatState, _t: Option<CreatureUid>)
         let is_skill = state
             .cards
             .get(idx)
-            .is_some_and(|c| c.card_type == CardType::Skill);
+            .is_some_and(|c| !c.card_id.is_quest() && c.card_type == CardType::Skill);
         if is_skill {
             gain_block_player(state, current_card_block(state));
         }

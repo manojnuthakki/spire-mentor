@@ -266,10 +266,11 @@ fn sapphire_seed_eat(state: &mut RunState) -> EventOutcome {
 }
 
 /// Base `EnchantmentModel.CanEnchant` (Sown has no override): not
-/// Status/Curse, unenchanted, not Unplayable — X-cost stays eligible.
+/// Status/Curse/Quest, unenchanted, not Unplayable — X-cost stays eligible.
 fn sown_can_enchant(c: &sts2_core::cards::Card) -> bool {
     use sts2_core::cards::CardType;
-    !matches!(c.card_type, CardType::Status | CardType::Curse)
+    !c.card_id.is_quest()
+        && !matches!(c.card_type, CardType::Status | CardType::Curse)
         && c.enchantments.is_empty()
         && (c.cost >= 0 || c.is_x_cost())
 }
@@ -354,7 +355,8 @@ fn self_help_card_eligible(
     card_type: sts2_core::cards::CardType,
     enchantment: sts2_core::cards::EnchantmentId,
 ) -> bool {
-    c.card_type == card_type
+    !c.card_id.is_quest()
+        && c.card_type == card_type
         && c.enchantments.is_empty()
         && (c.cost >= 0 || c.is_x_cost())
         && (enchantment != sts2_core::cards::EnchantmentId::Nimble || c.base_block > 0)

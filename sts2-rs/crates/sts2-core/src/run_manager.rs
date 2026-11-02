@@ -4887,10 +4887,10 @@ impl RunManager {
             .iter()
             .enumerate()
             .filter(|(_, c)| {
-                // Rust `CardType` has no Quest variant (Quest cards are
-                // identified by rarity); Status/Curse covers C#'s
-                // `(uint)(type - 4) <= 2u` exclusion for the live decks.
-                !matches!(c.card_type, CardType::Status | CardType::Curse)
+                // Installed EnchantmentModel.CanEnchant excludes Quest as
+                // well as Status/Curse, regardless of its stand-in type/cost.
+                !c.card_id.is_quest()
+                    && !matches!(c.card_type, CardType::Status | CardType::Curse)
                     && c.enchantments.is_empty()
                     && (c.cost >= 0 || (allow_x_cost && c.is_x_cost()))
                     && (!requires_block || c.base_block > 0)
