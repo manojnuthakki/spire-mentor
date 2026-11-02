@@ -23,10 +23,9 @@ pub struct CardEventCtx {
     /// `sts2-rs-3f8` plumbed this; listeners use it for `CardTag::Strike`
     /// queries without an arena round-trip.
     pub card_tags: crate::cards::CardTags,
-    /// Energy ACTUALLY paid for this play (C# `cardPlay.Resources.EnergyValue`):
-    /// the effective post-modifier cost for a normal card, or all drained energy
-    /// for an X-cost card. Populated only at the `before_card_played` dispatch
-    /// site in `combat_loop::play_card` (where the spend is known); all other
+    /// `cardPlay.Resources.EnergyValue` at before-play sites: paid energy for
+    /// manual plays, original modifier-resolved cost for autoplay (raw captured
+    /// energy for X). Repeated plays retain that original value. Other
     /// construction sites (exhaust events, after-played, off-deck synthesized
     /// cards) set `0`. `IntimidatingHelmet` gates on this to mirror C#
     /// `BeforeCardPlayed`'s `EnergyValue >= 2` check, which the printed-`cost`
@@ -2690,8 +2689,8 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardEventCtx) -
 
 /// Dispatch `before_card_played` to every registered listener. Bead
 /// `sts2-rs-ff3hr`: relic-side `&mut state` channel (IntimidatingHelmet).
-/// Fired from `combat_loop::play_card` after the energy spend and the
-/// Hand→Play move.
+/// Fired before each manual/autoplay body, including repeated plays, after
+/// the card's resource value is captured and it has entered Play.
 pub fn dispatch_before_card_played(state: &mut CombatState, ctx: &CardEventCtx) -> EffectResult {
     if is_empty_before_card_played() {
         return EffectResult::NotImplemented;

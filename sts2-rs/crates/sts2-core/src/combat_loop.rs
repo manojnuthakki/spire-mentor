@@ -6807,7 +6807,7 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
         card_uid: Some(card_uid),
         target: target_uid,
         card_tags: card.tags,
-        // C# `cardPlay.Resources.EnergyValue` — the energy actually paid (X-cost
+        // C# `cardPlay.Resources.EnergyValue` — for a manual play, energy paid (X-cost
         // cards: the drained pool; normal cards: the effective post-modifier
         // cost). IntimidatingHelmet's `before_card_played` gate reads this.
         energy_spent: energy_spent_for_hook,
@@ -7421,6 +7421,16 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // Combat-end short-circuit: if a replay killed the last enemy,
     // stop replaying to avoid `apply_damage` on an empty board.
     for _ in 0..extra_plays.max(0) {
+        // OnPlayWrapper copies the original ResourceInfo into each actual
+        // play. Manual legality ensures resolved_cost equals the paid value;
+        // X uses the original raw capture. Do not charge energy again.
+        if relic_channel_live(state, PlannedChannel::BeforeCardPlayed) {
+            let before_ctx = crate::relic_effects::CardEventCtx {
+                energy_spent: resolved_cost,
+                ..played_ctx
+            };
+            let _ = crate::relic_effects::dispatch_before_card_played(state, &before_ctx);
+        }
         // C# `CardModel.OnPlayWrapper` fires `Hook.BeforeCardPlayed` once per
         // play iteration (CardModel.cs:1496, inside the `i < playCount2` loop),
         // so a duplicated/replayed card re-runs the FULL before-play dispatch:
@@ -7555,6 +7565,13 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
         // host a log line, which the porting rules forbid.
         crate::event_log::flash_player_power(state, crate::PowerKind::EchoForm);
         {
+            if relic_channel_live(state, PlannedChannel::BeforeCardPlayed) {
+                let before_ctx = crate::relic_effects::CardEventCtx {
+                    energy_spent: resolved_cost,
+                    ..played_ctx
+                };
+                let _ = crate::relic_effects::dispatch_before_card_played(state, &before_ctx);
+            }
             // Re-run the FULL before-play dispatch per Echo replay (C# fires
             // `Hook.BeforeCardPlayed` per play iteration) — re-arms Storm AND
             // the Afterimage/SerpentForm/Oblivion/Strangle/Monologue snapshots
@@ -8639,7 +8656,8 @@ fn resolve_inline_auto_play_choices(state: &mut CombatState) {
 /// Record one FINISHED auto-play in the per-turn play bookkeeping that C#'s
 /// `History.CardPlaysFinished` feeds: the per-turn `cards_played_this_turn`
 /// bucket (read by Conflagration / Juggling / Finisher / LunarBlast / FTL),
-/// the combat-long ethereal tally, and the Stomp/Pinpoint per-card cost shaves.
+/// the combat-long ethereal tally, and Pinpoint's after-play cost shave.
+/// Stomp's before-play shave runs before each body, not in this tail.
 /// Mirrors the identical hand-play sequence (combat_loop.rs:4735-4764). Called
 /// once for the initial auto-play AND once per OneTwoPunch/base_replay replay,
 /// so a replayed scaling Attack observes its own earlier plays — matching C#'s
@@ -8662,9 +8680,6 @@ fn auto_play_tally_finished(
             .combat_log
             .ethereal_cards_played_this_combat
             .saturating_add(1);
-    }
-    if card_type == crate::cards::CardType::Attack {
-        state.discount_stomp_on_attack_played();
     }
     if card_type == crate::cards::CardType::Skill {
         state.discount_pinpoint_on_skill_played();
@@ -9000,6 +9015,21 @@ pub(crate) fn resolve_auto_played_card_at_target(
     // false. Mirrors the same call in `play_card` (line ~3715) so that e.g.
     // BeatDown+1 / Ovicopter auto-plays of Attacks decrement the FreeAttack
     // stack correctly (round-8 OVICOPTER / THIEVING_HOPPER).
+    // The existing per-card stamp is ResourceInfo.EnergyValue, not energy
+    // paid (zero for autoplay). Read this card's UID, not the outer source.
+    // A refused Enemy play with no target has no BeforeCardPlayed callback.
+    if (!matches!(top_target_type, TargetType::Enemy) || target_uid.is_some())
+        && relic_channel_live(state, PlannedChannel::BeforeCardPlayed)
+    {
+        let before_ctx = crate::relic_effects::CardEventCtx {
+            card_id: top_card_id,
+            card_uid: Some(top_uid),
+            target: target_uid,
+            card_tags: top_card_tags,
+            energy_spent: state.cards[top_idx].energy_spent,
+        };
+        let _ = crate::relic_effects::dispatch_before_card_played(state, &before_ctx);
+    }
     let _ = consume_free_card_power(state, top_card_type);
 
     // C# computes the auto-played card's result pile pre-OnPlay too
@@ -9160,6 +9190,13 @@ pub(crate) fn resolve_auto_played_card_at_target(
     if top_card_id == cards::CardId::Stardust {
         let captured = i32::from(state.player.stars).max(0);
         state.cards[top_idx].set_combat_var(crate::cards::VarKey::AutoPlayStarX, captured + 1);
+    }
+    // Stomp.BeforeCardPlayed precedes OnPlay for auto-plays as well as
+    // manual plays (CardCmd.AutoPlay -> CardModel.OnPlayWrapper). In
+    // particular, a selection parked inside this body already sees the shave.
+    // The resume tail must not apply it again.
+    if top_card_type == crate::cards::CardType::Attack {
+        state.discount_stomp_on_attack_played();
     }
     if !skip_dispatch {
         let _ = crate::card_effects::dispatch_for_card(state, top_uid, top_card_id, target_uid);
@@ -9456,6 +9493,17 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
     let top_card_type = top_card.card_type;
     let top_card_tags = top_card.tags;
 
+    // The parked card remains in Play while nested plays use other UIDs.
+    // Its existing stamp survives body cost changes, cleanup and cloning.
+    // Keep auto_resolved_cost separate: powers and Feral read that value.
+    let before_ctx = crate::relic_effects::CardEventCtx {
+        card_id: top_card_id,
+        card_uid: Some(top_uid),
+        target: target_uid,
+        card_tags: top_card_tags,
+        energy_spent: top_card.energy_spent,
+    };
+
     // Bead `sts2-rs-rnyme` follow-up: record this auto-play in the
     // combat-wide counter NOW — after the on-play dispatch + inline choice
     // resolution, before `AfterCardPlayed` — mirroring C#
@@ -9608,6 +9656,9 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
             if state.is_over {
                 break;
             }
+            if relic_channel_live(state, PlannedChannel::BeforeCardPlayed) {
+                let _ = crate::relic_effects::dispatch_before_card_played(state, &before_ctx);
+            }
             // C# `CardModel.OnPlayWrapper` fires `Hook.BeforeCardPlayed` per
             // play iteration (CardModel.cs:1496) for auto-plays too, so each
             // replay of an auto-played card re-arms the Afterimage / SerpentForm
@@ -9622,6 +9673,11 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
                 auto_resolved_cost,
                 auto_card_is_ethereal,
             );
+            // Each actual replay has its own BeforeCardPlayed, even though
+            // its outer auto-play and result-pile routing happen only once.
+            if top_card_type == crate::cards::CardType::Attack {
+                state.discount_stomp_on_attack_played();
+            }
             let _ = crate::card_effects::dispatch_for_card(state, top_uid, top_card_id, target_uid);
             resolve_inline_auto_play_choices(state);
             state.combat_log.player_card_plays_this_combat = state
@@ -9642,7 +9698,7 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
             flush_rupture_deferred_strength(state);
             // Bead `sts2-rs-distilled-chaos-replay-scale`: each replay is its
             // own C# `CardPlayFinished`, so re-tally the per-turn play bucket
-            // (+ ethereal / Stomp / Pinpoint) per replay — exactly like the
+            // (+ ethereal / Pinpoint) per replay — exactly like the
             // hand-play replay loop (combat_loop.rs:4828) — so a SECOND replay
             // of a scaling Attack sees the FIRST replay counted.
             auto_play_tally_finished(state, top_card_type, top_idx);
@@ -9650,7 +9706,7 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
         }
     }
 
-    // (Per-turn play tally + Stomp/Pinpoint shave + ethereal count moved to
+    // (Per-turn play tally + Pinpoint shave + ethereal count moved to
     // `auto_play_tally_finished`, called for the initial play BEFORE the replay
     // loop and once per replay INSIDE it — see bead
     // `sts2-rs-distilled-chaos-replay-scale` above. Formerly a single

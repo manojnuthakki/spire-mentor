@@ -3,13 +3,16 @@ use super::prelude::*;
 
 /// C# `IntimidatingHelmet.BeforeCardPlayed` (`IntimidatingHelmet.cs`):
 /// [decompiled C# omitted — see the cited path]
-/// The C# gate is on **energy actually paid** (`Resources.EnergyValue`), NOT the
-/// card's printed cost. The earlier Rust port hooked `after_card_played` and
+/// The C# gate is on `Resources.EnergyValue`, not the card's printed cost or
+/// autoplay's zero `EnergySpent`. Manual plays use the paid value; autoplay
+/// uses the original modifier-resolved cost (raw captured energy for X).
+/// The same value is retained for each play in the series.
+/// The earlier Rust port hooked `after_card_played` and
 /// gated on `!c.is_x_cost() && c.cost >= 2` (printed cost), which diverged in two
 /// ways: it EXCLUDED X-cost cards (C# grants when an X-card spends ≥2) and it
 /// granted on cost-modified plays where the printed cost was ≥2 but the energy
-/// actually paid was lower (e.g. a card discounted to 0). Read the energy spent
-/// from [`CardEventCtx::energy_spent`] (populated at the `before_card_played`
+/// value was lower (e.g. a card discounted to 0). Read the value
+/// from [`CardEventCtx::energy_spent`] (populated at each `before_card_played`
 /// dispatch site with C#'s `Resources.EnergyValue`). Bead `sts2-rs-g0kp`.
 pub(crate) fn on_before_card_played_intimidating_helmet(
     state: &mut CombatState,

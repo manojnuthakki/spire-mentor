@@ -1187,7 +1187,17 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
     // `sts2-rs-2itwm` note at the dispatch below. Restored just before disposal.
     let prev_inline = state.autoplay_inline_resolve;
     state.autoplay_inline_resolve = true;
+    // HistoryCourse also uses CardCmd.AutoPlay -> OnPlayWrapper. Its new UID
+    // already carries the original EnergyValue, independently of its source.
+    let before_ctx = sts2_core::relic_effects::CardEventCtx {
+        card_id,
+        card_uid: Some(new_uid),
+        target,
+        card_tags: dupe_tags,
+        energy_spent: state.cards[new_uid.get() as usize - 1].energy_spent,
+    };
     if !skip_dispatch {
+        let _ = sts2_core::relic_effects::dispatch_before_card_played(state, &before_ctx);
         // Bead `sts2-rs` (#181, seed 2385): the dupe can be an auto-play-hook
         // card (Cascade/Havoc/Mayhem) whose OnPlay `AutoPlayFromDrawPile`s a
         // batch — and one of THOSE auto-plays (e.g. an Armaments surfacing its
@@ -1329,6 +1339,10 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
         for _ in 0..total_extra {
             if state.is_over {
                 break;
+            }
+            let _ = sts2_core::relic_effects::dispatch_before_card_played(state, &before_ctx);
+            if dupe_card_type == sts2_core::cards::CardType::Attack {
+                state.discount_stomp_on_attack_played();
             }
             let _ = sts2_core::card_effects::dispatch_for_card(state, new_uid, card_id, target);
             let _ = sts2_core::relic_effects::dispatch_after_card_played(state, &played_ctx);
