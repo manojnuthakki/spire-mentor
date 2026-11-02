@@ -12481,6 +12481,10 @@ mod tests {
             rng: crate::dotnet_rng::Rng::new(0_i32),
             ..Default::default()
         };
+        // These are live autoplay controls, not dead-owner entry probes.
+        state.player.current_hp = 80;
+        state.player.max_hp = 80;
+        state.spawn_enemy(crate::monsters::MonsterKind::Nibbit);
         state.player.deferred_draw_order = true;
         let mk_card = |uid_n: u32, id: crate::cards::CardId| crate::cards::Card {
             uid: CardUid::new(uid_n).expect("non-zero"),

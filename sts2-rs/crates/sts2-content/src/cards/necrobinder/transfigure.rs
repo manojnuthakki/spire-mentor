@@ -192,6 +192,9 @@ mod tests {
     #[test]
     fn transfigure_one_hand_card_auto_applies_no_choice() {
         let mut state = CombatState::default();
+        state.player.current_hp = 80;
+        state.player.max_hp = 80;
+        state.spawn_enemy(sts2_core::MonsterKind::Nibbit);
         let a = mint(&mut state, CardId::StrikeNecrobinder);
         state.player.hand.push(a);
         let a_cost0 = state.cards[a.0.get() as usize - 1].cost;

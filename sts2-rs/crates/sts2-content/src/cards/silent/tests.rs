@@ -2617,6 +2617,8 @@ fn knife_trap_auto_plays_each_exhaust_shiv_as_real_card_play() {
         rng: sts2_core::dotnet_rng::Rng::new(0_i32),
         ..Default::default()
     };
+    state.player.current_hp = 80;
+    state.player.max_hp = 80;
     let enemy_id = NonZeroU32::new(1).expect("nz");
     state.creatures.push(Creature {
         id: enemy_id,
@@ -2688,6 +2690,8 @@ fn calculated_gamble_auto_plays_single_turn_sly_discard() {
         rng: sts2_core::dotnet_rng::Rng::new(0_i32),
         ..Default::default()
     };
+    state.player.current_hp = 80;
+    state.player.max_hp = 80;
     let enemy_id = NonZeroU32::new(1).expect("nz");
     state.creatures.push(Creature {
         id: enemy_id,
@@ -2778,6 +2782,9 @@ fn reflex_discarded_via_helper_draws_two_not_four() {
         rng: sts2_core::dotnet_rng::Rng::new(0_i32),
         ..Default::default()
     };
+    state.player.current_hp = 80;
+    state.player.max_hp = 80;
+    state.spawn_enemy(MonsterKind::Nibbit);
     // REFLEX (uid 1) in hand — `Sly` keyword (registered above).
     let reflex = sts2_core::CardUid(NonZeroU32::new(1).expect("nz"));
     state.cards.push(Card {

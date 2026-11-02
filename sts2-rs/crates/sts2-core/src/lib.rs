@@ -16657,6 +16657,9 @@ mod tests {
     #[test]
     fn open_hand_choice_autoresolves_forced_single_option() {
         let mut s = CombatState::default();
+        s.player.current_hp = 80;
+        s.player.max_hp = 80;
+        s.spawn_enemy(crate::monsters::MonsterKind::Nibbit);
         let pc = PendingChoice {
             kind: ChoiceKind::ExhaustFromHand,
             options: vec![ChoiceOption {
@@ -16681,6 +16684,9 @@ mod tests {
     #[test]
     fn open_hand_choice_skippable_single_option_surfaces() {
         let mut s = CombatState::default();
+        s.player.current_hp = 80;
+        s.player.max_hp = 80;
+        s.spawn_enemy(crate::monsters::MonsterKind::Nibbit);
         let pc = PendingChoice {
             kind: ChoiceKind::ExhaustFromHand,
             options: vec![ChoiceOption {
@@ -16705,6 +16711,9 @@ mod tests {
     #[test]
     fn open_hand_choice_non_fromhand_kind_surfaces() {
         let mut s = CombatState::default();
+        s.player.current_hp = 80;
+        s.player.max_hp = 80;
+        s.spawn_enemy(crate::monsters::MonsterKind::Nibbit);
         let pc = PendingChoice {
             kind: ChoiceKind::CardSelect,
             options: vec![ChoiceOption {

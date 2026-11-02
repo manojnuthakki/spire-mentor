@@ -311,7 +311,7 @@ fn qualifying_autoplay_selection_is_parked_after_block_and_resume_adds_only_repl
 }
 
 #[test]
-fn autoplay_absent_melted_and_missing_target_controls() {
+fn autoplay_absent_melted_and_ending_controls() {
     for helmet in [None, Some(true)] {
         let mut s = board(CardId::Bash, helmet);
         let c = s.player.hand.remove(0);
@@ -327,6 +327,10 @@ fn autoplay_absent_melted_and_missing_target_controls() {
         .current_hp = 0;
     let c = s.player.hand.remove(0);
     s.player.draw.push(c);
-    assert!(auto_play_specific_card(&mut s, c, false));
-    assert_eq!(s.player.block, 0, "there is no target for an actual play");
+    let before = s.clone();
+    assert!(!auto_play_specific_card(&mut s, c, false));
+    assert_eq!(
+        s, before,
+        "ending refuses entry before any helmet callback or move"
+    );
 }
