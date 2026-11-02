@@ -22,6 +22,9 @@ use super::prelude::*;
 /// increase its cost by 1 this combat (unless X-cost / already free below 0)
 /// and make it Replay (play one extra time). Upgrade: removes Exhaust.
 pub(crate) fn play_transfigure(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        return EffectResult::Resolved;
+    }
     // C# `CardSelectCmd.FromHand(prefs(prompt, 1), filter: null, this)` — a
     // forced single-pick (min=max=1) over the whole hand. This is a real
     // player-driven prompt (same family as Begone / Guards): `FromHand`

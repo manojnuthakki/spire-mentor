@@ -30,6 +30,9 @@ pub(crate) fn play_decisions_decisions(
     // Bead `sts2-rs-mnnnf`.
     let draws = if current_card_upgraded(state) { 5 } else { 3 };
     let _ = sts2_core::cards::draw_via_state(state, draws);
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        return EffectResult::Resolved;
+    }
 
     // Collect playable Skill candidates from hand, in hand order (C# `FromHand`
     // passes the hand with NO OrderBy). Filter mirrors C#:

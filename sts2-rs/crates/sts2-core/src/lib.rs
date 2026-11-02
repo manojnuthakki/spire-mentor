@@ -6505,6 +6505,13 @@ impl CombatState {
     /// Auto-resolution still fires the choice's `post_effect` (BurningPact's
     /// draw, Brand's Strength) via [`resolve_exhaust_from_hand`].
     pub fn open_hand_choice(&mut self, pc: PendingChoice) {
+        // CardSelectCmd.FromHand refuses a NEW selection on IsOverOrEnding.
+        // Its caller still continues after the empty result (Brand's Strength,
+        // Burning Pact's draw). Do not consume an already parked selection.
+        if crate::combat_loop::combat_is_ending(self) {
+            apply_post_choice_effect(self, pc.post_effect);
+            return;
+        }
         let auto = Self::kind_autoresolves_when_forced(pc.kind)
             && !pc.can_skip
             && pc.min_select >= 1
@@ -7620,6 +7627,11 @@ impl CombatState {
         // — the HELLRAISER+1 quick-sweep divergence, seed 40), and (b)
         // spends energy, while C# AutoPlay is free.
         for uid in auto_play_uids {
+            // The draw has finished; CardCmd.AutoPlay's entry guard precedes
+            // its Hand-to-Play move, targeting and callbacks.
+            if crate::combat_loop::combat_is_ending(self) {
+                continue;
+            }
             if let Some(pos) = self.player.hand.iter().position(|u| *u == uid) {
                 self.player.hand.remove(pos);
                 self.player.play.push(uid);

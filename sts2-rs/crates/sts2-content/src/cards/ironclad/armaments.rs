@@ -64,6 +64,11 @@ pub(crate) fn play_armaments(state: &mut CombatState, _t: Option<CreatureUid>) -
         return EffectResult::Resolved;
     }
 
+    // FromHandForUpgrade admits before either singleton auto-take or prompt.
+    // The upgraded branch above enumerates directly and still completes.
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        return EffectResult::Resolved;
+    }
     // Base Armaments (decomp `FromHandForUpgrade`):
     //   list.Count <= 1 → auto-pick FirstOrDefault (no prompt);
     //   list.Count >= 2 → open the UpgradeInHand selection.

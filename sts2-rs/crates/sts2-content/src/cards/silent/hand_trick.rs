@@ -20,6 +20,9 @@ use super::prelude::*;
 /// only opens the selection at `>= 2`.
 pub(crate) fn play_hand_trick(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
     gain_block_player(state, current_card_block(state));
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        return EffectResult::Resolved;
+    }
 
     // C# `CardSelectCmd.FromHand(prefs(1), filter: Type == Skill &&
     // !IsSlyThisTurn)` → `CardCmd.ApplySingleTurnSly`. IsSlyThisTurn = the

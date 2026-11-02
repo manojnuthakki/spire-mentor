@@ -1459,7 +1459,10 @@ fn run_after_player_turn_start_cluster(
             }
             crate::PowerKind::Entropy => {
                 let amount = state.powers.get_by_id(uid.0).map_or(0, |p| p.amount);
-                if amount > 0 {
+                // FromHand's empty return also applies to this existing
+                // first-N approximation. Its live selection fidelity is
+                // separate; do not transform anything after ending.
+                if amount > 0 && !combat_is_ending(state) {
                     let targets: smallvec::SmallVec<[crate::CardUid; 8]> = state
                         .player
                         .hand
@@ -1486,7 +1489,11 @@ fn run_after_player_turn_start_cluster(
                 // walk continues. Options are hand-order (C# `FromHand` passes the
                 // hand `Cards` with no OrderBy). Bead `sts2-rs-jxz`.
                 let amount = state.powers.get_by_id(uid.0).map_or(0, |p| p.amount);
-                if amount > 0 && !state.player.hand.is_empty() && state.pending_choice.is_none() {
+                if amount > 0
+                    && !state.player.hand.is_empty()
+                    && state.pending_choice.is_none()
+                    && !combat_is_ending(state)
+                {
                     let take = amount as usize;
                     if state.player.hand.len() <= take {
                         // Auto-take fast path: exhaust the entire hand in hand
@@ -1580,7 +1587,7 @@ fn run_after_player_turn_start_cluster(
                 // label — the first read of this corpus attributed the whole
                 // bucket to this power.
                 let amount = state.powers.get_by_id(uid.0).map_or(0, |p| p.amount);
-                if amount > 0 && state.pending_choice.is_none() {
+                if amount > 0 && state.pending_choice.is_none() && !combat_is_ending(state) {
                     let discard_count = (amount as usize).min(state.player.hand.len());
                     if discard_count > 0 {
                         let hand: smallvec::SmallVec<[crate::CardUid; 16]> =
@@ -1843,7 +1850,7 @@ pub(crate) fn run_turn_start_relic_tail(
         });
         if let Some(mayhem_uid) = mayhem_uid {
             let amount = state.powers.get_by_id(mayhem_uid.0).map_or(0, |p| p.amount);
-            if amount > 0 {
+            if amount > 0 && !combat_is_ending(state) {
                 let ap = crate::PendingAutoplay {
                     remaining: amount,
                     collected: smallvec::SmallVec::new(),
@@ -2798,7 +2805,7 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
     // list and `BeforeFlushLate` early-returns, so we fall straight through
     // to the flush tail (no prompt).
     let wlp_amount = state.player.pending_retain_count;
-    if wlp_amount > 0 {
+    if wlp_amount > 0 && !combat_is_ending(state) {
         // Eligible = hand cards not already retaining this turn (explicit
         // `retain_this_turn` flag OR keyword-`Retain` instance), in hand
         // order. Matches `WellLaidPlansPower.RetainFilter`
@@ -8159,6 +8166,10 @@ pub fn flush_played_cards_after_choice(state: &mut CombatState) {
 /// `tests/parity/known_divergences.md` for follow-up if the gap proves
 /// observable.
 pub fn auto_play_card_from_draw_top(state: &mut CombatState, force_exhaust: bool) -> bool {
+    // CardPileCmd.AutoPlayFromDrawPile admits once, before shuffle/collection.
+    if combat_is_ending(state) {
+        return false;
+    }
     // Reshuffle discard → draw if needed. C# `CardPileCmd.AutoPlayFromDrawPile`
     // routes through `ShuffleIfNecessary` → `Shuffle` → **`Hook.AfterShuffle`**
     // (`CardPileCmd.cs:857`) — so the relic after-shuffle bus AND
@@ -8214,7 +8225,7 @@ fn auto_play_i_am_invincible_from_draw_top(state: &mut CombatState) {
     let mut budget = state.player.draw.len();
     while budget > 0 {
         budget -= 1;
-        if state.is_over {
+        if combat_is_ending(state) {
             return;
         }
         let Some(&top_uid) = state.player.draw.first() else {
@@ -8250,6 +8261,9 @@ pub fn auto_play_specific_card(
     uid: crate::CardUid,
     force_exhaust: bool,
 ) -> bool {
+    if combat_is_ending(state) {
+        return false;
+    }
     let Some(pos) = state.player.draw.iter().position(|&u| u == uid) else {
         return false;
     };
@@ -8281,6 +8295,9 @@ pub fn auto_play_specific_card_from_discard(
     uid: crate::CardUid,
     force_exhaust: bool,
 ) -> bool {
+    if combat_is_ending(state) {
+        return false;
+    }
     // C# `BeatDown` captures the take-list CardModel *references* before the
     // auto-play loop, then `CardCmd.AutoPlay(item)` plays each BY REFERENCE
     // regardless of which pile it now sits in (`CardCmd.cs:33-109`: it only
@@ -8335,6 +8352,9 @@ pub fn auto_play_specific_card_from_exhaust_at_target(
     target: Option<CreatureUid>,
     force_exhaust: bool,
 ) -> bool {
+    if combat_is_ending(state) {
+        return false;
+    }
     if !state.player.exhaust.contains(&uid) {
         return false;
     }
@@ -8368,6 +8388,9 @@ pub fn auto_play_specific_card_from_exhaust_at_target(
 /// `count > 1`, where the per-card-loop-with-reshuffle shape would wrongly
 /// replay discarded cards. Bead `sts2-rs-q6bix` (F-F).
 pub fn auto_play_n_from_draw_top(state: &mut CombatState, count: i32, force_exhaust: bool) {
+    if combat_is_ending(state) {
+        return;
+    }
     // Phase 1: collect up to `count` top cards into Play.
     let mut collected: smallvec::SmallVec<[crate::CardUid; 8]> = smallvec::SmallVec::new();
     for _ in 0..count {
@@ -8713,6 +8736,12 @@ pub(crate) fn resolve_auto_played_card_at_target(
     target_override: Option<CreatureUid>,
     force_exhaust: bool,
 ) {
+    // CardCmd.AutoPlay refuses at ENTRY, including a dead owner. This is a
+    // new command (possibly a precollected/resumed sibling), never a finish
+    // or repeat of the card whose wrapper already started. Keep that tail.
+    if combat_is_ending(state) {
+        return;
+    }
     crate::cards::emit_pile_trace(
         &state.player,
         &state.cards,

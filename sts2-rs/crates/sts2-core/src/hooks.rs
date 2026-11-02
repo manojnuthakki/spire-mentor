@@ -1979,6 +1979,11 @@ fn auto_play_random_attack_from_hand(state: &mut CombatState) {
         .run_rng
         .shuffle
         .next_int_exclusive(0, playable.len() as i32) as usize];
+    // Stampede's caller-side pick happens even after ending. CardCmd.AutoPlay
+    // refuses only now, before moving the chosen native card or targeting it.
+    if crate::combat_loop::combat_is_ending(state) {
+        return;
+    }
     // Move Hand -> Play, then resolve as a FREE auto-play (target picked
     // inside resolve_auto_played_card for Enemy cards). Mirrors
     // CardCmd.AutoPlay enqueuing the card to the Play pile (CardCmd.cs:94-97)

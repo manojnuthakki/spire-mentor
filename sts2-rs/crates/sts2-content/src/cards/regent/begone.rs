@@ -27,6 +27,9 @@ use super::prelude::*;
 // Port-pin: sts2-rl-agent@01c094d:sts2_env/cards/regent.py:L90
 // C# source: ../sts2-wiki/decompiled/v0.103.2/MegaCrit.Sts2.Core.Models.Cards/Begone.cs
 pub(crate) fn play_begone(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        return EffectResult::Resolved;
+    }
     // No damage — Begone is a Self-targeted Skill in the C# source.
     // The created MinionStrike is upgraded iff Begone (the resolving card) is.
     let upgraded = sts2_core::card_effects::resolving_card_upgraded(state);

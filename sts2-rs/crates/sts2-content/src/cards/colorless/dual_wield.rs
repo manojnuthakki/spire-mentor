@@ -11,6 +11,11 @@ use super::prelude::*;
 /// the hand is at its cap. Bead `sts2-rs-lw9b` (6ynt.8-dual-wield).
 pub(crate) fn play_dual_wield(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
     use sts2_core::cards::CardType;
+    // FromHand refuses before template selection/copy creation. This does
+    // not repair the held live-choice or upgraded-copy-count approximation.
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        return EffectResult::Resolved;
+    }
     let template_uid = state.player.hand.iter().copied().find(|uid| {
         let idx = uid.0.get() as usize - 1;
         let ty = state.cards[idx].card_type;

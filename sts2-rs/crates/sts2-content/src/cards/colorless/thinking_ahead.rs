@@ -38,6 +38,9 @@ pub(crate) fn play_thinking_ahead(
     _t: Option<CreatureUid>,
 ) -> EffectResult {
     let _ = sts2_core::cards::draw_via_state(state, 2);
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        return EffectResult::Resolved;
+    }
     if state.player.hand.len() <= 1 {
         // ≤1 hand card → decomp auto-takes it (FromHand count<=MinSelect
         // short-circuit, `CardSelectCmd.cs:475-478`). Move the single card

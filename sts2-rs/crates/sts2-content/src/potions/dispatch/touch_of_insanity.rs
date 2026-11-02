@@ -20,6 +20,9 @@ pub(crate) fn drink_touch_of_insanity(
     state: &mut CombatState,
     _target: Option<u8>,
 ) -> EffectResult {
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        return EffectResult::Resolved;
+    }
     let candidates: smallvec::SmallVec<[sts2_core::CardUid; 10]> = state
         .player
         .hand

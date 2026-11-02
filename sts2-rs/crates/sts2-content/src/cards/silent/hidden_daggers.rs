@@ -22,8 +22,14 @@ pub(crate) fn play_hidden_daggers(
     state: &mut CombatState,
     _t: Option<CreatureUid>,
 ) -> EffectResult {
+    // FromHandForDiscard returns empty once ending; the body's unconditional
+    // Shiv generation below still runs after that empty return.
     let original: smallvec::SmallVec<[sts2_core::CardUid; 16]> =
-        state.player.hand.iter().copied().collect();
+        if sts2_core::combat_loop::combat_is_ending(state) {
+            smallvec::SmallVec::new()
+        } else {
+            state.player.hand.iter().copied().collect()
+        };
     let discard_count = original.len().min(2);
     if original.len() <= discard_count {
         // No meaningful choice (must discard every hand card, or none):

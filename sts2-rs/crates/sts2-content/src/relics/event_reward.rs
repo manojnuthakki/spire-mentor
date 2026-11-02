@@ -1007,6 +1007,18 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
     else {
         return EffectResult::NotImplemented;
     };
+    // HistoryCourse evaluates CreateDupe before calling CardCmd.AutoPlay.
+    // Preserve that native registration on refusal, but do not move it to
+    // Play, roll a target, count a play or enter the wrapper's callbacks.
+    if sts2_core::combat_loop::combat_is_ending(state) {
+        dupe.uid = sts2_core::CardUid(
+            std::num::NonZeroU32::new(u32::try_from(state.cards.len() + 1).unwrap_or(u32::MAX))
+                .expect("non-zero"),
+        );
+        dupe.set_combat_var(sts2_core::cards::VarKey::IsDupe, 1);
+        state.cards.push(dupe);
+        return EffectResult::Resolved;
+    }
     // Resolve the dupe's target the way C# `AutoPlay(…, null)` does: a random
     // alive enemy (consuming `combat_targets`) for `AnyEnemy` cards, no
     // target otherwise. The prior port picked the first alive enemy
