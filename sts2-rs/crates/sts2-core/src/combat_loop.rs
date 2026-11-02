@@ -4938,8 +4938,9 @@ pub fn apply_damage_to_player(
     // multiplier-rounding audit doc.
     //
     // Bead `sts2-rs-6jk` (j87-a): fold the relic_effects-family additive
-    // contribution into `raw_damage` before the hooks-family pipeline runs so
-    // multiplicative + cap + floor apply to the combined sum. Target slot
+    // contribution is kept separate from `raw_damage` until AFTER the
+    // enchantment arithmetic, then joins the ordinary additive stage before
+    // ordinary multipliers, caps and the final floor. Target slot
     // resolves via `state.player.creature_uid` (Some(uid) mid-combat after
     // d03 Phase 1); if it's None we skip the relic-side fold entirely.
     // Shared verbatim with `preview_damage_to_player` so the number a

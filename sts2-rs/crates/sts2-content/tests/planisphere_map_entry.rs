@@ -50,7 +50,12 @@ fn enter(rs: &mut RunState, point: MapPointType, room: RoomType) {
 
 #[test]
 fn unknown_point_heals_for_each_resolved_room_kind() {
-    for room in [RoomType::Shop, RoomType::Event, RoomType::Monster, RoomType::Treasure] {
+    for room in [
+        RoomType::Shop,
+        RoomType::Event,
+        RoomType::Monster,
+        RoomType::Treasure,
+    ] {
         let mut rs = standing(MapPointType::Unknown);
         enter(&mut rs, MapPointType::Unknown, room);
         assert_eq!(rs.current_hp, 35, "resolved {room:?}");
@@ -70,9 +75,15 @@ fn resolved_unknown_without_a_current_map_point_does_not_heal() {
 
 #[test]
 fn ordinary_points_do_not_heal_even_with_a_resolved_unknown_room() {
-    for point in [MapPointType::Shop, MapPointType::Monster, MapPointType::Elite,
-        MapPointType::Boss, MapPointType::Treasure, MapPointType::RestSite,
-        MapPointType::Ancient] {
+    for point in [
+        MapPointType::Shop,
+        MapPointType::Monster,
+        MapPointType::Elite,
+        MapPointType::Boss,
+        MapPointType::Treasure,
+        MapPointType::RestSite,
+        MapPointType::Ancient,
+    ] {
         let mut rs = standing(point);
         enter(&mut rs, point, RoomType::Unknown);
         assert_eq!(rs.current_hp, 30, "point {point:?}");
@@ -96,7 +107,9 @@ fn absent_melted_and_dead_player_controls() {
         let mut rs = standing(MapPointType::Unknown);
         match control {
             0 => rs.relics.clear(),
-            1 => { rs.melted_relics.insert(RelicId::Planisphere); }
+            1 => {
+                rs.melted_relics.insert(RelicId::Planisphere);
+            }
             2 => rs.current_hp = 0,
             _ => rs.current_hp = -1,
         }
@@ -122,7 +135,9 @@ fn manager(point: MapPointType, resolved: RoomType) -> RunManager {
     let mut rm = new_run_manager_for_character_with_ascension(7, CharacterId::Ironclad, 0);
     initialize_run_setup(&mut rm);
     for _ in 0..50 {
-        if rm.phase() == Phase::MapChoice { break; }
+        if rm.phase() == Phase::MapChoice {
+            break;
+        }
         let action = rm.get_available_actions()[0];
         rm.take_action(action);
     }
@@ -148,7 +163,10 @@ fn actual_map_moves_heal_once_before_the_first_room_decision_and_combat_snapshot
     for resolved in [RoomType::Shop, RoomType::Event, RoomType::Monster] {
         let mut rm = manager(MapPointType::Unknown, resolved);
         let gold = rm.run_state.gold;
-        assert_eq!(rm.take_action(RunAction::Move { col: 0 }), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::Move { col: 0 }),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.current_room.unwrap().room_type, resolved);
         assert_eq!(rm.run_state.current_hp, 35, "{resolved:?}");
         assert_eq!(rm.run_state.gold, gold + 12, "Maw Bank fires once");
@@ -166,12 +184,21 @@ fn actual_map_moves_heal_once_before_the_first_room_decision_and_combat_snapshot
 fn clone_and_refused_move_do_not_repeat_or_share_healing() {
     let mut rm = manager(MapPointType::Unknown, RoomType::Shop);
     let mut clone = rm.clone();
-    assert_eq!(rm.take_action(RunAction::Move { col: 9 }), ActionResult::InvalidForPhase);
+    assert_eq!(
+        rm.take_action(RunAction::Move { col: 9 }),
+        ActionResult::InvalidForPhase
+    );
     assert_eq!(rm.run_state.current_hp, 30);
-    assert_eq!(rm.take_action(RunAction::Move { col: 0 }), ActionResult::Advanced);
+    assert_eq!(
+        rm.take_action(RunAction::Move { col: 0 }),
+        ActionResult::Advanced
+    );
     assert_eq!(rm.run_state.current_hp, 35);
     assert_eq!(clone.run_state.current_hp, 30);
-    assert_eq!(clone.take_action(RunAction::Move { col: 0 }), ActionResult::Advanced);
+    assert_eq!(
+        clone.take_action(RunAction::Move { col: 0 }),
+        ActionResult::Advanced
+    );
     assert_eq!(clone.run_state.current_hp, 35);
     assert_eq!(rm.run_state, clone.run_state);
 }
@@ -181,20 +208,32 @@ fn forced_reentry_uses_the_actual_standing_point_without_another_map_visit() {
     for point in [MapPointType::Unknown, MapPointType::Shop] {
         let mut rm = manager(point, RoomType::Shop);
         // No standing point: a forced shop does not manufacture Unknown.
-        assert_eq!(rm.force_enter_room(ForcedRoom::Shop), ActionResult::Advanced);
+        assert_eq!(
+            rm.force_enter_room(ForcedRoom::Shop),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.current_hp, 30);
         // Start the independent natural-map case.
         let mut rm = manager(point, RoomType::Shop);
-        assert_eq!(rm.take_action(RunAction::Move { col: 0 }), ActionResult::Advanced);
+        assert_eq!(
+            rm.take_action(RunAction::Move { col: 0 }),
+            ActionResult::Advanced
+        );
         let heal = if point == MapPointType::Unknown { 5 } else { 0 };
         assert_eq!(rm.run_state.current_hp, 30 + heal);
         let floor = rm.run_state.total_floor;
         let gold = rm.run_state.gold;
-        assert_eq!(rm.force_enter_room(ForcedRoom::Shop), ActionResult::Advanced);
+        assert_eq!(
+            rm.force_enter_room(ForcedRoom::Shop),
+            ActionResult::Advanced
+        );
         assert_eq!(rm.run_state.current_hp, 30 + heal * 2);
         assert_eq!(rm.run_state.total_floor, floor);
         assert_eq!(rm.run_state.gold, gold + 12);
-        assert_eq!(rm.force_enter_room(ForcedRoom::Combat("NO_SUCH_ENCOUNTER")), ActionResult::InvalidForPhase);
+        assert_eq!(
+            rm.force_enter_room(ForcedRoom::Combat("NO_SUCH_ENCOUNTER")),
+            ActionResult::InvalidForPhase
+        );
         assert_eq!(rm.run_state.current_hp, 30 + heal * 2);
     }
 }

@@ -178,10 +178,9 @@ pub fn install_pool() {
         listener_pantograph as AfterRoomEnteredRunFn,
     );
     // Bead `sts2-rs-3wb0`: real `after_room_entered` listener for
-    // Planisphere's unknown-room heal (`HEAL = 4`). Python
-    // `uncommon.py::Planisphere`: on unknown-room entry, if alive,
-    // heal 4. Same channel + alive-gate as Pantograph (onyo), with
-    // `RoomType::Unknown` as the room-type predicate.
+    // Planisphere's Unknown-map-point heal (`HEAL = 5`). On room
+    // entry at an Unknown point, if alive, heal five. Same channel
+    // and alive-gate as Pantograph (onyo).
     register_after_room_entered(
         RelicId::Planisphere,
         listener_planisphere as AfterRoomEnteredRunFn,
@@ -664,23 +663,24 @@ fn listener_pantograph(rs: &mut RunState, room_type: RoomType) -> EffectResult {
     EffectResult::Resolved
 }
 
-/// `Planisphere::after_room_entered` — heal `PLANISPHERE_HEAL`
-/// (= 4) on entry to an unknown room, gated on `current_hp > 0`
-/// (Python pin
-/// `sts2-rl-agent@01c094d:sts2_env/relics/uncommon.py::Planisphere`).
+/// `Planisphere.cs::AfterRoomEntered` (v0.107.1): heal five if the
+/// living owner's `RunState.CurrentMapPoint` is Unknown. The resolved room
+/// argument is irrelevant: a shop, event or fight can all lie behind `?`.
 ///
-/// Python has a two-branch predicate: the `room_type.is_unknown`
-/// fast path + a fallback via `run_state.visited_map_coords[-1]
-/// .point_type.name == "UNKNOWN"`. The Rust port resolves both
-/// to `matches!(room_type, RoomType::Unknown)` because RunState
-/// doesn't track `visited_map_coords` or the act_map yet — when
-/// that surface lands, the fallback branch can be wired separately.
-/// Bead `sts2-rs-3wb0`.
-fn listener_planisphere(rs: &mut RunState, room_type: RoomType) -> EffectResult {
+/// `RunState.cs::CurrentMapPoint` looks up the last visited coordinate on
+/// the current act map. Use those existing fields rather than inferring map
+/// provenance from a room: forced re-entry keeps the standing point, while
+/// a room-only fixture has none. Act advancement clears the coordinates.
+fn listener_planisphere(rs: &mut RunState, _room_type: RoomType) -> EffectResult {
     if !rs.owns_active_relic(RelicId::Planisphere) {
         return EffectResult::NotImplemented;
     }
-    if !matches!(room_type, RoomType::Unknown) {
+    let point = rs.current_act_map.as_ref().and_then(|map| {
+        rs.visited_map_coords
+            .last()
+            .and_then(|coord| map.get_point(*coord))
+    });
+    if !point.is_some_and(|point| point.point_type == sts2_core::map::MapPointType::Unknown) {
         return EffectResult::NotImplemented;
     }
     if rs.current_hp <= 0 {
@@ -2112,31 +2112,42 @@ mod tests {
     // Planisphere listener tests — bead `sts2-rs-3wb0`
     // -----------------------------------------------------------------
 
-    /// Happy path: Unknown room + alive + owned → +5 HP
+    fn stand_on_unknown_map_point(rs: &mut sts2_core::runstate::RunState) {
+        let mut map = sts2_core::map::ActMap::new(1);
+        let idx = map.get_or_create(0, 1);
+        map.point_mut(idx).point_type = sts2_core::map::MapPointType::Unknown;
+        rs.current_act_map = Some(map);
+        rs.visited_map_coords
+            .push(sts2_core::map::MapCoord::new(0, 1));
+    }
+
+    /// Happy path: Unknown map point + alive + owned → +5 HP
     /// (C# `HealVar(5m)`, bead `sts2-rs-5ri31`).
     #[test]
-    fn listener_planisphere_heals_five_on_unknown_room_entry() {
+    fn listener_planisphere_heals_five_at_unknown_map_point() {
         crate::relics::dispatch::ensure_installed();
         let mut rs = sts2_core::runstate::RunState::new();
         rs.current_hp = rs.max_hp - 20;
         let before_hp = rs.current_hp;
         rs.relics.push(RelicId::Planisphere);
+        stand_on_unknown_map_point(&mut rs);
         let _ = sts2_core::run_effects::dispatch_after_room_entered(
             &mut rs,
-            sts2_core::runstate::RoomType::Unknown,
+            sts2_core::runstate::RoomType::Event,
         );
         assert_eq!(rs.current_hp, before_hp + PLANISPHERE_HEAL);
     }
 
-    /// No-op on non-Unknown room types.
+    /// No room kind qualifies without a standing map point.
     #[test]
-    fn listener_planisphere_is_noop_on_other_rooms() {
+    fn listener_planisphere_is_noop_without_current_map_point() {
         crate::relics::dispatch::ensure_installed();
         let mut rs = sts2_core::runstate::RunState::new();
         rs.current_hp = rs.max_hp - 20;
         let before_hp = rs.current_hp;
         rs.relics.push(RelicId::Planisphere);
         for rt in [
+            sts2_core::runstate::RoomType::Unknown,
             sts2_core::runstate::RoomType::Monster,
             sts2_core::runstate::RoomType::Elite,
             sts2_core::runstate::RoomType::Boss,
@@ -2150,14 +2161,14 @@ mod tests {
         assert_eq!(rs.current_hp, before_hp);
     }
 
-    /// No-op when the player is dead. Python's `current_hp <= 0`
-    /// short-circuit.
+    /// No-op when the player is dead, even at an Unknown point.
     #[test]
     fn listener_planisphere_is_noop_when_player_is_dead() {
         crate::relics::dispatch::ensure_installed();
         let mut rs = sts2_core::runstate::RunState::new();
         rs.current_hp = 0;
         rs.relics.push(RelicId::Planisphere);
+        stand_on_unknown_map_point(&mut rs);
         let _ = sts2_core::run_effects::dispatch_after_room_entered(
             &mut rs,
             sts2_core::runstate::RoomType::Unknown,
@@ -2172,6 +2183,7 @@ mod tests {
         let mut rs = sts2_core::runstate::RunState::new();
         rs.current_hp = rs.max_hp - 20;
         let before_hp = rs.current_hp;
+        stand_on_unknown_map_point(&mut rs);
         let _ = sts2_core::run_effects::dispatch_after_room_entered(
             &mut rs,
             sts2_core::runstate::RoomType::Unknown,
