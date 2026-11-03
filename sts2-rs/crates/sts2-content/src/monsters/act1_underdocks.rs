@@ -1114,8 +1114,10 @@ const LIVING_FOG_BOMB_SLOTS: u8 = 5;
 /// turn order and the bridge's `target_index` space). The summoner bounds the
 /// insertion too, so a fog whose slot isn't recorded still ends up last.
 ///
-/// C# spawns just before the attack; the effect_fn fires post-damage, which is
-/// state-equivalent here (the spawn does not alter the 5-damage hit).
+/// C# spawns before the attack (`BloatMove`), and so does the engine: the
+/// dispatcher (`perform_intent`'s `effect_before_damage`) runs BLOAT's effect
+/// ahead of its 5-damage hit, so a lethal hit still adds the bomb and damage
+/// reactions see it.
 fn living_fog_bloat_effect(state: &mut CombatState, owner: sts2_core::CreatureUid) {
     let occupied: smallvec::SmallVec<[u8; 8]> = state
         .active_enemy_uids()
@@ -4247,6 +4249,34 @@ mod tests {
             6,
             "a retained corpse still holds bomb1"
         );
+    }
+
+    /// `BloatMove` (fresh DLL `LivingFog.<BloatMove>d__26`) summons its bomb
+    /// BEFORE `DamageCmd.Attack(BloatDamage)`: a lethal BLOAT still adds the
+    /// bomb, and every damage reaction (Centennial Puzzle's draw, Hellraiser's
+    /// auto-play, a death trigger) sees it on the roster. Driven through the
+    /// real enemy turn, not the effect fn, so the dispatcher's order is what
+    /// this checks.
+    #[test]
+    fn living_fog_bloat_summons_before_its_attack() {
+        let (mut state, owner) = living_fog_fight();
+        let _ = state.init_player_creature();
+        state.player.current_hp = 1;
+        if let Some(c) = state.creatures.iter_mut().find(|c| c.id == owner.0) {
+            c.intent = Some(Intent::Attack { damage: 5 });
+            if let Some(ai) = c.ai.as_mut() {
+                ai.force_current_state("BLOAT");
+            }
+        }
+        state.phase = sts2_core::CombatPhase::EnemyTurnExec;
+        let _ = sts2_core::combat_loop::enemy_turn_exec(&mut state);
+        assert!(state.player.current_hp <= 0, "the 5-damage hit is lethal");
+        assert_eq!(
+            bombs(&state).len(),
+            1,
+            "the bomb is added before the fatal hit"
+        );
+        assert_eq!(state.enemy_slot(bombs(&state)[0]), Some(0));
     }
 
     #[test]

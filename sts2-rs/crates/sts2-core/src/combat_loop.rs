@@ -4241,8 +4241,15 @@ fn perform_intent(
     // drew 3 cards out first, so its pool — and thus the
     // CombatCardGeneration NextItem — diverged). Run the steal effect FIRST
     // here, then fall through to deal the damage, matching the C# order.
-    let effect_before_damage =
-        matches!(intent, Some(Intent::Attack { .. })) && attack_move_id == Some("THIEVERY_MOVE");
+    //
+    // LivingFog BLOAT: C# `BloatMove` (`LivingFog.<BloatMove>d__26`) runs
+    // `GetNextSlot` + `CreatureCmd.Add<GasBomb>` BEFORE
+    // `DamageCmd.Attack(BloatDamage)`, so a lethal BLOAT still adds its bomb
+    // and every damage reaction (Centennial Puzzle's draw, Hellraiser's
+    // auto-play targets, Gremlin Horn) sees it on the roster (F6 step29
+    // review). Same pre-damage order as THIEVERY.
+    let effect_before_damage = matches!(intent, Some(Intent::Attack { .. }))
+        && matches!(attack_move_id, Some("THIEVERY_MOVE" | "BLOAT"));
     if effect_before_damage {
         if let Some(effect) = attack_effect_fn {
             effect(state, enemy_uid);

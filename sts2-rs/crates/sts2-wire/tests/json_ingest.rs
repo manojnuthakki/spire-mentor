@@ -385,6 +385,53 @@ fn a_living_fog_fight_rebuilds_with_its_bomb_slots() {
     assert_eq!(slots, [Some(0), Some(1), Some(5), None]);
 }
 
+/// A bomb corpse a hook retains (an Illusion owner) stays in `Enemies` and
+/// keeps its slot across a rebuild: with five retained bomb corpses on the
+/// wire every bomb slot is held, so the rebuilt fog's BLOAT (through the real
+/// enemy turn) summons nothing, as `GetNextSlot` returns "".
+#[test]
+fn a_living_fog_rebuild_keeps_retained_bomb_corpses_in_their_slots() {
+    sts2_content::cards::dispatch::ensure_installed();
+    let mut value = small_fight(&["STRIKE_IRONCLAD"], serde_json::json!([]));
+    let illusion = sts2_core::PowerKind::Illusion.python_name();
+    let bomb = |uid: i32| {
+        serde_json::json!({"kind": "GasBomb", "uid": uid, "hp": 0,
+        "max_hp": 7, "block": 0, "powers": [{"name": illusion, "amount": 1}], "intents": [],
+        "intent_history": [], "move_state": "EXPLODE_MOVE", "is_dead": true, "is_escaped": false})
+    };
+    value["encounter"] = serde_json::json!([
+        {"kind": "LivingFog", "uid": 6, "hp": 80, "max_hp": 80, "block": 0, "powers": [],
+         "intents": [], "intent_history": [], "move_state": "BLOAT_MOVE",
+         "is_dead": false, "is_escaped": false},
+        bomb(1), bomb(2), bomb(3), bomb(4), bomb(5)
+    ]);
+    let mut state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    let slots: Vec<Option<u8>> = state
+        .enemy_uids
+        .iter()
+        .map(|uid| state.enemy_slot(*uid))
+        .collect();
+    assert_eq!(
+        slots,
+        [Some(5), Some(0), Some(1), Some(2), Some(3), Some(4)]
+    );
+    assert_eq!(
+        state.active_enemy_uids().len(),
+        6,
+        "all five corpses retained"
+    );
+    let fog = state.enemy_uids[0];
+    if let Some(c) = state.creatures.iter_mut().find(|c| c.id == fog.0) {
+        c.intent = Some(sts2_core::Intent::Attack { damage: 5 });
+        if let Some(ai) = c.ai.as_mut() {
+            ai.force_current_state("BLOAT");
+        }
+    }
+    state.phase = sts2_core::CombatPhase::EnemyTurnExec;
+    let _ = sts2_core::combat_loop::enemy_turn_exec(&mut state);
+    assert_eq!(state.enemy_uids.len(), 6, "no free bomb slot: no summon");
+}
+
 /// C# `BrilliantScarf.AfterCardPlayed` skips auto-plays: Havoc's auto-played
 /// Strike doesn't count, so after Havoc (the 3rd play) Bash still costs 2.
 #[test]

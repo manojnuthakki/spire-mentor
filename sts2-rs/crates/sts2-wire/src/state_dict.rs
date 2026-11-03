@@ -4065,35 +4065,51 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
     // bombs are listed before the fog. `living_fog_bloat_effect` reads the
     // occupied slots from `enemy_slot()`: left unstamped, living bombs hold
     // no slot and a rebuilt board would summon past five living bombs (F6
-    // step29). The bombs' exact slots are not on the wire; the k listed
-    // bombs take slots 0..k in order (exact unless a lower bomb died while a
-    // higher one lived, which needs two bombs alive at once).
+    // step29). A corpse a hook retains (`ShouldCreatureBeRemovedFromCombat
+    // AfterDeath() == false`: an Illusion/Reattach-style power, see
+    // `CombatState::should_remove_from_combat_on_death`) stays in `Enemies`
+    // and keeps its slot, so it is stamped too; a removed corpse is not. The
+    // bombs' exact slots are not on the wire; the k slot-holding bombs take
+    // slots 0..k in wire order (living bombs, listed before the fog, then
+    // the retained corpses the wire re-appends last; exact unless a lower
+    // bomb left while a higher one stayed).
     if let Some(fog_pos) = parsed
         .encounter
         .iter()
         .position(|e| e.kind == MonsterKind::LivingFog && !e.is_dead && !e.is_escaped)
     {
         const LIVING_FOG_SLOT: u8 = 5;
-        let live: Vec<(usize, CreatureUid)> = parsed
+        let listed: Vec<(usize, CreatureUid)> = parsed
             .encounter
             .iter()
             .enumerate()
             .filter(|(_, e)| !e.is_escaped)
             .zip(enemy_uids.iter())
-            .filter(|((_, e), _)| !e.is_dead)
             .map(|((i, _), uid)| (i, *uid))
             .collect();
-        let mut next = 0u8;
-        for (i, uid) in &live {
-            if *i < fog_pos
-                && parsed.encounter[*i].kind == MonsterKind::GasBomb
-                && next < LIVING_FOG_SLOT
-            {
-                state.set_enemy_slot(*uid, next);
-                next += 1;
-            }
+        let holds_slot = |i: usize, uid: CreatureUid| {
+            let e = &parsed.encounter[i];
+            e.kind == MonsterKind::GasBomb
+                && if e.is_dead {
+                    !state.should_remove_from_combat_on_death(uid)
+                } else {
+                    i < fog_pos
+                }
+        };
+        let bombs: Vec<CreatureUid> = listed
+            .iter()
+            .filter(|(i, uid)| !parsed.encounter[*i].is_dead && holds_slot(*i, *uid))
+            .chain(
+                listed
+                    .iter()
+                    .filter(|(i, uid)| parsed.encounter[*i].is_dead && holds_slot(*i, *uid)),
+            )
+            .map(|(_, uid)| *uid)
+            .collect();
+        for (slot, uid) in (0..LIVING_FOG_SLOT).zip(bombs) {
+            state.set_enemy_slot(uid, slot);
         }
-        if let Some((_, uid)) = live.iter().find(|(i, _)| *i == fog_pos) {
+        if let Some((_, uid)) = listed.iter().find(|(i, _)| *i == fog_pos) {
             state.set_enemy_slot(*uid, LIVING_FOG_SLOT);
         }
     }
