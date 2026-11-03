@@ -4190,17 +4190,30 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
     // `Enemies` (`SortEnemiesBySlotName`), and `enemy_uids` is the turn
     // order: left in wire order, retained bombs that revive would act AFTER
     // the fog where the game has them act before it. Once the slots are
-    // stamped (above), sort a pure fog/bomb roster by slot (stable; a
-    // removed corpse holds no slot and sorts last, where the wire lists it).
+    // stamped (above), the slot holders of a pure fog/bomb roster are put
+    // in slot order among the positions they occupy. A removed corpse holds
+    // no slot and stays where the wire lists it: `enemy_uids` is also the
+    // stable index space (targets, corpse identity), so only the retained
+    // members move, and a roster already in slot order is left as it is.
     // Runs after the reviver block, whose rank list is zipped with the wire
     // order.
     if living_fog_roster {
-        let mut order: SmallVec<[(u8, CreatureUid); 8]> = enemy_uids
-            .iter()
-            .map(|uid| (state.enemy_slot(*uid).unwrap_or(u8::MAX), *uid))
+        let held: SmallVec<[usize; 8]> = (0..enemy_uids.len())
+            .filter(|&i| state.enemy_slot(enemy_uids[i]).is_some())
             .collect();
-        order.sort_by_key(|(slot, _)| *slot);
-        enemy_uids = order.into_iter().map(|(_, uid)| uid).collect();
+        let mut by_slot: SmallVec<[(u8, CreatureUid); 8]> = held
+            .iter()
+            .map(|&i| {
+                (
+                    state.enemy_slot(enemy_uids[i]).unwrap_or(u8::MAX),
+                    enemy_uids[i],
+                )
+            })
+            .collect();
+        by_slot.sort_by_key(|(slot, _)| *slot);
+        for (&i, (_, uid)) in held.iter().zip(by_slot) {
+            enemy_uids[i] = uid;
+        }
     }
     state.enemy_uids = enemy_uids;
 

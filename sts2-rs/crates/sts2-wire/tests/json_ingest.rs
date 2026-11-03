@@ -457,6 +457,50 @@ fn a_living_fog_rebuild_keeps_retained_bomb_corpses_in_their_slots() {
     assert_eq!(living, expected, "revived bombs act before the fog");
 }
 
+/// Only slot holders move: a removed bomb corpse (no retaining power) keeps
+/// its wire position, since `enemy_uids` is also the stable index space,
+/// while the fog and a retained corpse take slot order among their own
+/// positions.
+#[test]
+fn a_living_fog_rebuild_moves_only_slot_holders() {
+    sts2_content::cards::dispatch::ensure_installed();
+    let mut value = small_fight(&["STRIKE_IRONCLAD"], serde_json::json!([]));
+    let illusion = sts2_core::PowerKind::Illusion.python_name();
+    value["encounter"] = serde_json::json!([
+        {"kind": "LivingFog", "uid": 6, "hp": 80, "max_hp": 80, "block": 0, "powers": [],
+         "intents": [], "intent_history": [], "move_state": "BLOAT_MOVE",
+         "is_dead": false, "is_escaped": false},
+        {"kind": "GasBomb", "uid": 1, "hp": 0, "max_hp": 7, "block": 0, "powers": [],
+         "intents": [], "intent_history": [], "move_state": "EXPLODE_MOVE",
+         "is_dead": true, "is_escaped": false},
+        {"kind": "GasBomb", "uid": 2, "hp": 0, "max_hp": 7, "block": 0,
+         "powers": [{"name": illusion, "amount": 1}], "intents": [], "intent_history": [],
+         "move_state": "EXPLODE_MOVE", "is_dead": true, "is_escaped": false}
+    ]);
+    let state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    let rows: Vec<(Option<sts2_core::MonsterKind>, i32, Option<u8>)> = state
+        .enemy_uids
+        .iter()
+        .filter_map(|u| state.creatures.iter().find(|c| c.id == u.0))
+        .map(|c| {
+            (
+                c.species,
+                c.current_hp,
+                state.enemy_slot(sts2_core::CreatureUid(c.id)),
+            )
+        })
+        .collect();
+    use sts2_core::MonsterKind::{GasBomb, LivingFog};
+    assert_eq!(
+        rows,
+        [
+            (Some(GasBomb), 0, Some(0)),
+            (Some(GasBomb), 0, None),
+            (Some(LivingFog), 80, Some(5))
+        ]
+    );
+}
+
 /// C# `BrilliantScarf.AfterCardPlayed` skips auto-plays: Havoc's auto-played
 /// Strike doesn't count, so after Havoc (the 3rd play) Bash still costs 2.
 #[test]
