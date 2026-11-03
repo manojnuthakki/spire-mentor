@@ -9,6 +9,7 @@ pub(crate) fn play_neutralize(
     let t = target.expect("Neutralize: Enemy-targeted, engine validated");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     // Bead `sts2-rs-x9uqx`: C# `Neutralize.cs` `DynamicVar("Weak", 1)` with
     // `OnUpgrade UpgradeValueBy(1m)` → Weak 1 base / 2 upgraded.
     let weak = if current_card_upgraded(state) { 2 } else { 1 };

@@ -56,6 +56,7 @@ pub(crate) fn play_fetch(state: &mut CombatState, target: Option<CreatureUid>) -
     // missing (deal_damage_from_osty_to_enemy resolves to a no-op).
     let dmg = if current_card_upgraded(state) { 6 } else { 3 };
     deal_damage_from_osty_to_enemy(state, t, dmg);
+    sts2_core::attack_command::end_card_command(state);
 
     // C# `if (!HasBeenPlayedThisTurn) Draw(Cards.BaseValue=1)` — gated inside the
     // Osty-alive block. We only draw when the Osty is alive (matching the C#

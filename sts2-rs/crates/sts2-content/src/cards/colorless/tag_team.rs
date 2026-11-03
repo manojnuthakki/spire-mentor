@@ -10,6 +10,7 @@ use super::prelude::*;
 pub(crate) fn play_tag_team(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("TagTeam: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     apply_power_to_creature(state, t, PowerKind::TagTeam, 1);
     EffectResult::Resolved
 }

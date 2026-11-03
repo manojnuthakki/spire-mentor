@@ -10,6 +10,7 @@ pub(crate) fn play_fear(state: &mut CombatState, target: Option<CreatureUid>) ->
     // central card_upgrades_generated table (base_damage 7 → 8); read current_damage.
     let dmg = current_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, dmg);
+    sts2_core::attack_command::end_card_command(state);
     // C# PowerVar<VulnerablePower>(1); OnUpgrade Vulnerable.UpgradeValueBy(1) is a
     // PowerVar bump → gate on the upgraded check.
     let vuln = if current_card_upgraded(state) { 2 } else { 1 };

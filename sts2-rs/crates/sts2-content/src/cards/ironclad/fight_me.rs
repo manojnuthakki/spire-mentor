@@ -10,6 +10,7 @@ pub(crate) fn play_fight_me(state: &mut CombatState, target: Option<CreatureUid>
     let dmg = current_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, dmg);
     let _ = deal_damage_player_to_enemy(state, t, dmg);
+    sts2_core::attack_command::end_card_command(state);
     let player_str = if current_upgraded(state) { 4 } else { 3 };
     apply_power_to_player(state, PowerKind::Strength, player_str);
     apply_power_to_enemy(state, t, PowerKind::Strength, 1);

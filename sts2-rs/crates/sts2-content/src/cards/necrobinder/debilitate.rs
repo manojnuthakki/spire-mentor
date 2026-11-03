@@ -25,6 +25,7 @@ pub(crate) fn play_debilitate(
     let t = target.expect("Debilitate: enemy target required");
     let dmg = current_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, dmg);
+    sts2_core::attack_command::end_card_command(state);
     let debilitate_amt = if current_card_upgraded(state) { 3 } else { 2 };
     apply_power_to_enemy(state, t, PowerKind::Debilitate, debilitate_amt);
     EffectResult::Resolved

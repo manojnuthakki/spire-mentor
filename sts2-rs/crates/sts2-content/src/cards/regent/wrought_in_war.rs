@@ -13,6 +13,7 @@ pub(crate) fn play_wrought_in_war(
 ) -> EffectResult {
     let t = target.expect("WroughtInWar: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let forge = if current_card_upgraded(state) { 9 } else { 7 };
     let _ = forge_from_card(state, forge);
     EffectResult::Resolved

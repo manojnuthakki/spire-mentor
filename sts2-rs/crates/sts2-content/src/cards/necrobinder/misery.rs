@@ -54,6 +54,7 @@ pub(crate) fn play_misery(state: &mut CombatState, target: Option<CreatureUid>) 
 
     // 2. Deal the attack damage to the target.
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
 
     // 3. Copy each snapshotted debuff onto every other hittable enemy.
     if !original_debuffs.is_empty() {

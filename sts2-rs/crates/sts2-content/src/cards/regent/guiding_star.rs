@@ -15,6 +15,7 @@ pub(crate) fn play_guiding_star(
 ) -> EffectResult {
     let t = target.expect("GuidingStar: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // C# `GuidingStar.cs` `OnUpgrade` bumps BOTH DamageVar +1 (handled
     // via current_damage) AND CardsVar +1 (2→3). Bead `sts2-rs-f6naf`.
     let cards = if current_card_upgraded(state) { 3 } else { 2 };

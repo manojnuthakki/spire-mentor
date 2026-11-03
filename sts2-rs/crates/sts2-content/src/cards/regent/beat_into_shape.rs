@@ -28,6 +28,7 @@ pub(crate) fn play_beat_into_shape(
     let t = target.expect("BeatIntoShape: Enemy-targeted");
     let forge = resolving_preview(state, preview_beat_into_shape, target);
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let _ = forge_from_card(state, forge);
     EffectResult::Resolved
 }

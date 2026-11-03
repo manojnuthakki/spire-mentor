@@ -54,6 +54,7 @@ pub(crate) fn play_snap(state: &mut CombatState, target: Option<CreatureUid>) ->
         // hit reads the Osty's dealer-side modifiers (see Poke).
         let dmg = if current_card_upgraded(state) { 10 } else { 7 };
         let _ = deal_damage_from_osty_to_enemy(state, t, dmg);
+        sts2_core::attack_command::end_card_command(state);
     }
 
     // C# `CardSelectCmd.FromHand` early-returns when `CombatManager.IsOverOrEnding`,

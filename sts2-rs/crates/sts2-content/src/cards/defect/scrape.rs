@@ -13,6 +13,7 @@ pub(crate) fn play_scrape(state: &mut CombatState, target: Option<CreatureUid>) 
     let t = target.expect("Scrape: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     let draws = if current_card_upgraded(state) { 5 } else { 4 };
     let pre = state.player.hand.len();
     let _ = sts2_core::cards::draw_via_state(state, draws);

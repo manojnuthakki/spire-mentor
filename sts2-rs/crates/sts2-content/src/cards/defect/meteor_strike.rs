@@ -10,6 +10,7 @@ pub(crate) fn play_meteor_strike(
     let t = target.expect("MeteorStrike: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     orbs::channel_orb(state, Orb::plasma());
     orbs::channel_orb(state, Orb::plasma());
     orbs::channel_orb(state, Orb::plasma());

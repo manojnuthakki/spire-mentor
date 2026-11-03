@@ -3464,7 +3464,12 @@ pub fn dispatch_for_card(
     target: Option<CreatureUid>,
 ) -> EffectResult {
     let prev = state.resolving_card.replace(card_uid);
+    // The card's attack command (if it is an Attack) lives inside this
+    // `OnPlay`: opened at its first hit, closed here at the latest. See
+    // [`crate::attack_command`].
+    let mark = crate::attack_command::dispatch_enter(state);
     let out = dispatch(state, card_id, target);
+    crate::attack_command::dispatch_exit(state, mark, card_uid);
     state.resolving_card = prev;
     out
 }
@@ -4882,6 +4887,7 @@ fn play_bash(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResu
     let t = target.expect("Bash: Enemy-targeted, engine validated");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    crate::attack_command::end_card_command(state);
     // Bead `sts2-rs-orim9`: C# `Bash.cs` `PowerVar<VulnerablePower>(2)` with
     // `OnUpgrade UpgradeValueBy(1m)` → 2 base / 3 upgraded.
     let amt = if current_card_upgraded(state) { 3 } else { 2 };

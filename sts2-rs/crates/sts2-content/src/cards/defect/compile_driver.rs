@@ -23,6 +23,7 @@ pub(crate) fn play_compile_driver(
     let t = target.expect("CompileDriver: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     let draw = resolving_preview(state, preview_compile_driver, target);
     if draw > 0 {
         let _ = sts2_core::cards::draw_via_state(state, draw);

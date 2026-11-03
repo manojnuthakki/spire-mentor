@@ -15,6 +15,7 @@ use super::prelude::*;
 pub(crate) fn play_shatter(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
     let base = current_card_damage(state);
     deal_damage_player_to_all(state, base);
+    sts2_core::attack_command::end_card_command(state);
     orbs::evoke_all_n(state, 2);
     EffectResult::Resolved
 }

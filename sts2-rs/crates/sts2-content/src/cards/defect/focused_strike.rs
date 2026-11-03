@@ -24,6 +24,7 @@ pub(crate) fn play_focused_strike(
     let t = target.expect("FocusedStrike: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     let amt = if current_card_upgraded(state) { 2 } else { 1 };
     apply_power_to_player(state, PowerKind::Focus, amt);
     apply_power_to_player(state, PowerKind::FocusedStrike, amt);

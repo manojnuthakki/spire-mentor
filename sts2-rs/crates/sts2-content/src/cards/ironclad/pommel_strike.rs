@@ -8,6 +8,7 @@ pub(crate) fn play_pommel_strike(
 ) -> EffectResult {
     let t = target.expect("PommelStrike: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // Bead `sts2-rs-cptdk`: C# `PommelStrike.cs` `CardsVar(1)` with
     // `OnUpgrade UpgradeValueBy(1m)` → draw 1 base / draw 2 upgraded.
     let draws = if current_upgraded(state) { 2 } else { 1 };

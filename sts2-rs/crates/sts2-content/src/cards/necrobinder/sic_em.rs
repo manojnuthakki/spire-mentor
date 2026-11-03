@@ -38,6 +38,7 @@ pub(crate) fn play_sic_em(state: &mut CombatState, target: Option<CreatureUid>) 
     // OstyAttack cards (poke/unleash/bone_shards). No-op if the Osty is missing.
     let dmg = if current_card_upgraded(state) { 6 } else { 5 };
     deal_damage_from_osty_to_enemy(state, t, dmg);
+    sts2_core::attack_command::end_card_command(state);
 
     // SicEmPower: 3 base, +1 on upgrade (v0.107.1; was 2/3). Applied regardless
     // of the Osty's state (C# applies it after the `if (!CheckMissingWithAnim)`

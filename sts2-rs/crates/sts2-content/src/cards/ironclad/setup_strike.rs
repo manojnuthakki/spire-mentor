@@ -27,6 +27,7 @@ pub(crate) fn play_setup_strike(
     // Damage resolves BEFORE the +STR is applied (C# order), so this hit
     // benefits only from pre-existing Strength, not the buff it grants.
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // C# SetupStrike.cs OnUpgrade bumps Strength 2->3. Bead `sts2-rs-ja5qw`.
     let amt = if current_upgraded(state) { 3 } else { 2 };
     apply_power_to_player(state, PowerKind::SetupStrike, amt);

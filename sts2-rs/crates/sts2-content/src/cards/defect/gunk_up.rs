@@ -10,6 +10,7 @@ pub(crate) fn play_gunk_up(state: &mut CombatState, target: Option<CreatureUid>)
     for _ in 0..3 {
         let _ = deal_damage_player_to_enemy(state, t, base);
     }
+    sts2_core::attack_command::end_card_command(state);
     let _ = spawn_slimed(state, PileKind::Discard);
     EffectResult::Resolved
 }

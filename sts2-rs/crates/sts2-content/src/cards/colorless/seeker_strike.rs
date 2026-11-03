@@ -41,6 +41,7 @@ pub(crate) fn play_seeker_strike(
 ) -> EffectResult {
     let t = target.expect("SeekerStrike: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // A lethal SeekerStrike ends combat before the draw-pile select: C#
     // `CardSelectCmd.FromSimpleGrid` returns empty when `IsEnding`
     // (CardSelectCmd.cs:222-224), so suppress the select here too.

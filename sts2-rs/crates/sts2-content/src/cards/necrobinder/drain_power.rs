@@ -20,6 +20,7 @@ pub(crate) fn play_drain_power(
     let t = target.expect("DrainPower: AnyEnemy-targeted");
     // C# `DamageVar.BaseValue` (the base 10/12, NOT the calculated value).
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
 
     let count = if current_card_upgraded(state) { 3 } else { 2 };
 

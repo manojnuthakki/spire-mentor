@@ -10,6 +10,7 @@ use super::prelude::*;
 pub(crate) fn play_knockdown(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Knockdown: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // C# Knockdown.cs OnUpgrade bumps KnockdownPower by 1 (2 -> 3); damage
     // scales via base_damage. Bead `sts2-rs-zvm2n`: prior body hardcoded 2,
     // dropping the upgrade.

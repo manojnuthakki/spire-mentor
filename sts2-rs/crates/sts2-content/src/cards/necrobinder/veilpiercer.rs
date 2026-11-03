@@ -16,6 +16,7 @@ pub(crate) fn play_veilpiercer(
     // central card_upgrades_generated table (CardId::Veilpiercer); read current_damage.
     let dmg = current_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, dmg);
+    sts2_core::attack_command::end_card_command(state);
     // C# PowerCmd.Apply<VeilpiercerPower>(base.Owner.Creature, 1m, ...) — applies
     // to the card owner (the player). VeilpiercerPower is StackType.Counter.
     apply_power_to_player(state, PowerKind::Veilpiercer, 1);

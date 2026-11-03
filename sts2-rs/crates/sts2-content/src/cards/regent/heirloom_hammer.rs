@@ -36,6 +36,7 @@ pub(crate) fn play_heirloom_hammer(
 ) -> EffectResult {
     let t = target.expect("HeirloomHammer: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
 
     // A lethal HeirloomHammer ends combat before the hand select: C#
     // `CardSelectCmd.FromHand` returns empty when `IsEnding`

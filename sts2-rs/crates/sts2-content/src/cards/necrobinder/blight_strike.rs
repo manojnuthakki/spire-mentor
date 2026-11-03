@@ -18,6 +18,7 @@ pub(crate) fn play_blight_strike(
     // i.e. the damage dealt by this single-target attack. Use the full outcome's
     // total_damage so the Doom amount tracks the realized hit, not the raw base.
     let outcome = card_effects::deal_damage_player_to_enemy_full(state, t, dmg);
+    sts2_core::attack_command::end_card_command(state);
     apply_power_to_enemy(state, t, PowerKind::Doom, outcome.total_damage);
     EffectResult::Resolved
 }

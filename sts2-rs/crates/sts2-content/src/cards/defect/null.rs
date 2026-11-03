@@ -10,6 +10,7 @@ pub(crate) fn play_null(state: &mut CombatState, target: Option<CreatureUid>) ->
     let t = target.expect("NullCard: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     // C# Null.cs OnUpgrade bumps Weak 2->3 (Damage +3 via current_card_damage).
     // Bead `sts2-rs-jhe92`.
     let weak = if current_card_upgraded(state) { 3 } else { 2 };

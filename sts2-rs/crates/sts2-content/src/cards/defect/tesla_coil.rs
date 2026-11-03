@@ -21,6 +21,8 @@ pub(crate) fn play_tesla_coil(
     let t = target.expect("TeslaCoil: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    // The attack ends here; the Lightning zaps below are not part of it.
+    sts2_core::attack_command::end_card_command(state);
     let lightning = state
         .player
         .orbs

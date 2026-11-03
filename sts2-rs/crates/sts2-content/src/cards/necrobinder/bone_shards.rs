@@ -57,6 +57,7 @@ pub(crate) fn play_bone_shards(
     // player-dealer-gated effects do not fire). `deal_damage_from_osty_to_all_
     // alive_enemies` resolves the dealer as the pet creature (see `osty_dealer_ref`).
     deal_damage_from_osty_to_all_alive_enemies(state, dmg);
+    sts2_core::attack_command::end_card_command(state);
 
     // C# `CreatureCmd.GainBlock(Owner.Creature, Block, cardPlay)` — player block.
     gain_block_player(state, block);

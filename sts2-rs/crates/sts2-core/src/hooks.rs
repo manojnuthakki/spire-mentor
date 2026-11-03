@@ -3341,28 +3341,22 @@ fn power_modify_damage_additive(
             // C# `VigorPower.ModifyDamageAdditive`
             // (`MegaCrit.Sts2.Core.Models.Powers/VigorPower.cs:56-76`):
             // returns `Amount` when `Owner == dealer` AND
-            // `props.IsPoweredAttack()`, BUT only for hits whose
-            // `cardSource` matches the latched command
-            // (`commandToModify.ModelSource`) — Vigor latches the FIRST
-            // powered `AttackCommand` (`BeforeAttack`) and boosts only
-            // that command's hits. We mirror the card-source scope via
-            // `player.vigor_latch_card` (set after the first powered
-            // player hit, see `damage::apply_damage`): `None` = not yet
-            // latched ⇒ apply (first command + card-less attacks);
-            // `Some(c)` ⇒ apply only when the active card (`play.last()`)
-            // is `c`. This stops a SECOND command in the same play
-            // (Uproar's auto-played follow-up attack) from getting the
-            // bonus (UPROAR seed 359: +8 over-applied to the auto-play).
-            // Bead `sts2-rs-6049l` / `sts2-rs-vigor-cmd`.
-            if owner == Some(ctx.dealer) && ctx.props.is_powered() {
-                match state.player.vigor_latch_card {
-                    Some(latched)
-                        if crate::card_effects::resolving_card_uid(state) != Some(latched) =>
-                    {
-                        0
-                    }
-                    _ => power.amount,
-                }
+            // `props.IsPoweredAttack()`, except for another card's damage
+            // while a command is latched (`commandToModify`, set at its
+            // `BeforeAttack`; see [`crate::attack_command`]). This stops a
+            // SECOND command (Uproar's auto-played follow-up attack) from
+            // getting the bonus. Bead `sts2-rs-6049l` / `sts2-rs-vigor-cmd`.
+            // The latch is the player's (`attack_commands.vigor`); an enemy's
+            // Vigor is not scoped by it.
+            if owner == Some(ctx.dealer)
+                && ctx.props.is_powered()
+                && (owner != Some(CreatureRef::Player)
+                    || crate::attack_command::vigor_applies(
+                        state,
+                        crate::card_effects::resolving_card_uid(state),
+                    ))
+            {
+                power.amount
             } else {
                 0
             }
@@ -3886,13 +3880,18 @@ fn power_modify_damage_multiplicative(
             // returns 3× for the owner's first powered attack
             // (`cardSource.Owner == Owner` AND `props.IsPoweredAttack()`),
             // captured in `BeforeAttack` and consumed in `AfterAttack`
-            // (decrement → removed). We mirror the magnitude here
-            // (×3 for the dealer's powered attacks) and rely on the
-            // single-use consumption in `dispatch_after_card_played`
-            // to scope it to the FIRST attack — once consumed the
-            // power is gone, so the second attack sees no instance.
+            // (decrement → removed) by [`crate::attack_command`], which
+            // also scopes the ×3 to the latched command's card.
             // Bead `sts2-rs-2e9q2` follow-up (Gigantification Potion).
-            if owner == Some(ctx.dealer) && ctx.props.is_powered() {
+            // While a command is latched (`BeforeAttack`, see
+            // [`crate::attack_command`]) only that command's card is tripled.
+            if owner == Some(ctx.dealer)
+                && ctx.props.is_powered()
+                && crate::attack_command::gigantification_applies(
+                    state,
+                    crate::card_effects::resolving_card_uid(state),
+                )
+            {
                 DamageMul::new(3, 1)
             } else {
                 DamageMul::ONE
@@ -14013,9 +14012,7 @@ const AFTER_CARD_PLAYED_PLAYER_REACT_KINDS: crate::PowerKindSet =
     crate::PowerKindSet::from_kinds(&[
         PowerKind::Rage,
         PowerKind::Calamity,
-        PowerKind::Vigor,
         PowerKind::DevourLifePower,
-        PowerKind::Gigantification,
         PowerKind::Afterimage,
         PowerKind::Storm,
         PowerKind::Subroutine,
@@ -14039,9 +14036,7 @@ const AFTER_CARD_PLAYED_PLAYER_REACT_KINDS: crate::PowerKindSet =
 const AFTER_CARD_PLAYED_PENDING_KINDS: crate::PowerKindSet = crate::PowerKindSet::from_kinds(&[
     PowerKind::Rage,
     PowerKind::Calamity,
-    PowerKind::Vigor,
     PowerKind::DevourLifePower,
-    PowerKind::Gigantification,
 ]);
 const AFTER_CARD_PLAYED_SNAPSHOT_KINDS: crate::PowerKindSet =
     crate::PowerKindSet::from_kinds(&[PowerKind::Storm, PowerKind::Subroutine]);
@@ -14053,65 +14048,56 @@ const AFTER_CARD_PLAYED_ORDERED_ENEMY_HIT_KINDS: crate::PowerKindSet =
     ]);
 
 /// C# `SkittishPower.AfterAttack`
-/// (`../sts2-wiki/decompiled/v0.107.1/MegaCrit.Sts2.Core.Models.Powers/SkittishPower.cs:56-69`):
-/// ONCE PER TURN, when a card-sourced (`command.ModelSource is CardModel`)
-/// `ValueProp.Move` attack lands UNBLOCKED damage on the owner, the owner
-/// gains `Amount` block with `ValueProp.Unpowered`.
-///
-/// Two-phase like CurlUp: the content `skittish_after_damage` hook
-/// arms `skip_next_tick` on the hit, and the grant lands HERE — after the
-/// whole card resolves — so none of the triggering card's own hits are
-/// absorbed by the fresh block (C# grants after the `AttackCommand`, which
-/// is the same boundary for every single-command card; see the hook's
-/// doc-comment for the residual two-command case). A play that pauses on a
-/// selection after its attack (Headbutt's discard pick) has finished that
-/// command too, so `combat_loop::play_card` grants here before surfacing
-/// the choice.
-///
-/// `counter` is C#'s `Data.hasGainedBlockThisTurn`: set to 1 on grant, reset
-/// to 0 by the `AfterSideTurnEnd(side != Owner.Side)` analogue in
-/// [`dispatch_after_turn_end`] (player-side turn end, since Skittish only
-/// ever lives on a monster). The power is NOT removed — unlike CurlUp it
-/// re-arms every turn.
-pub(crate) fn grant_latched_skittish(state: &mut CombatState) {
-    // present_kinds lane gate (perf): no live Skittish ⇒ nothing latched.
-    if power_kind_live(state, PowerKind::Skittish) {
-        let latched: SmallVec<[(CreatureUid, i32, crate::PowerUid); 2]> = state
-            .powers
-            .iter()
-            .filter(|p| {
-                p.kind == PowerKind::Skittish && p.skip_next_tick && p.counter == 0 && p.amount > 0
-            })
-            .filter_map(|p| {
-                state
-                    .creatures
-                    .iter()
-                    .find(|c| c.powers.iter().any(|pu| pu.0 == p.id) && c.current_hp > 0)
-                    .map(|c| (CreatureUid(c.id), p.amount, crate::PowerUid(p.id)))
-            })
-            .collect();
-        for (owner, amount, pid) in latched {
-            // C# `CreatureCmd.GainBlock(Owner, Amount, ValueProp.Unpowered)` —
-            // `Effect::GainBlockCreature` is the enemy-side unpowered grant
-            // (monster block never scales with the player's Dexterity/Frail).
-            apply_effects(
-                state,
-                &[Effect::GainBlockCreature {
-                    target: CreatureRef::Enemy(owner),
-                    amount,
-                }],
-            );
-            if let Some(p) = state.powers.get_mut_by_id(pid.0) {
-                p.skip_next_tick = false;
-                p.counter = 1;
-            }
+/// (`MegaCrit.Sts2.Core.Models.Powers/SkittishPower.cs`): ONCE PER TURN
+/// (`!HasGainedBlockThisTurn`, the `counter` lane), when a `ValueProp.Move`
+/// command whose `ModelSource` is a card completes, the FIRST of the command's
+/// results whose receiver is the owner decides: nonzero `UnblockedDamage`
+/// grants `Amount` block (`ValueProp.Unpowered`). A command with no result for
+/// the owner, or whose first result for it was fully blocked, grants nothing.
+/// Runs at the command's `AfterAttack` ([`crate::attack_command::end`]), so the
+/// fresh block is up before the card's remaining `OnPlay` work and its
+/// `AfterCardPlayed` callbacks (Kusarigama's hit). `counter` resets at the
+/// player-side turn end in [`dispatch_after_turn_end`]; the power is not
+/// removed.
+pub(crate) fn skittish_after_attack(
+    state: &mut CombatState,
+    frame: &crate::attack_command::AttackCommandFrame,
+) {
+    if !power_kind_live(state, PowerKind::Skittish)
+        || !frame.props.contains(ValueProps::MOVE)
+        || frame.source.is_none()
+    {
+        return;
+    }
+    let owners: SmallVec<[(CreatureUid, i32, crate::PowerUid); 2]> = state
+        .powers
+        .iter()
+        .filter(|p| p.kind == PowerKind::Skittish && p.counter == 0 && p.amount > 0)
+        .filter_map(|p| {
+            state
+                .creatures
+                .iter()
+                .find(|c| c.powers.iter().any(|pu| pu.0 == p.id) && c.current_hp > 0)
+                .map(|c| (CreatureUid(c.id), p.amount, crate::PowerUid(p.id)))
+        })
+        .collect();
+    for (owner, amount, pid) in owners {
+        let first = frame.results.iter().find(|(r, _)| *r == owner);
+        if !first.is_some_and(|(_, unblocked)| *unblocked != 0) {
+            continue;
         }
-        // Disarm any latch that could not be granted (owner died to the very
-        // card that armed it) so it cannot fire on a later play this turn.
-        for p in &mut state.powers {
-            if p.kind == PowerKind::Skittish {
-                p.skip_next_tick = false;
-            }
+        // C# `CreatureCmd.GainBlock(Owner, Amount, ValueProp.Unpowered)` —
+        // `Effect::GainBlockCreature` is the enemy-side unpowered grant
+        // (monster block never scales with the player's Dexterity/Frail).
+        apply_effects(
+            state,
+            &[Effect::GainBlockCreature {
+                target: CreatureRef::Enemy(owner),
+                amount,
+            }],
+        );
+        if let Some(p) = state.powers.get_mut_by_id(pid.0) {
+            p.counter = 1;
         }
     }
 }
@@ -14251,11 +14237,7 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
                     // `enemy_hitting_player_reactions` walk below, not this
                     // commutative `pending` lane. Bead
                     // `sts2-rs-after-card-played-power-order-w2i4c`.
-                    PowerKind::Rage
-                    | PowerKind::Calamity
-                    | PowerKind::Vigor
-                    | PowerKind::DevourLifePower
-                    | PowerKind::Gigantification => {
+                    PowerKind::Rage | PowerKind::Calamity | PowerKind::DevourLifePower => {
                         pending.push((power.kind, power.amount));
                     }
                     _ => {}
@@ -14296,26 +14278,6 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
     let is_attack = ctx.card_type == Some(crate::cards::CardType::Attack);
     let is_power = ctx.card_type == Some(crate::cards::CardType::Power);
     let is_shiv = ctx.card_tags.contains(crate::cards::CardTag::Shiv);
-    // C# `VigorPower`/`GigantificationPower` latch on `BeforeAttack` only when
-    // `command.Attacker == Owner` (the player). An Osty-attack card (SQUEEZE,
-    // RIGHT_HAND_HAND, …) is Attack-TYPED but its hit is `FromOsty`, so the
-    // Attacker is the Osty, not the player — the buff never latches and so is
-    // NOT consumed. Exclude those cards from the attack-card consume gate
-    // (the boost arm already excludes them via `owner == dealer`). Without
-    // this, an Osty-attack card spent the player's Akabeko Vigor end-to-end
-    // (Necrobinder sweep `player.powers.len` cluster: SQUEEZE/PROTECTOR/
-    // RIGHT_HAND_HAND at turn 0 with Vigor 8).
-    let is_osty_attack = ctx
-        .card_id
-        .is_some_and(crate::cards::CardId::is_osty_attack);
-    // C# Gigantification/Vigor latch on `BeforeAttack`, which only fires when an
-    // `AttackCommand` actually executes. An Attack-type card whose `OnPlay`
-    // conditionally issues NO command (PactsEnd with exhaust < 3) sets this flag
-    // so its play does not consume the buff. A 0-HIT attack card (FlakCannon /
-    // X=0 Whirlwind) still issues a command and leaves the flag false, so it
-    // still consumes — NOT the reverted `ph5mx` powered-hit gate.
-    let attack_command_suppressed = state.player.attack_command_suppressed_this_play;
-    let is_player_attack = is_attack && !is_osty_attack && !attack_command_suppressed;
     // Storm is snapshot-armed at before-play (`counter` holds the pre-`OnPlay`
     // stack count; see [`arm_storm_snapshot`]). C# `StormPower.BeforeCardPlayed`
     // only records an entry for POWER cards, and `AfterCardPlayed` channels the
@@ -14461,102 +14423,8 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
             // ordered `enemy_hitting_player_reactions` walk below (application
             // order vs Haunt/Panache). Bead
             // `sts2-rs-after-card-played-power-order-w2i4c`.
-            PowerKind::Vigor
-                // C# `VigorPower.AfterAttack`
-                // (`MegaCrit.Sts2.Core.Models.Powers/VigorPower.cs:78-85`):
-                // when the tracked attack resolves, the power consumes
-                // itself via `ModifyAmount(-amountWhenAttackStarted)`,
-                // zeroing it out. The net observable is "+Vigor to the
-                // FIRST attack played, then gone". `BeforeAttack` only
-                // tracks `IsPoweredAttack()` commands, so consumption is
-                // gated on the played card being an Attack (matching the
-                // collapsed Akabeko surrogate's `after_card_played`).
-                // Bead `sts2-rs-6049l`. Consumed when a PLAYER Attack card is
-                // played (C# `AttackCommand.Execute` fires `AfterAttack` even at
-                // zero hits — see the comment on the removed `attacked_this_play`
-                // gate above). `is_player_attack` excludes Osty-attack cards,
-                // whose hit is `FromOsty` (Attacker != player) so Vigor never
-                // latches/consumes — see `is_osty_attack` above.
-                if is_player_attack && amount > 0 => {
-                    // C# `PowerCmd.ModifyAmount` runs `ShouldRemoveDueToAmount()`
-                    // after the decrement, so the spent Vigor is REMOVED at 0
-                    // (`PowerModel.cs:413-424`), not left lingering at amount 0.
-                    // Mirror the `Effect::DecrementPowerAmount` handler's
-                    // prune-at-0 (bead `sts2-rs-2w966`): unlink the instance
-                    // from `state.powers`, `player.powers`, and creature mirrors.
-                    // Without this, `player.powers.len` diverges from C# (=0)
-                    // the moment the first attack resolves.
-                    let mut remove_pid = None;
-                    for uid in player_power_uids.iter().copied() {
-                        if let Some(power) =
-                            state.powers.get_mut_by_id(uid.0)
-                        {
-                            if power.kind == PowerKind::Vigor {
-                                power.amount =
-                                    power.amount.saturating_sub(amount).max(0);
-                                if power.amount == 0 {
-                                    remove_pid = Some(uid.0);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    if let Some(pid) = remove_pid {
-                        state.powers.retain(|p| p.id != pid);
-                        state.player.powers.retain(|u| u.0 != pid);
-                        for c in &mut state.creatures {
-                            c.powers.retain(|u| u.0 != pid);
-                        }
-                    }
-                    // Vigor spent → release the command latch so a re-applied
-                    // Vigor later this combat starts fresh. Bead `sts2-rs-vigor-cmd`.
-                    state.player.vigor_latch_card = None;
-                }
-            PowerKind::Gigantification
-                // C# `GigantificationPower.AfterAttack`
-                // (`MegaCrit.Sts2.Core.Models.Powers/GigantificationPower.cs`):
-                // when the tracked (first powered) attack resolves, the power
-                // `Decrement(this)`s — a Counter power at amount 1, so it drops
-                // to 0 and is removed (`ShouldRemoveDueToAmount`). The ×3
-                // multiplier lands on that first attack (see the
-                // `modify_damage_multiplicative` arm); consuming it here scopes
-                // the boost to a single attack. Mirrors the Vigor surrogate
-                // above: gate on the played card being an Attack (BeforeAttack
-                // only captures `IsPoweredAttack()` commands; the powered
-                // nuance is collapsed, matching Vigor). Decrement by 1 (C#
-                // `Decrement`), prune at 0. Bead `sts2-rs-2e9q2` follow-up.
-                // C# `AfterAttack` fires even at zero hits (`AttackCommand
-                // .Execute`), so a 0-hit Attack still consumes Gigantification.
-                // Gate on `is_player_attack` (NOT plain `is_attack`): C#
-                // `GigantificationPower.BeforeAttack` only latches a
-                // `command.DamageProps.IsPoweredAttack()` attack, and an
-                // Osty-attack card (SQUEEZE/SIC_EM/POKE/…) deals an UNPOWERED
-                // hit `FromOsty`, so the buff never latches and is never
-                // consumed — mirroring the Vigor surrogate above. Without this,
-                // playing SIC_EM spent the player's Gigantification (e.g. from
-                // a Gigantification potion) end-to-end (Necrobinder sweep seed
-                // 396: player.powers GIGANTIFICATION cs=[1] rs=[]).
-                if is_player_attack && amount > 0 => {
-                    let mut remove_pid = None;
-                    for uid in player_power_uids.iter().copied() {
-                        if let Some(power) = state.powers.get_mut_by_id(uid.0) {
-                            if power.kind == PowerKind::Gigantification {
-                                power.amount = power.amount.saturating_sub(1).max(0);
-                                if power.amount == 0 {
-                                    remove_pid = Some(uid.0);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    if let Some(pid) = remove_pid {
-                        state.powers.retain(|p| p.id != pid);
-                        state.player.powers.retain(|u| u.0 != pid);
-                        for c in &mut state.creatures {
-                            c.powers.retain(|u| u.0 != pid);
-                        }
-                    }
-                }
+            // Vigor / Gigantification are spent at their command's
+            // `AfterAttack` ([`crate::attack_command::end`]), not here.
             PowerKind::Calamity
                 // C# `CalamityPower.AfterCardPlayed`
                 // (`MegaCrit.Sts2.Core.Models.Powers/CalamityPower.cs`): when
@@ -15150,10 +15018,6 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
             }
         }
     }
-
-    // ── React: Skittish (enemy, PhantasmalGardener) ────────────────────
-    // See [`grant_latched_skittish`].
-    grant_latched_skittish(state);
 
     // ── React: Monologue (Regent power) ────────────────────────────────
     // C# `MonologuePower.AfterCardPlayed` (MonologuePower.cs:63-72): for every
@@ -20104,8 +19968,8 @@ mod tests {
     }
 
     /// **Vigor command scope** (`sts2-rs-vigor-cmd`): once Vigor has latched
-    /// the first attacking card (`vigor_latch_card`), its additive boosts only
-    /// hits sourced from that card (`play.last()`). A hit from a different card
+    /// a command (`attack_commands.vigor`), its additive boosts only hits
+    /// sourced from that command's card (`play.last()`). A hit from a different card
     /// in the same play (Uproar's auto-played follow-up attack) gets +0;
     /// `None` (not yet latched) and a matching card still get the bonus.
     #[test]
@@ -20123,7 +19987,11 @@ mod tests {
         state.player.play.push(card_a);
         assert_eq!(dispatch_modify_damage_additive(&state, &ctx), 8);
         // Latched to card_a, active card is card_a → applies.
-        state.player.vigor_latch_card = Some(card_a);
+        state.attack_commands.vigor = Some(crate::attack_command::AttackPowerLatch {
+            command: 0,
+            source: Some(card_a),
+            amount_at_start: 8,
+        });
         assert_eq!(dispatch_modify_damage_additive(&state, &ctx), 8);
         // Latched to card_a, active card is now card_b (nested auto-play) → +0.
         state.player.play.push(card_b);
@@ -20144,57 +20012,35 @@ mod tests {
         assert_eq!(dispatch_modify_damage_additive(&state, &ctx), 0);
     }
 
-    /// **Vigor consumption**: after the first Attack is played, Vigor is
-    /// spent to 0, mirroring C# `VigorPower.AfterAttack`
-    /// (`ModifyAmount(-amountWhenAttackStarted)`). Because
-    /// `PowerCmd.ModifyAmount` runs `ShouldRemoveDueToAmount()` after every
-    /// amount change (`PowerModel.cs:413-424`), the spent Vigor instance is
-    /// REMOVED at 0 — `player.powers.len` drops by one, it does not linger at
-    /// amount 0. The C#-parity harness's `state_to_dict` emits every power, so
-    /// a lingering 0-amount Vigor diverges on `player.powers.len` (C#=0 Rust=1)
-    /// the moment the first attack is played (bead `sts2-rs-6049l` follow-up,
-    /// surfaced by the 2026-05-29 re-audit). A second attack then gets +0.
+    /// **Vigor is not the card tail's** (F6 step30): C# spends Vigor at its
+    /// command's `AfterAttack` (`ModifyAmount(-amountWhenAttackStarted)`,
+    /// removed at 0), which runs inside `OnPlay` before the card's own
+    /// selection and before `AfterCardPlayed`. `dispatch_after_card_played`
+    /// therefore leaves it alone; `attack_command` spends it (see the
+    /// `attack_command_lifecycle` tests in `sts2-content`).
     #[test]
-    fn vigor_consumed_after_first_attack_played() {
+    fn after_card_played_does_not_spend_vigor() {
         use crate::cards::CardType;
         let (mut state, uid) = state_with_player_power(PowerKind::Vigor, 8);
         let ctx_attack = CardCtx {
             card_type: Some(CardType::Attack),
             ..CardCtx::default()
         };
-        // Bead `sts2-rs-ph5mx`: the consume now requires a powered attack to
-        // have actually landed during the play (C# `BeforeAttack` latch).
-        // `powered_hits_at_card_play_start` defaults to 0, so a single recorded
-        // powered hit this turn satisfies the gate.
         state.player.powered_hits_this_turn = 1;
         dispatch_after_card_played(&mut state, &ctx_attack);
-        assert!(
-            !state.powers.iter().any(|p| p.id == uid.0),
-            "spent Vigor must be REMOVED at 0 (C# ShouldRemoveDueToAmount), \
-             not lingering at amount 0"
+        assert_eq!(
+            state.powers.get_by_id(uid.0).map(|p| p.amount),
+            Some(8),
+            "Vigor belongs to its attack command, not to AfterCardPlayed"
         );
-        assert!(
-            !state.player.powers.iter().any(|u| u.0 == uid.0),
-            "removed Vigor must be unlinked from player.powers"
-        );
-
-        // Second powered attack now gets +0 from Vigor.
-        let dmg_ctx = DamageCtx {
-            dealer: CreatureRef::Player,
-            target: CreatureRef::Enemy(CreatureUid::new(99).unwrap()),
-            props: ValueProps::MOVE,
-        };
-        assert_eq!(dispatch_modify_damage_additive(&state, &dmg_ctx), 0);
     }
 
-    /// **Gigantification ×3 + single-use consume**: C#
-    /// `GigantificationPower.ModifyDamageMultiplicative` returns 3× for the
-    /// owner's first powered attack and `AfterAttack` decrements it to 0
-    /// (removed). Mirrors the Vigor surrogate: the ×3 lands on the powered
-    /// attack, then `dispatch_after_card_played` (Attack) consumes the
-    /// power. Bead `sts2-rs-2e9q2` follow-up (Gigantification Potion).
+    /// **Gigantification ×3**: C# `GigantificationPower.ModifyDamageMultiplicative`
+    /// returns 3× for the owner's powered card attacks (only the latched
+    /// command's card while one is latched); its command's `AfterAttack`
+    /// decrements it (`attack_command`), not `AfterCardPlayed`.
     #[test]
-    fn gigantification_triples_first_attack_then_consumed() {
+    fn gigantification_triples_and_is_not_the_card_tails() {
         use crate::cards::CardType;
         let (mut state, uid) = state_with_player_power(PowerKind::Gigantification, 1);
         let dmg_ctx = DamageCtx {
@@ -20202,7 +20048,7 @@ mod tests {
             target: CreatureRef::Enemy(CreatureUid::new(99).unwrap()),
             props: ValueProps::MOVE,
         };
-        // First powered attack: 6 → floor(6 * 3) = 18.
+        // Powered attack: 6 → floor(6 * 3) = 18.
         assert_eq!(modify_damage(&state, 6, &dmg_ctx), 18);
         // An UNPOWERED hit gets no boost (mirrors IsPoweredAttack guard).
         let unpowered = DamageCtx {
@@ -20210,24 +20056,24 @@ mod tests {
             ..dmg_ctx
         };
         assert_eq!(modify_damage(&state, 6, &unpowered), 6);
-
-        // Playing an Attack consumes the (Counter-1) power: 1 → 0 → removed.
         let ctx_attack = CardCtx {
             card_type: Some(CardType::Attack),
             ..CardCtx::default()
         };
-        // Bead `sts2-rs-ph5mx`: gate now requires an actual powered attack.
         state.player.powered_hits_this_turn = 1;
         dispatch_after_card_played(&mut state, &ctx_attack);
         assert!(
-            !state.powers.iter().any(|p| p.id == uid.0),
-            "spent Gigantification must be removed at amount 0"
+            state.powers.iter().any(|p| p.id == uid.0),
+            "Gigantification belongs to its attack command, not to AfterCardPlayed"
         );
-        assert!(
-            !state.player.powers.iter().any(|u| u.0 == uid.0),
-            "removed Gigantification must be unlinked from player.powers"
-        );
-        // Second attack: no boost (×1).
+        // Latched to another card: no ×3 for this one.
+        state.player.play.clear();
+        state.player.play.push(CardUid::new(22).unwrap());
+        state.attack_commands.gigantification = Some(crate::attack_command::AttackPowerLatch {
+            command: 0,
+            source: Some(CardUid::new(11).unwrap()),
+            amount_at_start: 0,
+        });
         assert_eq!(modify_damage(&state, 6, &dmg_ctx), 6);
     }
 
@@ -20429,19 +20275,35 @@ mod tests {
         };
         assert!(mirror_vigor(&state), "setup: mirror has Vigor");
 
-        let ctx_attack = CardCtx {
-            card_type: Some(CardType::Attack),
-            ..CardCtx::default()
-        };
-        // Bead `sts2-rs-ph5mx`: the consume now requires an actual powered
-        // attack to have landed this play (C# `BeforeAttack` latch).
-        state.player.powered_hits_this_turn = 1;
-        dispatch_after_card_played(&mut state, &ctx_attack);
+        // F6 step30: the spend is the attack command's `AfterAttack`
+        // (`attack_command::end`), which reads the same mirror-aware union.
+        let _ = CardType::Attack;
+        let enemy = crate::CreatureUid::new(7).unwrap();
+        state.creatures.push(crate::Creature {
+            id: enemy.0,
+            current_hp: 30,
+            max_hp: 30,
+            block: 0,
+            powers: SmallVec::new(),
+            species: None,
+            intent: None,
+            intent_history: crate::IntentHistory::default(),
+            monster_id: crate::MonsterId("Nibbit"),
+            ai: None,
+        });
+        state.enemy_uids.push(enemy);
+        assert!(crate::attack_command::begin(
+            &mut state,
+            CreatureRef::Player,
+            ValueProps::MOVE,
+            None
+        ));
+        crate::attack_command::end(&mut state);
         assert!(
             !mirror_vigor(&state),
-            "Vigor on the player mirror must be consumed + removed on the \
-             first attack (the real-combat surface, not just legacy \
-             player.powers)"
+            "Vigor on the player mirror must be consumed + removed at the \
+             first attack command's AfterAttack (the real-combat surface, not \
+             just legacy player.powers)"
         );
     }
 

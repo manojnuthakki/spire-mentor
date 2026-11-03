@@ -15,6 +15,7 @@ pub(crate) fn play_solar_strike(
 ) -> EffectResult {
     let t = target.expect("SolarStrike: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let stars = if current_card_upgraded(state) { 2 } else { 1 };
     gain_stars(state, stars);
     EffectResult::Resolved

@@ -21,6 +21,7 @@ pub(crate) fn play_go_for_the_eyes(
     let t = target.expect("GoForTheEyes: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     let intends_attack = state
         .creatures
         .iter()

@@ -572,6 +572,13 @@ pub fn check_turn_boundary(
         "active_attack still set at round {} ({ctx})",
         state.round
     );
+    // 19b. No open player attack command between turns (each `OnPlay`
+    // dispatch closes the command it opened; `attack_command`).
+    ensure!(
+        state.attack_commands.frames.is_empty(),
+        "attack command still open at round {} ({ctx})",
+        state.round
+    );
 
     // 20. (removed) EchoForm no longer rides a per-round budget counter that
     // decrements across turns — `cards_first_in_series_this_turn` is a

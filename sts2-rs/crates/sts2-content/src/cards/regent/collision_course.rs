@@ -14,6 +14,7 @@ pub(crate) fn play_collision_course(
 ) -> EffectResult {
     let t = target.expect("CollisionCourse: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let _ = spawn_card_into_hand(state, card_from_spec(&sspecs::debris()));
     EffectResult::Resolved
 }

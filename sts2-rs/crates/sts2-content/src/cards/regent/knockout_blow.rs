@@ -9,6 +9,7 @@ pub(crate) fn play_knockout_blow(
 ) -> EffectResult {
     let t = target.expect("KnockoutBlow: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let dead = state
         .creatures
         .iter()

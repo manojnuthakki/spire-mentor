@@ -23,6 +23,7 @@ pub(crate) fn play_sculpting_strike(
 ) -> EffectResult {
     let t = target.expect("SculptingStrike: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
 
     // C# `CardSelectCmd.FromHand` early-returns when `CombatManager.IsOverOrEnding`,
     // so a lethal Sculpting Strike never opens its Ethereal prompt — combat goes

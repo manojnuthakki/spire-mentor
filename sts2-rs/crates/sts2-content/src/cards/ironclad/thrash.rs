@@ -38,6 +38,7 @@ pub(crate) fn play_thrash(state: &mut CombatState, target: Option<CreatureUid>) 
         .saturating_add(rem_num);
     let _ = card_effects::deal_damage_player_to_enemy_frac(state, t, base_num, rem_den);
     let _ = card_effects::deal_damage_player_to_enemy_frac(state, t, base_num, rem_den);
+    sts2_core::attack_command::end_card_command(state);
     // Exhaust a random Attack from hand (C# `Rng.CombatCardSelection.NextItem`
     // over hand Attacks; the engine drains the single deterministic stream).
     let attack_uids: Vec<sts2_core::CardUid> = state

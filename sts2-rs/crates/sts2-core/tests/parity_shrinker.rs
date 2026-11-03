@@ -306,6 +306,7 @@ mod shrinker {
             is_boss: false,
             act_index: 1,
             active_attack: None,
+            attack_commands: sts2_core::attack_command::AttackCommandState::default(),
             energy_wasted: 0,
             cards_drawn: 0,
             pending_run_gold_loss: 0,

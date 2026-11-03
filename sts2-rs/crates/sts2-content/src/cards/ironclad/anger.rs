@@ -6,6 +6,7 @@ use super::prelude::*;
 pub(crate) fn play_anger(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Anger: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // Bead `sts2-rs-5om`: add a copy of self to the discard pile. The
     // copy is built from the played card's POD (preserves upgrade flag /
     // combat_vars) rather than the generic `anger()` spec — mirrors

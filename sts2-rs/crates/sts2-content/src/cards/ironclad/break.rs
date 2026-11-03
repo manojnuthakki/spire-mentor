@@ -13,6 +13,7 @@ use super::prelude::*;
 pub(crate) fn play_break(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Break: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let vuln = if current_upgraded(state) { 7 } else { 5 };
     apply_power_to_enemy(state, t, PowerKind::Vulnerable, vuln);
     EffectResult::Resolved

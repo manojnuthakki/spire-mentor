@@ -15,6 +15,7 @@ pub(crate) fn play_refract(state: &mut CombatState, target: Option<CreatureUid>)
     for _ in 0..2 {
         let _ = deal_damage_player_to_enemy(state, t, base);
     }
+    sts2_core::attack_command::end_card_command(state);
     for _ in 0..2 {
         orbs::channel_orb(state, Orb::glass());
     }

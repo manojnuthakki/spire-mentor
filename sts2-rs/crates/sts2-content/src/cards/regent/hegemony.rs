@@ -8,6 +8,7 @@ pub(crate) fn play_hegemony(state: &mut CombatState, target: Option<CreatureUid>
     // already flows via current_damage). Bead `sts2-rs-a3428`.
     let t = target.expect("Hegemony: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let energy = if current_card_upgraded(state) { 3 } else { 2 };
     apply_power_to_player(state, PowerKind::EnergyNextTurn, energy);
     EffectResult::Resolved

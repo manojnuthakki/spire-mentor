@@ -23,6 +23,7 @@ pub(crate) fn play_shining_strike(
 ) -> EffectResult {
     let t = target.expect("ShiningStrike: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     gain_stars(state, 2);
     EffectResult::Resolved
 }

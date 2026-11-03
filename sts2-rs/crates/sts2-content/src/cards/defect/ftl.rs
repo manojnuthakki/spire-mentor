@@ -13,6 +13,7 @@ pub(crate) fn play_ftl(state: &mut CombatState, target: Option<CreatureUid>) -> 
     let t = target.expect("Ftl: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     let play_max = if current_card_upgraded(state) { 4 } else { 3 };
     if state.count_player_cards_played_this_turn(None) < play_max {
         let _ = sts2_core::cards::draw_via_state(state, 1);

@@ -5,6 +5,7 @@ use super::prelude::*;
 pub(crate) fn play_uppercut(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Uppercut: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // Bead `sts2-rs-o52s8`: C# `Uppercut.cs` `DynamicVar("Power", 1)` with
     // `OnUpgrade UpgradeValueBy(1m)` → 1/2 Weak AND Vulnerable.
     let amt = if current_upgraded(state) { 2 } else { 1 };

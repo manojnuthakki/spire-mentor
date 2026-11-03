@@ -755,6 +755,11 @@ fn apply_damage_with_final_impl(
     props: ValueProps,
     bypass_hp_loss_cap: bool,
 ) -> DamageOutcome {
+    // The running Attack card's first hit opens its attack command (C#
+    // `AttackCommand.Execute` admits and awaits `BeforeAttack` before any hit;
+    // a command whose target is already gone still runs). See
+    // [`crate::attack_command`].
+    crate::attack_command::before_hit(state, dealer, props);
     // Retained corpses are not damage targets either. In particular, a
     // multi-hit attack must not trigger their before-damage Thorns again.
     if state.creatures[creature_index_for(state, target)].current_hp <= 0 {
@@ -1047,6 +1052,9 @@ fn apply_damage_with_final_impl(
     // `results.last().blocked > 0 && target.block == 0` to detect a
     // block-break on `after_damage_given`.
     state.record_attack_hit(target, blocked, hp_loss);
+    // C# `AttackCommand.AddResultsInternal`: this hit's result joins its
+    // command's `Results` (SkittishPower reads the first one per receiver).
+    crate::attack_command::record_result(state, dealer, target, hp_loss);
 
     // Bead `sts2-rs-ybtmu` (Group A): power-side `AfterBlockBroken` witness
     // dispatch (BurrowedPower). C# fires `Hook.AfterBlockBroken` per damage
@@ -1103,19 +1111,6 @@ fn apply_damage_with_final_impl(
                 .player
                 .powered_hits_by_target_this_turn
                 .push((target, 1));
-        }
-        // C# `VigorPower.BeforeAttack` latches `commandToModify` on the FIRST
-        // powered attack command; thereafter `ModifyDamageAdditive` only boosts
-        // that command's card. Mirror it: on the first powered player hit while
-        // a live Vigor exists and nothing is latched yet, record the active card
-        // (`play.last()`) so subsequent commands this play (e.g. Uproar's
-        // auto-play) are excluded. The additive arm already returned `Amount`
-        // for THIS first hit (latch was still `None`); latching now scopes the
-        // rest. Bead `sts2-rs-vigor-cmd`.
-        if state.player.vigor_latch_card.is_none()
-            && state.player_power_amount(crate::PowerKind::Vigor) > 0
-        {
-            state.player.vigor_latch_card = crate::card_effects::resolving_card_uid(state);
         }
     }
 
@@ -4140,57 +4135,6 @@ mod tests {
                 .map(|p| p.amount),
             Some(1),
             "an unblocked hit consumes exactly one Buffer stack"
-        );
-    }
-
-    /// A powered player hit latches the active card for Vigor when a live
-    /// Vigor exists and nothing is latched yet (the `is_none() && amount > 0`
-    /// gate, true branch).
-    #[test]
-    fn vigor_latches_active_card_on_powered_player_hit() {
-        let mut state = enemy_target_state(50, 0, SmallVec::new());
-        // Player holds Vigor(3); the active card is uid 5 on top of Play.
-        let mut vigor = mk_power(10, PowerKind::Vigor, None);
-        vigor.amount = 3;
-        state.powers.push(vigor);
-        state.player.powers = smallvec::smallvec![puid(10)];
-        state.player.play = smallvec::smallvec![crate::CardUid::new(5).unwrap()];
-
-        let _ = apply_damage_with_final(
-            &mut state,
-            CreatureRef::Player,
-            cuid(1),
-            6,
-            ValueProps::MOVE,
-        );
-
-        assert_eq!(
-            state.player.vigor_latch_card,
-            Some(crate::CardUid::new(5).unwrap()),
-            "first powered hit with live Vigor latches the active card"
-        );
-    }
-
-    /// Control for the Vigor latch: with NO active Vigor the latch stays
-    /// `None` even on a powered player hit (the `amount > 0` half of the gate,
-    /// false branch). Kills the `&&`→`||` and `> 0`→`>= 0` mutants that would
-    /// latch regardless of Vigor.
-    #[test]
-    fn no_vigor_latch_without_active_vigor() {
-        let mut state = enemy_target_state(50, 0, SmallVec::new());
-        state.player.play = smallvec::smallvec![crate::CardUid::new(5).unwrap()];
-
-        let _ = apply_damage_with_final(
-            &mut state,
-            CreatureRef::Player,
-            cuid(1),
-            6,
-            ValueProps::MOVE,
-        );
-
-        assert_eq!(
-            state.player.vigor_latch_card, None,
-            "no live Vigor → no latch"
         );
     }
 

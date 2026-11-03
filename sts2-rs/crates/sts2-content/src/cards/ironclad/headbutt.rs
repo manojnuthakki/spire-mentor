@@ -21,6 +21,7 @@ use super::prelude::*;
 pub(crate) fn play_headbutt(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Headbutt: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // C# `CardSelectCmd.FromSimpleGrid` (CardSelectCmd.cs:222-224) returns an
     // empty selection immediately when `CombatManager.Instance.IsEnding`, so a
     // LETHAL Headbutt suppresses the put-back select (and its auto-move)

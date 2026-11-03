@@ -19,6 +19,7 @@ use super::prelude::*;
 pub(crate) fn play_hyperbeam(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
     let base = current_card_damage(state);
     deal_damage_player_to_all(state, base);
+    sts2_core::attack_command::end_card_command(state);
     apply_power_signed_to_player(state, PowerKind::Focus, -3);
     EffectResult::Resolved
 }

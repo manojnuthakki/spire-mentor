@@ -25,6 +25,7 @@ pub(crate) fn play_strangle(state: &mut CombatState, target: Option<CreatureUid>
     let t = target.expect("Strangle: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     // C# Strangle.cs OnUpgrade bumps StranglePower 2->3.
     let amt = if current_card_upgraded(state) { 3 } else { 2 };
     apply_power_to_enemy(state, t, PowerKind::Strangle, amt);

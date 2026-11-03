@@ -240,7 +240,6 @@ fn build_encounter_state(
         powered_hits_by_target_this_turn: smallvec::SmallVec::new(),
         powered_hits_at_card_play_start: 0,
         attack_command_suppressed_this_play: false,
-        vigor_latch_card: None,
         generated_cards_this_combat: 0,
         skills_played_this_turn: 0,
         card_plays_started_this_turn: 0,
@@ -332,6 +331,7 @@ fn build_encounter_state(
         is_boss: false,
         act_index: 1,
         active_attack: None,
+        attack_commands: sts2_core::attack_command::AttackCommandState::default(),
         energy_wasted: 0,
         cards_drawn: 0,
         pending_run_gold_loss: 0,
@@ -1282,31 +1282,57 @@ impl PyCombatState {
         //    represents the whole budget. Carrying it would restore a value
         //    the engine deliberately spent.
         //
-        // `vigor_latch_card` DOES need carrying. C# `VigorPower.BeforeAttack`
-        // latches `commandToModify` on the first powered attack so that only
-        // that card's later commands keep the bonus; the latch clears when
-        // Vigor is spent. Lost across a rebuild, a second command in the same
-        // play re-takes the additive boost. It names a card in the PLAY pile
-        // (`damage.rs:973` stores `play.last()`), which the wire ships in
-        // order, so translate it by position exactly as the draw-pile pins are
-        // translated above — and drop it when the piles disagree, since a
-        // latch pointing at the wrong card is worse than none.
-        // Length equality alone is a weak guard on a pile this short, so the
-        // card at the translated index must also BE the same card.
-        self.inner.player.vigor_latch_card = carried.inner.player.vigor_latch_card.and_then(|c| {
-            if self.inner.player.play.len() != carried.inner.player.play.len() {
+        // The Vigor / Gigantification command latches DO need carrying (F6
+        // step30, `sts2_core::attack_command`). C# `VigorPower.BeforeAttack`
+        // latches `commandToModify` (with the amount it started at) and
+        // `GigantificationPower` its own; only that command's card keeps the
+        // boost while it is latched. A decision never lands inside a command
+        // (each `OnPlay` closes the one it opened), so open frames are not
+        // carried; a latch can outlive its command only when the power
+        // survived it. Its card is named by uid, which the rebuild
+        // re-allocates: translate it by its PLAY-pile position, which the wire
+        // ships in order (as the draw-pile pins above are), and drop the latch
+        // when the piles disagree, since a latch pointing at the wrong card is
+        // worse than none. Length equality alone is a weak guard on a pile this
+        // short, so the card at the translated index must also BE the same
+        // card. The command counter is carried so a carried latch can never
+        // match a later command's id.
+        let translate = |fresh: &Self, c: sts2_core::CardUid| -> Option<sts2_core::CardUid> {
+            if fresh.inner.player.play.len() != carried.inner.player.play.len() {
                 return None;
             }
             let idx = carried.inner.player.play.iter().position(|p| *p == c)?;
-            let dst = *self.inner.player.play.get(idx)?;
+            let dst = *fresh.inner.player.play.get(idx)?;
             let same_card = |s: &Self, uid: sts2_core::CardUid| {
                 s.inner
                     .cards
                     .get(uid.0.get() as usize - 1)
                     .map(|k| k.card_id)
             };
-            (same_card(self, dst) == same_card(carried, c)).then_some(dst)
-        });
+            (same_card(fresh, dst) == same_card(carried, c)).then_some(dst)
+        };
+        let carry_latch = |fresh: &Self, l: sts2_core::attack_command::AttackPowerLatch| match l
+            .source
+        {
+            None => Some(l),
+            Some(c) => translate(fresh, c).map(|dst| sts2_core::attack_command::AttackPowerLatch {
+                source: Some(dst),
+                ..l
+            }),
+        };
+        let vigor = carried
+            .inner
+            .attack_commands
+            .vigor
+            .and_then(|l| carry_latch(self, l));
+        let gigantification = carried
+            .inner
+            .attack_commands
+            .gigantification
+            .and_then(|l| carry_latch(self, l));
+        self.inner.attack_commands.vigor = vigor;
+        self.inner.attack_commands.gigantification = gigantification;
+        self.inner.attack_commands.next_id = carried.inner.attack_commands.next_id;
 
         for name in carry_relic_counters.unwrap_or_default() {
             let kind = crate::state_dict::relic_kind_from_python_name(&name).ok_or_else(|| {
@@ -4223,14 +4249,19 @@ mod tests {
             move_hand_into_play(&mut fresh);
             // The SECOND card, so the assertion cannot pass on a hardcoded
             // head-of-pile.
-            carried.inner.player.vigor_latch_card = Some(carried.inner.player.play[1]);
+            carried.inner.attack_commands.vigor =
+                Some(sts2_core::attack_command::AttackPowerLatch {
+                    command: 3,
+                    source: Some(carried.inner.player.play[1]),
+                    amount_at_start: 8,
+                });
 
             fresh
                 .transplant_hidden(&carried, None, true, None, None)
                 .expect("shapes agree");
 
             assert_eq!(
-                fresh.inner.player.vigor_latch_card,
+                fresh.inner.attack_commands.vigor.and_then(|l| l.source),
                 Some(fresh.inner.player.play[1]),
                 "the latch names a card in the play pile, which the wire ships \
                  in order — so it translates by position like the draw pins"
@@ -4245,7 +4276,12 @@ mod tests {
         Python::with_gil(|py| {
             let mut carried = mirror_fixture(py);
             move_hand_into_play(&mut carried);
-            carried.inner.player.vigor_latch_card = Some(carried.inner.player.play[0]);
+            carried.inner.attack_commands.vigor =
+                Some(sts2_core::attack_command::AttackPowerLatch {
+                    command: 3,
+                    source: Some(carried.inner.player.play[0]),
+                    amount_at_start: 8,
+                });
 
             // The play pile emptied between decisions (the play resolved).
             let mut fresh = mirror_fixture(py);
@@ -4254,7 +4290,7 @@ mod tests {
                 .expect("shapes agree");
 
             assert_eq!(
-                fresh.inner.player.vigor_latch_card, None,
+                fresh.inner.attack_commands.vigor, None,
                 "the piles disagree, so the position is untranslatable"
             );
         });
@@ -4267,7 +4303,12 @@ mod tests {
         Python::with_gil(|py| {
             let mut carried = mirror_fixture(py);
             move_hand_into_play(&mut carried);
-            carried.inner.player.vigor_latch_card = Some(carried.inner.player.play[0]);
+            carried.inner.attack_commands.vigor =
+                Some(sts2_core::attack_command::AttackPowerLatch {
+                    command: 3,
+                    source: Some(carried.inner.player.play[0]),
+                    amount_at_start: 8,
+                });
 
             // Same length, same cards — reordered. Position 0 now names
             // DEFEND where the carried mirror latched STRIKE.
@@ -4280,7 +4321,7 @@ mod tests {
                 .expect("shapes agree");
 
             assert_eq!(
-                fresh.inner.player.vigor_latch_card, None,
+                fresh.inner.attack_commands.vigor, None,
                 "translating onto a different card would exempt the real Vigor \
                  card and boost an unrelated one"
             );

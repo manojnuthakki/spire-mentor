@@ -21,6 +21,7 @@ pub(crate) fn play_fisticuffs(
 ) -> EffectResult {
     let t = target.expect("Fisticuffs: Enemy-targeted");
     let outcome = deal_damage_player_to_enemy_full(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     gain_block_player(state, outcome.total_damage + outcome.overkill);
     EffectResult::Resolved
 }

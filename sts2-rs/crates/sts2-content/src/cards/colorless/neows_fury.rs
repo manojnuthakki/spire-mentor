@@ -20,6 +20,7 @@ pub(crate) fn play_neows_fury(
 ) -> EffectResult {
     let t = target.expect("NeowsFury: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // Bead `sts2-rs-8iucs`: C# `NeowsFury.cs` `CardsVar(2)` with `OnUpgrade
     // UpgradeValueBy(1m)` → up to 2 discards base / 3 upgraded.
     let want: usize = if current_upgraded(state) { 3 } else { 2 };

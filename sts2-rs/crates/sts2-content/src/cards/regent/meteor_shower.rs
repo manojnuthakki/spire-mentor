@@ -9,6 +9,7 @@ use super::prelude::*;
 // Port-pin: sts2-rl-agent@01c094d:sts2_env/cards/regent.py:L853
 pub(crate) fn play_meteor_shower(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
     deal_damage_all_enemies(state, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let uids: Vec<CreatureUid> = state.enemy_uids.iter().copied().collect();
     for uid in uids {
         if state

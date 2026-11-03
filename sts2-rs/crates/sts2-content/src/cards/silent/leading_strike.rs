@@ -12,6 +12,7 @@ pub(crate) fn play_leading_strike(
     let t = target.expect("LeadingStrike: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     for _ in 0..2 {
         let _ = spawn_shiv(state, PileKind::Hand);
     }

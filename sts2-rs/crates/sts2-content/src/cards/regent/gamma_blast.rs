@@ -9,6 +9,7 @@ pub(crate) fn play_gamma_blast(
 ) -> EffectResult {
     let t = target.expect("GammaBlast: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     apply_power_to_enemy(state, t, PowerKind::Weak, 2);
     apply_power_to_enemy(state, t, PowerKind::Vulnerable, 2);
     EffectResult::Resolved

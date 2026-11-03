@@ -9,6 +9,7 @@ pub(crate) fn play_poisoned_stab(
     let t = target.expect("PoisonedStab: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     // C# PoisonedStab.cs OnUpgrade bumps Poison 3->4. Bead `sts2-rs-qplr9`.
     let poison = if current_card_upgraded(state) { 4 } else { 3 };
     apply_power_to_enemy(state, t, PowerKind::Poison, poison);

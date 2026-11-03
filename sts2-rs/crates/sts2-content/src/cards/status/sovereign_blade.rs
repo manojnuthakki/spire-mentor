@@ -32,6 +32,7 @@ pub(crate) fn play_sovereign_blade(
             card,
         );
     }
+    sts2_core::attack_command::end_card_command(state);
     // Parry (C# v0.107.1): `ParryPower` is an inert marker; `SovereignBlade`
     // reads `GetOwnerParryAmount` (= the `ParryPower` amount) and gains that
     // much Block via a `CalculatedBlockVar(ValueProp.Move)` — a powered

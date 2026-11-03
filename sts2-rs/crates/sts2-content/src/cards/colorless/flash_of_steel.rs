@@ -14,6 +14,7 @@ pub(crate) fn play_flash_of_steel(
 ) -> EffectResult {
     let t = target.expect("FlashOfSteel: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let _ = sts2_core::cards::draw_via_state(state, 1);
     EffectResult::Resolved
 }

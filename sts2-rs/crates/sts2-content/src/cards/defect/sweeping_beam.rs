@@ -10,6 +10,7 @@ use super::prelude::*;
 pub(crate) fn play_sweeping_beam(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
     let base = current_card_damage(state);
     deal_damage_player_to_all(state, base);
+    sts2_core::attack_command::end_card_command(state);
     let _ = sts2_core::cards::draw_via_state(state, 1);
     EffectResult::Resolved
 }

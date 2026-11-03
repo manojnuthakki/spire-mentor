@@ -11,6 +11,7 @@ pub(crate) fn play_molten_fist(
 ) -> EffectResult {
     let t = target.expect("MoltenFist: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let existing = enemy_vulnerable(state, t);
     if existing > 0 {
         apply_power_to_enemy(state, t, PowerKind::Vulnerable, existing);

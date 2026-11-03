@@ -26,6 +26,7 @@ pub(crate) fn play_graveblast(
 ) -> EffectResult {
     let t = target.expect("Graveblast: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // A lethal Graveblast ends combat before the discard select: C#
     // `CardSelectCmd.FromSimpleGrid` returns empty when `IsEnding`
     // (CardSelectCmd.cs:222-224), so suppress the select here too.

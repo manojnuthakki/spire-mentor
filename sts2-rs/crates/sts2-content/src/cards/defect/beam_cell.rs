@@ -10,6 +10,7 @@ pub(crate) fn play_beam_cell(state: &mut CombatState, target: Option<CreatureUid
     let t = target.expect("BeamCell: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     // C# BeamCell.cs OnUpgrade bumps Vulnerable 1->2 (Damage +1 flows via
     // current_card_damage). Bead `sts2-rs-ofyps`.
     let vuln = if current_card_upgraded(state) { 2 } else { 1 };

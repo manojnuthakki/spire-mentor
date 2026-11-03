@@ -149,98 +149,6 @@ fn phantasmal_gardener_enlarge_effect(state: &mut CombatState, owner: sts2_core:
     sts2_core::card_effects::apply_power_to_creature(state, owner, PowerKind::Strength, amount);
 }
 
-/// C# `SkittishPower.AfterAttack`
-/// (`../sts2-wiki/decompiled/v0.107.1/MegaCrit.Sts2.Core.Models.Powers/SkittishPower.cs:56-69`):
-///
-/// [decompiled C# omitted — see the cited path]
-///
-/// PhantasmalGardener spawns with `SkittishPower(6)`
-/// (`PhantasmalGardener.cs:92`, wired in `sts2-core::monsters::on_spawn_self_buffs`);
-/// the power was recorded but had no listener body at all, so the mirror showed
-/// block 0 where the world showed 6 and MCTS over-valued every attack into a
-/// gardener by that block.
-///
-/// **Two-phase, like `CurlUp`.** C# grants the block in `AfterAttack`, i.e.
-/// AFTER the whole `AttackCommand` — so none of that command's own hits are
-/// absorbed by the fresh block. This hook therefore only LATCHES
-/// (`Power::skip_next_tick = true`); the grant runs in the core
-/// `hooks::grant_latched_skittish`, from the `dispatch_after_card_played`
-/// lane (or before a mid-play selection surfaces), which is the engine's
-/// established surrogate for C#'s per-command `AfterAttack` boundary (the same
-/// collapse Vigor / Gigantification / CurlUp use). The residual difference is
-/// a card that issues TWO separate attack commands — C# would grant between
-/// them, we grant after both — but the once-per-turn gate means at most one
-/// grant either way.
-///
-/// Gate notes vs `curl_up_after_damage`:
-/// * `ValueProp.Move` (`props.is_card_or_monster_move()`), **not**
-///   `IsPoweredAttack()` — an UNPOWERED card attack still triggers Skittish.
-/// * `ModelSource is CardModel` is true for `FromCard` AND `FromOsty`
-///   (`Commands.Builders/AttackCommand.cs:208-237` both assign
-///   `ModelSource = card`), so the player's Osty counts as a card source.
-/// * `UnblockedDamage != 0` — a fully-blocked hit does NOT arm the latch
-///   (unlike CurlUp, whose C# body ignores the `DamageResult`).
-fn skittish_after_damage(
-    state: &mut CombatState,
-    owner: sts2_core::CreatureUid,
-    dealer: sts2_core::hooks::CreatureRef,
-    props: sts2_core::hooks::ValueProps,
-    unblocked_damage: i32,
-) -> sts2_core::card_effects::EffectResult {
-    use sts2_core::hooks::{CreatureRef, ValueProps};
-    // C# `ValuePropExtensions.IsCardOrMonsterMove` = `props.HasFlag(Move)`.
-    if unblocked_damage == 0 || !props.contains(ValueProps::MOVE) {
-        return sts2_core::card_effects::EffectResult::NotImplemented;
-    }
-    // `command.ModelSource is CardModel` — the player's own card, or a card
-    // routed through the player's Osty (`FromOsty(osty, card)`).
-    let card_sourced = match dealer {
-        CreatureRef::Player => true,
-        CreatureRef::Enemy(uid) => state.player.pet_uid == Some(uid),
-        CreatureRef::Ally(_) | CreatureRef::Nobody => false,
-    };
-    if !card_sourced {
-        return sts2_core::card_effects::EffectResult::NotImplemented;
-    }
-    // `!HasGainedBlockThisTurn` (`counter == 0`) → arm the grant.
-    let pid: Option<std::num::NonZeroU32> = state
-        .creatures
-        .iter()
-        .find(|c| c.id == owner.0)
-        .and_then(|c| {
-            c.powers.iter().find_map(|puid| {
-                state
-                    .powers
-                    .iter()
-                    .find(|p| {
-                        p.id == puid.0
-                            && p.kind == PowerKind::Skittish
-                            && p.amount > 0
-                            && p.counter == 0
-                    })
-                    .map(|p| p.id)
-            })
-        });
-    let Some(pid) = pid else {
-        return sts2_core::card_effects::EffectResult::NotImplemented;
-    };
-    if let Some(p) = state.powers.get_mut_by_id(pid) {
-        p.skip_next_tick = true;
-    }
-    sts2_core::card_effects::EffectResult::Resolved
-}
-
-/// Idempotent installer for SkittishPower's `AfterDamageReceived` latch.
-/// Called via a `Once` guard from [`create_phantasmal_gardener_ai`] — every
-/// gardener spawn flows through it, so the handler is present before any
-/// combat damage event. Safe to call from multiple boot paths.
-pub fn install_skittish_handlers() {
-    sts2_core::monster_power_effects::register_after_damage_received_for_power(
-        PowerKind::Skittish,
-        skittish_after_damage,
-    );
-}
-
 /// `SkulkingColony` INERTIA →
 /// `PowerCmd.Apply<StrengthPower>(base.Creature, InertiaStrengthGain, …)`
 /// (`MegaCrit.Sts2.Core.Models.Monsters/SkulkingColony.cs:83`). v0.107.1
@@ -1651,17 +1559,9 @@ pub enum PhantasmalGardenerSlot {
 /// The C# also applies `SkittishPower(SkittishAmount=6)` on
 /// `AfterAddedToRoom` (`PhantasmalGardener.cs:92`); the spawn grant lives in
 /// `sts2-core::monsters::on_spawn_self_buffs`, and its reactive body is the
-/// [`skittish_after_damage`] latch + the core `dispatch_after_card_played`
-/// grant lane, installed once here.
+/// core `hooks::skittish_after_attack`, run at each player attack command's
+/// `AfterAttack` (`sts2-core::attack_command`).
 pub fn create_phantasmal_gardener_ai(slot: PhantasmalGardenerSlot) -> MonsterAi {
-    // Register the Skittish latch once per process — every PhantasmalGardener
-    // spawn flows through this factory, so the handler is in place before any
-    // combat damage event (same shape as `install_curl_up_handlers`).
-    {
-        use std::sync::OnceLock;
-        static INSTALL_SKITTISH: OnceLock<()> = OnceLock::new();
-        INSTALL_SKITTISH.get_or_init(install_skittish_handlers);
-    }
     let mut s = BTreeMap::new();
     s.insert(
         "BITE",

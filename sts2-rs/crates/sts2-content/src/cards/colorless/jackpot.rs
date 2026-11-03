@@ -36,6 +36,7 @@ pub(crate) fn play_jackpot(state: &mut CombatState, target: Option<CreatureUid>)
 
     let t = target.expect("Jackpot: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
 
     // C# `Jackpot.OnPlay`:
     //   `Owner.Character.CardPool.GetUnlockedCards(...).Where(cost==0 && !CostsX)`

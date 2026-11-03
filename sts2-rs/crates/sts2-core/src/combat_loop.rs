@@ -688,11 +688,6 @@ pub fn start_player_turn(state: &mut CombatState) -> StepResult {
     // reset here so `echo_form_first_in_series_this_turn`'s max cannot be held
     // up by a stale half.
     reset_echo_form_series_tally(state);
-    // Release any stale Vigor command-latch at turn start (bead
-    // `sts2-rs-vigor-cmd`): the latch normally clears on Vigor consume, but a
-    // turn that ends with un-consumed Vigor (no attack played) must not carry a
-    // stale latch into the next turn's first attack.
-    state.player.vigor_latch_card = None;
 
     // Step 3: fire before_side_turn_start(PLAYER). The TurnSideCtx is
     // a placeholder POD at this pin — Phase 6 grows it to carry the
@@ -7085,9 +7080,8 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
         if state.is_over {
             resolve_inline_auto_play_choices(state);
         } else {
-            // The body's attack commands have finished by the time it asks
-            // (C# `AfterAttack` fired): Skittish's block shows at the pick.
-            crate::hooks::grant_latched_skittish(state);
+            // The body's attack command finished (its `AfterAttack` ran in
+            // `dispatch_for_card`) before the pick surfaces.
             state.pending_play = Some(crate::PendingPlay { finish: fin });
             return StepResult::PendingChoice;
         }

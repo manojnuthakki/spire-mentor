@@ -16,6 +16,7 @@ use super::prelude::*;
 pub(crate) fn play_reave(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Reave: AnyEnemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
 
     // C# Cards.IntValue == 1; Reave's OnUpgrade does not touch CardsVar, so
     // always generate exactly one Soul. If Reave is upgraded, the spawned

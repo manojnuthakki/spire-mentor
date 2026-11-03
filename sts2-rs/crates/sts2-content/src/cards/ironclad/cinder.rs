@@ -10,6 +10,7 @@ use super::prelude::*;
 pub(crate) fn play_cinder(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Cinder: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // Snapshot hand uids; `exhaust_hand_card` mutates `state.player.hand`.
     let hand: Vec<sts2_core::CardUid> = state.player.hand.iter().copied().collect();
     if !hand.is_empty() {

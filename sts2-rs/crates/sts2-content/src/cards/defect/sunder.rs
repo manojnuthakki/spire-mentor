@@ -20,6 +20,7 @@ pub(crate) fn play_sunder(state: &mut CombatState, target: Option<CreatureUid>) 
         .find(|c| c.id == t.0)
         .map_or(0, |c| c.current_hp);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     let post_hp = state
         .creatures
         .iter()

@@ -16,6 +16,7 @@ pub(crate) fn play_all_for_one(
     let t = target.expect("AllForOne: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     let candidates: smallvec::SmallVec<[sts2_core::CardUid; 8]> =
         sts2_core::card_effects::search_pile(state, PileKind::Discard, |c| {
             c.cost == 0

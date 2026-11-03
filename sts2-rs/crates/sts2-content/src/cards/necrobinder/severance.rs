@@ -25,6 +25,7 @@ use super::prelude::*;
 pub(crate) fn play_severance(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Severance: AnyEnemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
 
     // souls[0] -> Draw at CardPilePosition.Random.
     let soul_draw = card_from_spec(&status_specs::soul());

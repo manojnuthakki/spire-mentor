@@ -9,6 +9,7 @@ use super::prelude::*;
 pub(crate) fn play_pillage(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Pillage: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // C# do/while (`Pillage.cs:28-33`): draw 1, then continue while
     // `drawn != null && drawn.Type == Attack && hand.Count < 10`. The loop
     // keys on the RETURNED drawn card, NOT the hand size — so it keeps

@@ -12,6 +12,7 @@ pub(crate) fn play_synthesis(state: &mut CombatState, target: Option<CreatureUid
     let t = target.expect("Synthesis: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     apply_power_to_player(state, PowerKind::FreePower, 1);
     EffectResult::Resolved
 }

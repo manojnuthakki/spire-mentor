@@ -19,6 +19,7 @@ use super::prelude::*;
 pub(crate) fn play_mangle(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Mangle: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // C# Mangle.cs OnUpgrade bumps StrengthLoss 10->15. Bead `sts2-rs-ja5qw`.
     let amt = if current_upgraded(state) { 15 } else { 10 };
     // C# `PowerCmd.Apply<ManglePower>` first folds the amount through

@@ -9,6 +9,7 @@ use super::prelude::*;
 // Port-pin: sts2-rl-agent@01c094d:sts2_env/cards/regent.py:L682
 pub(crate) fn play_dying_star(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
     deal_damage_all_enemies(state, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     // C# `DyingStar.cs` OnUpgrade bumps StrengthLoss 9→11 alongside the
     // Damage upgrade. Bead `sts2-rs-upqp8`.
     let strength_loss = if current_card_upgraded(state) { 11 } else { 9 };

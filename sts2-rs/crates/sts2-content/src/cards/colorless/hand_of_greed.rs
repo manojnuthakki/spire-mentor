@@ -31,6 +31,7 @@ pub(crate) fn play_hand_of_greed(
     let t = target.expect("HandOfGreed: Enemy-targeted");
     let should_trigger_fatal = sts2_core::card_effects::should_owner_death_trigger_fatal(state, t);
     let _ = deal_damage_player_to_enemy_full(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     let killed = state
         .creatures
         .iter()

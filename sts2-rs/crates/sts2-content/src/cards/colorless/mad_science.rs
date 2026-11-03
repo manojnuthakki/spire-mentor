@@ -61,9 +61,15 @@ pub(crate) fn play_mad_science(
                 1
             };
             if let Some(t) = target {
-                let damage = current_damage(state);
+                // C# `ExecuteAttack` runs one `AttackCommand` per hit (its
+                // `Execute` sits inside the loop), each with its own
+                // BeforeAttack/AfterAttack, so each hit's damage is computed
+                // after the previous command spent its Vigor.
                 for _ in 0..hits {
+                    sts2_core::attack_command::begin_card_command(state);
+                    let damage = current_damage(state);
                     let _ = deal_damage_player_to_enemy(state, t, damage);
+                    sts2_core::attack_command::end_card_command(state);
                 }
             }
         }

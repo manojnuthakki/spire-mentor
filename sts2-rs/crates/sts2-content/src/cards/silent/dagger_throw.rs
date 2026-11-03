@@ -16,6 +16,7 @@ pub(crate) fn play_dagger_throw(
     let t = target.expect("DaggerThrow: Enemy-targeted");
     let base = current_card_damage(state);
     let _ = deal_damage_player_to_enemy(state, t, base);
+    sts2_core::attack_command::end_card_command(state);
     let _ = sts2_core::cards::draw_via_state(state, 1);
     request_discard_from_hand(state, 1);
     EffectResult::Resolved

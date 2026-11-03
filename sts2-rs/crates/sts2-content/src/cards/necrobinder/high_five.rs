@@ -55,6 +55,7 @@ pub(crate) fn play_high_five(
     // player-dealer-gated effects do not fire). `deal_damage_from_osty_to_all_
     // alive_enemies` resolves the dealer as the pet creature (see `osty_dealer_ref`).
     deal_damage_from_osty_to_all_alive_enemies(state, dmg);
+    sts2_core::attack_command::end_card_command(state);
 
     // C# `PowerCmd.Apply<VulnerablePower>(CombatState.HittableEnemies, Vulnerable.
     // BaseValue, Owner.Creature, this)` — apply Vulnerable to every alive enemy.

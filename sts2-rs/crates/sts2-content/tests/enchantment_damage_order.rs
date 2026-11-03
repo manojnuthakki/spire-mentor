@@ -98,12 +98,20 @@ fn enchant_order_precedes_strength_weak_vulnerable_and_vigor_identity() {
             (enchanted + 2) * 3 / 4
         );
         power(&mut s, CreatureRef::Player, PowerKind::Vigor, 4);
-        s.player.vigor_latch_card = Some(CardUid::new(2).unwrap());
+        s.attack_commands.vigor = Some(sts2_core::attack_command::AttackPowerLatch {
+            command: 0,
+            source: Some(CardUid::new(2).unwrap()),
+            amount_at_start: 4,
+        });
         assert_eq!(
             sts2_core::hooks::modify_damage(&s, 6, &null),
             (enchanted + 2) * 3 / 4
         );
-        s.player.vigor_latch_card = Some(s.cards[0].uid);
+        s.attack_commands.vigor = Some(sts2_core::attack_command::AttackPowerLatch {
+            command: 0,
+            source: Some(s.cards[0].uid),
+            amount_at_start: 4,
+        });
         assert_eq!(
             sts2_core::hooks::modify_damage(&s, 6, &null),
             (enchanted + 6) * 3 / 4

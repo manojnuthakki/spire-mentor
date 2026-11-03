@@ -80,6 +80,10 @@ pub use powers::PowerKind;
 // pipeline → block → hp.
 pub mod damage;
 
+// The player's attack commands (C# `AttackCommand`): identity, admission,
+// results and the BeforeAttack/AfterAttack lifecycle.
+pub mod attack_command;
+
 // Opt-in forensics for "which effect spent that HP?" — the question a mirror
 // desync poses and cannot answer. Off by default; see the module docs.
 pub mod damage_trace;
@@ -2048,21 +2052,6 @@ pub struct PlayerCombatState {
     /// Bead `sts2-rs-pacts-no-command`.
     pub attack_command_suppressed_this_play: bool,
 
-    /// Engine-private scratch: the card whose attack first consumed a live
-    /// `VigorPower` this play — C# `VigorPower` latches `commandToModify` on
-    /// the FIRST powered `AttackCommand` (`BeforeAttack`) and its
-    /// `ModifyDamageAdditive` only boosts hits whose `cardSource` matches that
-    /// command's card. We mirror that by recording the `play.last()` card after
-    /// the first powered player hit; the Vigor additive arm then boosts only
-    /// hits sourced from that latched card (`None` = not yet latched ⇒ apply,
-    /// covering the first command and card-less attacks). Scopes Vigor to one
-    /// attack command so a card that triggers a SECOND command in the same play
-    /// (Uproar's auto-played follow-up attack) does NOT get the bonus. Cleared
-    /// when Vigor is consumed (`after_turn`/`after_card_played`) and at
-    /// side-turn start. Not serialized / not hashed (transient). Bead
-    /// `sts2-rs-vigor-cmd`.
-    pub vigor_latch_card: Option<CardUid>,
-
     /// Per-combat count of cards materialised into the player's hand via
     /// the "generated card" path ([`crate::card_effects::spawn_card_into_hand`]
     /// — colorless-modifier generation, `CollisionCourse` Debris,
@@ -3922,6 +3911,12 @@ pub struct CombatState {
     /// production combat.
     pub active_attack: Option<ActiveAttack>,
 
+    /// The player's attack commands: the open ones (innermost last), the next
+    /// command id and the Vigor / Gigantification command latches. Never holds
+    /// an open command between `apply()` calls (each `OnPlay` dispatch closes
+    /// what it opened). See [`crate::attack_command`].
+    pub attack_commands: crate::attack_command::AttackCommandState,
+
     /// The most-recently-appended entry in [`Self::master_deck`].
     /// `None` when no card has been added yet. Bead `sts2-rs-anx`.
     ///
@@ -4096,6 +4091,7 @@ impl Default for CombatState {
             is_boss: false,
             act_index: 1,
             active_attack: None,
+            attack_commands: crate::attack_command::AttackCommandState::default(),
             energy_wasted: 0,
             cards_drawn: 0,
             pending_run_gold_loss: 0,

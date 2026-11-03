@@ -50,7 +50,6 @@ fn gardener_state(enemy_block: i32) -> CombatState {
     // The latch hook installs when a PhantasmalGardener AI is built; this test
     // mounts the power directly, so install it explicitly (same shape as the
     // CurlUp regression test).
-    sts2_content::monsters::act1_underdocks::install_skittish_handlers();
 
     let mut state = CombatState::default();
     let eid = NonZeroU32::new(1).expect("nz");

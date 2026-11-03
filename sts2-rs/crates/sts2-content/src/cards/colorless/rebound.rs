@@ -12,6 +12,7 @@ use super::prelude::*;
 pub(crate) fn play_rebound(state: &mut CombatState, target: Option<CreatureUid>) -> EffectResult {
     let t = target.expect("Rebound: Enemy-targeted");
     let _ = deal_damage_player_to_enemy(state, t, current_damage(state));
+    sts2_core::attack_command::end_card_command(state);
     if let Some(uid) = state.player.creature_uid {
         apply_power_to_creature(state, uid, PowerKind::Rebound, 1);
     }

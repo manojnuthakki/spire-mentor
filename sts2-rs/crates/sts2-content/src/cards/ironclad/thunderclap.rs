@@ -24,6 +24,7 @@ pub(crate) fn play_thunderclap(state: &mut CombatState, _t: Option<CreatureUid>)
             let _ = deal_damage_player_to_enemy(state, uid, dmg);
         }
     }
+    sts2_core::attack_command::end_card_command(state);
     // Re-snapshot AFTER damage: C# applies Vulnerable to `HittableEnemies`
     // evaluated post-damage, so death-spawned minions are included and dead
     // enemies excluded.
