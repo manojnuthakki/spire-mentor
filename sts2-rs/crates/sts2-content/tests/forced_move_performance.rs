@@ -209,7 +209,7 @@ fn blocked_body_is_admitted_once_and_completes_only_after_choice() {
 }
 
 #[test]
-fn actor_killed_during_its_body_completes_but_dead_roster_slot_never_starts() {
+fn actor_killed_during_its_body_completes_and_is_absent_from_the_next_roster() {
     let (mut s, tunneler) = board(
         MonsterKind::Tunneler,
         act2_hive::create_tunneler_ai(),
@@ -237,4 +237,85 @@ fn actor_killed_during_its_body_completes_but_dead_roster_slot_never_starts() {
         &["BITE_MOVE"],
         "a corpse is not admitted again"
     );
+}
+
+fn earlier_body_board(
+    effect: sts2_core::monster_ai::EffectFn,
+) -> (CombatState, CreatureUid, CreatureUid) {
+    let mut first_ai = act2_hive::create_tunneler_ai();
+    let sts2_core::monster_ai::MonsterState::Move(m) =
+        std::sync::Arc::make_mut(&mut first_ai.states)
+            .get_mut("BITE_MOVE")
+            .unwrap()
+    else {
+        unreachable!()
+    };
+    m.effect = effect;
+    m.intents = smallvec::smallvec![sts2_core::Intent::Buff {
+        kind: PowerKind::Strength,
+        amount: 0
+    }];
+    let (mut s, first) = board(MonsterKind::Tunneler, first_ai, None, 80);
+    let later = s.spawn_enemy(MonsterKind::Tunneler);
+    let later_ai = act2_hive::create_tunneler_ai();
+    let intent = later_ai.current_move().intents.first().copied();
+    s.set_creature_ai(later, later_ai);
+    s.creatures
+        .iter_mut()
+        .find(|c| c.id == later.0)
+        .unwrap()
+        .intent = intent;
+    let survivor = s.spawn_enemy(MonsterKind::Nibbit);
+    s.creatures
+        .iter_mut()
+        .find(|c| c.id == survivor.0)
+        .unwrap()
+        .intent = None;
+    (s, first, later)
+}
+
+#[test]
+fn earlier_body_kills_a_later_snapshotted_actor_without_admitting_it() {
+    fn kill_later(s: &mut CombatState, owner: CreatureUid) {
+        let later = s.enemy_uids[1];
+        assert_ne!(owner, later);
+        sts2_core::damage::apply_damage(
+            s,
+            sts2_core::hooks::CreatureRef::Enemy(owner),
+            later,
+            1000,
+            sts2_core::hooks::ValueProps::NONE,
+            None,
+        );
+    }
+    let (mut s, first, later) = earlier_body_board(kill_later);
+    let mut cloned = s.clone();
+    for state in [&mut s, &mut cloned] {
+        assert_eq!(enemy_turn_exec(state), StepResult::Advanced);
+        assert_eq!(state.player.current_hp, 5000);
+        assert!(ai(state, first).performed_first_move());
+        let victim = state.creatures.iter().find(|c| c.id == later.0).unwrap();
+        assert_eq!(victim.current_hp, 0);
+        assert!(!ai(state, later).performed_first_move());
+        assert!(!ai(state, later).performed_current_move());
+        assert!(ai(state, later).move_history().is_empty());
+        assert_eq!(victim.intent_history.last_kind, None);
+    }
+}
+
+#[test]
+fn later_slot_uses_live_projected_intent_instead_of_static_ai_or_roster_copy() {
+    fn change_later_intent(s: &mut CombatState, _: CreatureUid) {
+        let later = s.enemy_uids[1];
+        s.creatures
+            .iter_mut()
+            .find(|c| c.id == later.0)
+            .unwrap()
+            .intent = Some(sts2_core::Intent::Attack { damage: 2 });
+    }
+    let (mut s, _, later) = earlier_body_board(change_later_intent);
+    assert_eq!(ai(&s, later).current_move().intents[0].damage(), 13);
+    assert_eq!(enemy_turn_exec(&mut s), StepResult::Advanced);
+    assert_eq!(s.player.current_hp, 4998);
+    assert_eq!(ai(&s, later).move_history(), &["BITE_MOVE"]);
 }

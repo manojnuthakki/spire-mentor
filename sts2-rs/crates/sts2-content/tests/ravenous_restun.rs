@@ -76,6 +76,117 @@ fn turn(s: &mut CombatState) {
     assert_eq!(enemy_turn_end(s), StepResult::Advanced);
 }
 
+fn reflected_walk(kinds: &[MonsterKind], hps: &[i32]) -> (CombatState, Vec<CreatureUid>) {
+    sts2_content::cards::dispatch::install_default_registry();
+    sts2_content::relics::dispatch::ensure_installed();
+    let mut s = CombatState::default();
+    s.player.current_hp = 100;
+    s.player.max_hp = 100;
+    s.init_player_creature();
+    s.side = Side::Enemy;
+    s.phase = CombatPhase::EnemyTurnExec;
+    let player = s.player.creature_uid.unwrap();
+    sts2_core::card_effects::apply_power_to_creature(&mut s, player, PowerKind::Thorns, 3);
+    let mut actors = Vec::new();
+    for (&kind, &hp) in kinds.iter().zip(hps) {
+        let uid = s.spawn_enemy(kind);
+        let ai = match kind {
+            MonsterKind::CorpseSlug => create_corpse_slug_ai(1),
+            MonsterKind::Tunneler => sts2_content::monsters::act2_hive::create_tunneler_ai(),
+            _ => unreachable!(),
+        };
+        let intent = ai.current_move().intents.first().copied();
+        s.set_creature_ai(uid, ai);
+        let c = s.creatures.iter_mut().find(|c| c.id == uid.0).unwrap();
+        c.current_hp = hp;
+        c.max_hp = 80;
+        c.block = 0;
+        c.intent = intent;
+        actors.push(uid);
+    }
+    (s, actors)
+}
+
+#[test]
+fn earlier_reflection_death_replaces_later_slug_attacks_at_their_slots() {
+    for hps in [&[1, 80][..], &[1, 1, 80][..]] {
+        let (mut s, actors) = reflected_walk(&vec![MonsterKind::CorpseSlug; hps.len()], hps);
+        let mut cloned = s.clone();
+        for state in [&mut s, &mut cloned] {
+            assert_eq!(enemy_turn_exec(state), StepResult::Advanced);
+            assert_eq!(state.player.current_hp, 92, "only the first GLOMP executes");
+            let first = state
+                .creatures
+                .iter()
+                .find(|c| c.id == actors[0].0)
+                .unwrap();
+            assert_eq!(first.current_hp, 0);
+            assert_eq!(first.ai.as_ref().unwrap().move_history(), &["GLOMP"]);
+            for (&uid, &hp) in actors[1..].iter().zip(&hps[1..]) {
+                let c = state.creatures.iter().find(|c| c.id == uid.0).unwrap();
+                let ai = c.ai.as_ref().unwrap();
+                assert_eq!(c.current_hp, hp, "the stunned actor never hits Thorns");
+                assert_eq!(ai.current_state_id(), "STUNNED");
+                assert!(ai.performed_current_move());
+                assert!(ai.performed_first_move());
+                assert_eq!(ai.move_history(), &["STUNNED"]);
+                assert_eq!(
+                    c.intent_history.last_kind,
+                    Some(sts2_core::monsters::IntentKindTag::Stun)
+                );
+                assert_eq!(ai.forced_next_state(), Some("GLOMP"));
+                assert_eq!(strength(state, uid), 4);
+            }
+            assert_eq!(enemy_turn_end(state), StepResult::Advanced);
+            for &uid in &actors[1..] {
+                assert_eq!(current(state, uid), "GLOMP");
+            }
+            state.phase = CombatPhase::EnemyTurnExec;
+            assert_eq!(enemy_turn_exec(state), StepResult::Advanced);
+            assert_eq!(
+                state.player.current_hp, 80,
+                "normal resume, with a later restun if the second slug dies"
+            );
+            if actors.len() == 3 {
+                let last = state
+                    .creatures
+                    .iter()
+                    .find(|c| c.id == actors[2].0)
+                    .unwrap();
+                assert_eq!(
+                    last.ai.as_ref().unwrap().move_history(),
+                    &["STUNNED", "STUNNED"]
+                );
+                assert_eq!(strength(state, actors[2]), 8);
+            }
+        }
+    }
+}
+
+#[test]
+fn two_earlier_reflection_deaths_restun_before_the_later_slot_without_extra_attack() {
+    let (mut s, actors) = reflected_walk(
+        &[
+            MonsterKind::Tunneler,
+            MonsterKind::Tunneler,
+            MonsterKind::CorpseSlug,
+        ],
+        &[1, 1, 80],
+    );
+    assert_eq!(enemy_turn_exec(&mut s), StepResult::Advanced);
+    assert_eq!(
+        s.player.current_hp, 74,
+        "only two BITE_MOVE13 attacks execute"
+    );
+    assert_eq!(current(&s, actors[2]), "STUNNED");
+    assert_eq!(strength(&s, actors[2]), 8);
+    let last = s.creatures.iter().find(|c| c.id == actors[2].0).unwrap();
+    assert_eq!(last.ai.as_ref().unwrap().move_history(), &["STUNNED"]);
+    assert_eq!(last.ai.as_ref().unwrap().forced_next_state(), Some("GLOMP"));
+    assert_eq!(enemy_turn_end(&mut s), StepResult::Advanced);
+    assert_eq!(current(&s, actors[2]), "GLOMP");
+}
+
 fn repeated_deaths(starter: u8, original: &str, next: &str) {
     for side in [Side::Player, Side::Enemy] {
         let (mut s, slug, allies) = board(starter, side);

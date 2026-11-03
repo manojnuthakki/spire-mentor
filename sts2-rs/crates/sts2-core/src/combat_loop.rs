@@ -3822,7 +3822,9 @@ pub fn enemy_turn_exec(state: &mut CombatState) -> StepResult {
 ///
 /// `acting` is the `(uid, intent)` roster snapshot taken at `enemy_turn_exec`
 /// entry (see its Step-2 rationale for why it is snapshotted rather than
-/// re-queried). Monsters `[0, start_index)` have already performed; the walk
+/// re-queried). It preserves order and initial eligibility, not the move body:
+/// each slot reads the actor's live intent after earlier actors' effects.
+/// Monsters `[0, start_index)` have already performed; the walk
 /// resumes at `start_index` and advances to `EnemyTurnEnd` after each actual
 /// body's admission/completion has been recorded at that actor's slot.
 ///
@@ -3865,7 +3867,7 @@ fn run_enemy_perform_walk(
     // multi-state monsters collapse to their turn-0 intent forever.
     let mut slot = start_index;
     while slot < acting_enemies.len() {
-        let (enemy_uid, intent) = acting_enemies[slot];
+        let (enemy_uid, _) = acting_enemies[slot];
         slot += 1;
         // Recheck admission at the actual slot: an earlier body may have
         // removed/killed this actor. Retained Reattach corpses legitimately
@@ -3873,6 +3875,12 @@ fn run_enemy_perform_walk(
         let Some(idx) = crate::creature_pos(&state.creatures, enemy_uid.0) else {
             continue;
         };
+        // Native MonsterModel.PerformMove captures NextMove when this actor
+        // starts, not when the roster was built. Earlier bodies can force a
+        // replacement (e.g. Ravenous after reflected damage kills an ally).
+        // Use the live projection, including dynamic hit/damage adjustments,
+        // for admission, execution and intent-history attribution alike.
+        let intent = state.creatures[idx].intent;
         let reattach = is_acting_reattach_corpse(state, &state.creatures[idx]);
         if !reattach && (state.creatures[idx].current_hp <= 0 || intent.is_none()) {
             continue;
