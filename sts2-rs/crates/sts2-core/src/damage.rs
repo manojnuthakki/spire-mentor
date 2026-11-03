@@ -757,9 +757,42 @@ fn apply_damage_with_final_impl(
 ) -> DamageOutcome {
     // The running Attack card's first hit opens its attack command (C#
     // `AttackCommand.Execute` admits and awaits `BeforeAttack` before any hit;
-    // a command whose target is already gone still runs). See
-    // [`crate::attack_command`].
-    crate::attack_command::before_hit(state, dealer, props);
+    // a command whose target is already gone still runs). A refused command,
+    // or one whose attacker died or whose combat is ending, runs no further
+    // hit. Damage dealt while this call runs (reactions to it) is never a
+    // command hit. See [`crate::attack_command`].
+    let owner = crate::attack_command::before_hit(state, dealer, props);
+    if owner == crate::attack_command::HitOwner::Stopped {
+        return DamageOutcome {
+            hp_loss: 0,
+            blocked: 0,
+            overkill: 0,
+            total_damage: 0,
+        };
+    }
+    state.attack_commands.damage_depth += 1;
+    let out = apply_damage_hit(
+        state,
+        dealer,
+        target,
+        final_damage,
+        props,
+        bypass_hp_loss_cap,
+        owner,
+    );
+    state.attack_commands.damage_depth -= 1;
+    out
+}
+
+fn apply_damage_hit(
+    state: &mut CombatState,
+    dealer: CreatureRef,
+    target: CreatureUid,
+    final_damage: i32,
+    props: ValueProps,
+    bypass_hp_loss_cap: bool,
+    owner: crate::attack_command::HitOwner,
+) -> DamageOutcome {
     // Retained corpses are not damage targets either. In particular, a
     // multi-hit attack must not trigger their before-damage Thorns again.
     if state.creatures[creature_index_for(state, target)].current_hp <= 0 {
@@ -1054,7 +1087,9 @@ fn apply_damage_with_final_impl(
     state.record_attack_hit(target, blocked, hp_loss);
     // C# `AttackCommand.AddResultsInternal`: this hit's result joins its
     // command's `Results` (SkittishPower reads the first one per receiver).
-    crate::attack_command::record_result(state, dealer, target, hp_loss);
+    if owner == crate::attack_command::HitOwner::Command {
+        crate::attack_command::record_result(state, target, hp_loss);
+    }
 
     // Bead `sts2-rs-ybtmu` (Group A): power-side `AfterBlockBroken` witness
     // dispatch (BurrowedPower). C# fires `Hook.AfterBlockBroken` per damage

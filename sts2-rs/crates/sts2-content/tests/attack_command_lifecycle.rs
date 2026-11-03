@@ -500,3 +500,114 @@ fn nested_autoplay_gets_no_vigor_from_the_outer_command() {
     assert_eq!(state.creatures[1].current_hp, 200 - 26 - 6);
     assert_eq!(player_power_amount(&state, PowerKind::Vigor), None);
 }
+
+// ── review r1: result ownership and hit admission ─────────────────────────
+
+fn enemy_power(state: &mut CombatState, idx: usize, raw: u32, kind: PowerKind, amount: i32) {
+    let pid = NonZeroU32::new(raw).expect("nz");
+    state.powers.push(Power {
+        id: pid,
+        kind,
+        amount,
+        counter: 0,
+        applier: None,
+        skip_next_tick: false,
+    });
+    state.creatures[idx].powers.push(PowerUid(pid));
+}
+
+/// Review r1 F1: a power's damage dealt while the command's hit runs (Strike →
+/// Reaper Form's Doom → Shroud's block → Juggernaut on a random enemy) is the
+/// power's own damage, not a result of the Strike's command: a Gardener only
+/// Juggernaut hit gains no Skittish block (the DLL's [(22,6),(30,0),(26,0),(23,0)]).
+#[test]
+fn reaction_damage_inside_a_hit_is_not_a_command_result() {
+    let mut found = 0;
+    for k in 0..16 {
+        let mut state = base_state();
+        enemy(&mut state, 10, 200, 0, None);
+        enemy(&mut state, 11, 200, 0, Some(51));
+        player_power(&mut state, 60, PowerKind::ReaperForm, 1);
+        player_power(&mut state, 61, PowerKind::Shroud, 2);
+        player_power(&mut state, 62, PowerKind::Juggernaut, 5);
+        for _ in 0..k {
+            let _ = state.run_rng.combat_targets.next_int_exclusive(0, 2);
+        }
+        let s = attack(&mut state, CardId::StrikeIronclad, 6);
+        state.player.hand.push(s);
+        let _ = sts2_core::combat_loop::play_card(&mut state, 0, Some(0));
+        assert_eq!(
+            state.creatures[1].current_hp,
+            200 - 6
+                - if state.creatures[2].current_hp == 200 {
+                    5
+                } else {
+                    0
+                }
+        );
+        if state.creatures[2].current_hp < 200 {
+            found += 1;
+            assert_eq!(
+                state.creatures[2].current_hp,
+                200 - 5,
+                "Juggernaut hit the Gardener"
+            );
+            assert_eq!(
+                state.creatures[2].block, 0,
+                "no Skittish block from a reaction's damage"
+            );
+            assert_eq!(skittish_counter(&state, 51), 0);
+        }
+    }
+    assert!(found > 0, "Juggernaut never targeted the Gardener");
+}
+
+/// Review r1 F2: Breakthrough's self-damage kills the player before its
+/// command: the command is refused and deals nothing.
+#[test]
+fn refused_command_deals_no_hit() {
+    let mut state = base_state();
+    state.player.current_hp = 1;
+    enemy(&mut state, 10, 50, 0, None);
+    enemy(&mut state, 11, 50, 0, None);
+    let bt = card(
+        &mut state,
+        CardId::Breakthrough,
+        CardType::Attack,
+        TargetType::AllEnemies,
+        9,
+    );
+    state.player.hand.push(bt);
+    let _ = sts2_core::combat_loop::play_card(&mut state, 0, None);
+    assert!(state.player.current_hp <= 0);
+    assert_eq!(state.creatures[1].current_hp, 50);
+    assert_eq!(state.creatures[2].current_hp, 50);
+}
+
+/// Review r1 F2: Twin Strike at 1 HP into Thorns 1: the first hit lands and
+/// its Thorns kills the attacker, so the admitted command runs no second hit.
+#[test]
+fn attacker_death_stops_the_next_hit() {
+    let mut state = base_state();
+    state.player.current_hp = 1;
+    enemy(&mut state, 10, 50, 0, None);
+    enemy_power(&mut state, 1, 70, PowerKind::Thorns, 1);
+    let ts = attack(&mut state, CardId::TwinStrike, 5);
+    state.player.hand.push(ts);
+    let _ = sts2_core::combat_loop::play_card(&mut state, 0, Some(0));
+    assert!(state.player.current_hp <= 0);
+    assert_eq!(state.creatures[1].current_hp, 50 - 5, "one hit only");
+}
+
+/// Control: Twin Strike into Thorns 1 at enough HP still lands both hits.
+#[test]
+fn living_attacker_lands_every_hit_into_thorns() {
+    let mut state = base_state();
+    enemy(&mut state, 10, 50, 0, None);
+    enemy_power(&mut state, 1, 70, PowerKind::Thorns, 1);
+    let ts = attack(&mut state, CardId::TwinStrike, 5);
+    state.player.hand.push(ts);
+    let _ = sts2_core::combat_loop::play_card(&mut state, 0, Some(0));
+    assert_eq!(state.player.current_hp, 80 - 2);
+    assert_eq!(state.creatures[1].current_hp, 50 - 10);
+}

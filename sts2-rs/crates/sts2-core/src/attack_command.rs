@@ -87,6 +87,27 @@ pub struct AttackCommandState {
     /// Whether the `OnPlay` dispatch now running has opened a command for its
     /// card (saved and restored around nested dispatches).
     pub dispatch_opened: bool,
+    /// How many damage calls are running inside the current `OnPlay` dispatch
+    /// (saved and reset around nested dispatches). A hit dealt while another
+    /// is running (a power's or relic's reaction to it: Juggernaut after
+    /// Shroud after Reaper Form's Doom) is that callback's own damage, never
+    /// a hit of the card's command.
+    pub damage_depth: u32,
+}
+
+/// What one hit on an enemy is to the running card's attack command
+/// ([`before_hit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HitOwner {
+    /// Not a command hit (no Attack card resolving, not a `Move` hit of the
+    /// player or Osty, a hit nested in another damage call, or a hit after the
+    /// card's command already closed): plain damage, not recorded.
+    Plain,
+    /// A hit of the innermost command: it lands and its result is recorded.
+    Command,
+    /// The command was refused, or its attacker died or combat is ending: C#
+    /// `AttackCommand.Execute` runs no (further) hit.
+    Stopped,
 }
 
 fn attacker_alive(state: &CombatState, attacker: CreatureRef) -> bool {
@@ -272,16 +293,26 @@ fn card_attacker(state: &CombatState, dealer: CreatureRef) -> bool {
     }
 }
 
-/// Before one hit on an enemy: open the running card's command if this is its
-/// first hit (a `Move` hit dealt by the player or the player's Osty while an
-/// Attack card's `OnPlay` runs, with no open command of that card and
-/// attacker innermost).
-pub(crate) fn before_hit(state: &mut CombatState, dealer: CreatureRef, props: ValueProps) {
+/// Before one hit on an enemy: what the hit is to the running card's command,
+/// opening the command if this is its first hit (a `Move` hit dealt by the
+/// player or the player's Osty while an Attack card's `OnPlay` runs, not nested
+/// in another damage call, with no open command of that card and attacker
+/// innermost). C# `AttackCommand.Execute`: a refused command runs no hit, and
+/// its hit loop stops once the attacker is dead or combat is ending (a hit
+/// already started finishes; the admitted command still completes).
+pub(crate) fn before_hit(
+    state: &mut CombatState,
+    dealer: CreatureRef,
+    props: ValueProps,
+) -> HitOwner {
     let Some(card) = state.resolving_card else {
-        return;
+        return HitOwner::Plain;
     };
-    if !props.contains(ValueProps::MOVE) || !card_attacker(state, dealer) {
-        return;
+    if state.attack_commands.damage_depth > 0
+        || !props.contains(ValueProps::MOVE)
+        || !card_attacker(state, dealer)
+    {
+        return HitOwner::Plain;
     }
     if state
         .attack_commands
@@ -289,33 +320,34 @@ pub(crate) fn before_hit(state: &mut CombatState, dealer: CreatureRef, props: Va
         .last()
         .is_some_and(|f| f.source == Some(card) && f.attacker == dealer)
     {
-        return;
+        return if crate::combat_loop::combat_is_ending(state) || !attacker_alive(state, dealer) {
+            HitOwner::Stopped
+        } else {
+            HitOwner::Command
+        };
     }
     if !card_is_attack(state, card) {
-        return;
+        return HitOwner::Plain;
     }
     // A command already ran for this card in this dispatch (closed by its
     // handler): a later hit is not part of a new command unless the handler
     // opens one. Hits outside any command are plain damage.
     if state.attack_commands.dispatch_opened {
-        return;
+        return HitOwner::Plain;
     }
-    let _ = begin(state, dealer, props, Some(card));
+    if begin(state, dealer, props, Some(card)) {
+        HitOwner::Command
+    } else {
+        HitOwner::Stopped
+    }
 }
 
-/// After one hit on an enemy produced a result: append it to the innermost
-/// command's results when the hit is that command's.
-pub(crate) fn record_result(
-    state: &mut CombatState,
-    dealer: CreatureRef,
-    receiver: CreatureUid,
-    unblocked: i32,
-) {
-    let card = state.resolving_card;
+/// After one command hit produced a result (C# `AttackCommand.AddResultsInternal`
+/// with the hit's own `CreatureCmd.Damage` results): append it to the innermost
+/// command's results.
+pub(crate) fn record_result(state: &mut CombatState, receiver: CreatureUid, unblocked: i32) {
     if let Some(frame) = state.attack_commands.frames.last_mut() {
-        if frame.attacker == dealer && card.is_some() && frame.source == card {
-            frame.results.push((receiver, unblocked));
-        }
+        frame.results.push((receiver, unblocked));
     }
 }
 
@@ -324,14 +356,19 @@ pub(crate) fn record_result(
 pub(crate) struct DispatchMark {
     depth: usize,
     opened: bool,
+    damage_depth: u32,
 }
 
 pub(crate) fn dispatch_enter(state: &mut CombatState) -> DispatchMark {
     let mark = DispatchMark {
         depth: state.attack_commands.frames.len(),
         opened: state.attack_commands.dispatch_opened,
+        damage_depth: state.attack_commands.damage_depth,
     };
     state.attack_commands.dispatch_opened = false;
+    // A card played from inside a damage call (an auto-play a reaction
+    // triggers) runs its own command from the top.
+    state.attack_commands.damage_depth = 0;
     mark
 }
 
@@ -363,6 +400,7 @@ pub(crate) fn dispatch_exit(state: &mut CombatState, mark: DispatchMark, card: C
         }
     }
     state.attack_commands.dispatch_opened = mark.opened;
+    state.attack_commands.damage_depth = mark.damage_depth;
 }
 
 /// Vigor's additive bonus for a hit from `card` (`None`: not a card's damage).

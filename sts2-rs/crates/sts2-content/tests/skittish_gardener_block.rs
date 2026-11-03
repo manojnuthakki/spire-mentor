@@ -47,9 +47,9 @@ fn push_card(state: &mut CombatState, id: CardId, dmg: i32) -> sts2_core::CardUi
 /// caller asks for.
 fn gardener_state(enemy_block: i32) -> CombatState {
     content_dispatch::ensure_installed();
-    // The latch hook installs when a PhantasmalGardener AI is built; this test
-    // mounts the power directly, so install it explicitly (same shape as the
-    // CurlUp regression test).
+    // Skittish needs no setup: the core attack-command lifecycle grants its
+    // block at the command's `AfterAttack` (`sts2_core::attack_command`), so
+    // mounting the power directly is enough.
 
     let mut state = CombatState::default();
     let eid = NonZeroU32::new(1).expect("nz");
