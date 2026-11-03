@@ -358,6 +358,33 @@ fn an_ovicopter_fight_rebuilds_with_its_egg_slots() {
     assert_eq!(slots, [Some(3), Some(4), Some(5)]);
 }
 
+/// `LivingFogNormal.Slots = [bomb1..bomb5, livingFog]` (F6 step29): a rebuilt
+/// Living Fog holds slot 5 and its listed living bombs the first bomb slots,
+/// so the next BLOAT reads their occupancy; a dead bomb holds none.
+#[test]
+fn a_living_fog_fight_rebuilds_with_its_bomb_slots() {
+    sts2_content::cards::dispatch::ensure_installed();
+    let mut value = small_fight(&["STRIKE_IRONCLAD"], serde_json::json!([]));
+    let enemy = |kind: &str, uid: i32, mv: &str, dead: bool| {
+        serde_json::json!({"kind": kind, "uid": uid, "hp": if dead { 0 } else { 7 },
+        "max_hp": 7, "block": 0, "powers": [], "intents": [], "intent_history": [], "move_state": mv,
+        "is_dead": dead, "is_escaped": false})
+    };
+    value["encounter"] = serde_json::json!([
+        enemy("GasBomb", 1, "EXPLODE_MOVE", false),
+        enemy("GasBomb", 2, "EXPLODE_MOVE", false),
+        enemy("LivingFog", 3, "BLOAT_MOVE", false),
+        enemy("GasBomb", 4, "EXPLODE_MOVE", true)
+    ]);
+    let state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    let slots: Vec<Option<u8>> = state
+        .enemy_uids
+        .iter()
+        .map(|uid| state.enemy_slot(*uid))
+        .collect();
+    assert_eq!(slots, [Some(0), Some(1), Some(5), None]);
+}
+
 /// C# `BrilliantScarf.AfterCardPlayed` skips auto-plays: Havoc's auto-played
 /// Strike doesn't count, so after Havoc (the 3rd play) Bash still costs 2.
 #[test]

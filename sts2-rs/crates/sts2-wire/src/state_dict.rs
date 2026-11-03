@@ -4057,6 +4057,47 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
         }
     }
 
+    // --- Living Fog bomb slots ---
+    //
+    // `LivingFogNormal.Slots = ["bomb1", .., "bomb5", "livingFog"]`: the fog
+    // holds slot 5 and BLOAT gives each bomb the FIRST slot no creature in
+    // `Enemies` holds (`GetNextSlot`), with `Enemies` slot-sorted, so living
+    // bombs are listed before the fog. `living_fog_bloat_effect` reads the
+    // occupied slots from `enemy_slot()`: left unstamped, living bombs hold
+    // no slot and a rebuilt board would summon past five living bombs (F6
+    // step29). The bombs' exact slots are not on the wire; the k listed
+    // bombs take slots 0..k in order (exact unless a lower bomb died while a
+    // higher one lived, which needs two bombs alive at once).
+    if let Some(fog_pos) = parsed
+        .encounter
+        .iter()
+        .position(|e| e.kind == MonsterKind::LivingFog && !e.is_dead && !e.is_escaped)
+    {
+        const LIVING_FOG_SLOT: u8 = 5;
+        let live: Vec<(usize, CreatureUid)> = parsed
+            .encounter
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| !e.is_escaped)
+            .zip(enemy_uids.iter())
+            .filter(|((_, e), _)| !e.is_dead)
+            .map(|((i, _), uid)| (i, *uid))
+            .collect();
+        let mut next = 0u8;
+        for (i, uid) in &live {
+            if *i < fog_pos
+                && parsed.encounter[*i].kind == MonsterKind::GasBomb
+                && next < LIVING_FOG_SLOT
+            {
+                state.set_enemy_slot(*uid, next);
+                next += 1;
+            }
+        }
+        if let Some((_, uid)) = live.iter().find(|(i, _)| *i == fog_pos) {
+            state.set_enemy_slot(*uid, LIVING_FOG_SLOT);
+        }
+    }
+
     // --- C# `Enemies`-order (slot) restoration for reviver rosters ---
     //
     // The adapter wire lists ALIVE enemies in C# `Enemies` order and

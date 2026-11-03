@@ -5771,19 +5771,19 @@ impl CombatState {
     /// retains corpses in `enemy_uids` (bead `sts2-rs-c8why`), so this filter
     /// does by hand what C# gets from the removal.
     ///
-    /// # The exception, and why not every summoner should use this
+    /// # Self-killed monsters
     ///
     /// `CreatureCmd`'s removal is guarded by `!monster.IsPerformingMove`
     /// (`CreatureCmd.cs:525-529`): a monster that kills ITSELF during its own
-    /// move stays in `_enemies`, so its slot is NOT recycled. LivingFog's
-    /// GasBombs die that way — inside their own EXPLODE — which is why
-    /// `living_fog_bloat_effect` counts bombs (dead included) instead of
-    /// calling into these helpers, and why the fight is capped at five bombs
-    /// total rather than five at a time.
+    /// move stays in `_enemies` until that move is over, and then
+    /// `MonsterModel.PerformMove` removes it (`IsDead &&
+    /// ShouldCreatureBeRemovedFromCombatAfterDeath` → `RemoveCreature`). So
+    /// its slot is free again for every later actor; LivingFog's GasBombs,
+    /// which die in their own EXPLODE, recycle bomb slots (F6 step29; an
+    /// earlier reading here capped the fight at five bombs total).
     ///
-    /// So: before putting a summoner on the slot model, check how its spawns
-    /// die. Killed by the player (Two-Tailed Rats, Ovicopter eggs) → slot
-    /// recycles, use these helpers. Self-killed mid-move → it does not.
+    /// This helper counts living enemies only; a summoner whose dead spawns
+    /// a hook can retain should read [`Self::active_enemy_uids`] instead.
     fn occupied_enemy_slots(&self) -> SmallVec<[u8; 8]> {
         self.enemy_uids
             .iter()

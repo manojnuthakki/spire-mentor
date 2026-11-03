@@ -1087,66 +1087,50 @@ fn living_fog_advanced_gas_effect(state: &mut CombatState, _owner: sts2_core::Cr
 
 /// Encounter slots available to LivingFog's spawns.
 ///
-/// `LivingFogNormal.Slots = ["bomb1".."bomb5", "livingFog"]` — five bomb
-/// slots, and they are never recycled, so it is five bombs per COMBAT rather
-/// than five at a time.
+/// `LivingFogNormal.Slots = ["bomb1".."bomb5", "livingFog"]`: five bomb slots
+/// ahead of the fog's own (index 5). `GetNextSlot` (`EncounterModel`) returns
+/// the first slot no creature in `combatState.Enemies` holds, or "" (and
+/// `BloatMove` then skips the spawn).
 ///
-/// This is the documented exception to the shared slot model (GH #552), which
-/// treats a corpse's slot as free. `GetNextSlot` tests
-/// `combatState.Enemies.All(c => c.SlotName != s)` (`EncounterModel.cs:247`),
-/// and a dead GasBomb is still IN `Enemies`: `CreatureCmd`'s removal is
-/// guarded by `!monster.IsPerformingMove` (`CreatureCmd.cs:525-529`) and a
-/// bomb dies inside its own EXPLODE. Monsters the PLAYER kills (Two-Tailed
-/// Rats, Ovicopter eggs) are not performing a move, so they ARE removed and
-/// their slots do recycle — which is why those two use
-/// `CombatState::last_free_enemy_slot` and this does not.
-const LIVING_FOG_BOMB_SLOTS: usize = 5;
+/// A slot is occupancy, not a lifetime count (F6 step29, fresh DLL authority
+/// `MonsterModel.PerformMove`, `CreatureCmd.Kill`): a bomb the player kills
+/// leaves `Enemies` in `Kill` (it isn't performing a move), and a bomb that
+/// dies in its own EXPLODE leaves it as soon as that move is over
+/// (`IsPerformingMove = false`, then `IsDead &&
+/// ShouldCreatureBeRemovedFromCombatAfterDeath` → `RemoveCreature`). Either
+/// way its slot is free for the next BLOAT. Only living bombs and corpses a
+/// hook retains (`should_remove_from_combat_on_death`) hold a slot, which is
+/// what [`CombatState::active_enemy_uids`] lists.
+const LIVING_FOG_BOMB_SLOTS: u8 = 5;
 
 /// BLOAT: spawn one `GasBomb` (C# `BloatAmount = 1`) running its own EXPLODE
 /// moveset, alongside the 5-damage attack.
 ///
-/// The spawn takes the summoner's slot position, it does NOT append (GH #366).
-/// The bomb slots all precede `"livingFog"` in the encounter's `Slots` list,
-/// and `CombatState.AddCreature` re-runs `SortEnemiesBySlotName`
-/// (`CombatState.cs:678-684`) on every add — so a spawned bomb lands *ahead of
-/// its summoner*. That list is the turn order (`CombatManager.cs:1075-1084`)
-/// and it is also the bridge's `target_index` space, so appending was not
-/// cosmetic: it inverted who acts first. Measured on all four 2026-08-03 live
-/// A1 corpora as 8 pure-permutation records, world `["GasBomb#0","LivingFog#0"]`
-/// vs mirror reversed with `$.encounter.roster` the only diverging path.
-///
-/// Inserting at the OWNER's index rather than a hard-coded 0 is what makes
-/// this right for the second and later bombs too: each new bomb takes the
-/// next free bomb slot, which is still left of the fog but right of every
-/// bomb already placed — exactly where the owner sits once the earlier bombs
-/// are in front of it.
+/// The bomb takes the first free bomb slot (`GetNextSlot`) and its place in
+/// slot order: `CombatState.AddCreature` re-runs `SortEnemiesBySlotName`
+/// (`CombatState.cs:678-684`) on every add, so it lands ahead of every
+/// living enemy with a higher slot, and always ahead of its summoner, whose
+/// `livingFog` slot follows all five bomb slots (GH #366: that list is the
+/// turn order and the bridge's `target_index` space). The summoner bounds the
+/// insertion too, so a fog whose slot isn't recorded still ends up last.
 ///
 /// C# spawns just before the attack; the effect_fn fires post-damage, which is
 /// state-equivalent here (the spawn does not alter the 5-damage hit).
 fn living_fog_bloat_effect(state: &mut CombatState, owner: sts2_core::CreatureUid) {
-    // `GetNextSlot` returning "" makes `BloatMove` skip the spawn entirely
-    // (`LivingFog.cs:91-97`). Counts the dead, per the slot-retention note on
-    // `LIVING_FOG_BOMB_SLOTS`.
-    let bombs_placed = state
-        .enemy_uids
+    let occupied: smallvec::SmallVec<[u8; 8]> = state
+        .active_enemy_uids()
         .iter()
-        .filter(|u| {
-            state
-                .creatures
-                .iter()
-                .find(|c| c.id == u.0)
-                .and_then(|c| c.species)
-                == Some(sts2_core::MonsterKind::GasBomb)
-        })
-        .count();
-    if bombs_placed >= LIVING_FOG_BOMB_SLOTS {
+        .filter_map(|u| state.enemy_slot(*u))
+        .collect();
+    let Some(slot) = (0..LIVING_FOG_BOMB_SLOTS).find(|s| !occupied.contains(s)) else {
         return;
-    }
-    let at = state
+    };
+    let owner_at = state
         .enemy_uids
         .iter()
         .position(|&u| u == owner)
         .unwrap_or(state.enemy_uids.len());
+    let at = state.slot_insert_index(slot).min(owner_at);
     let uid = state.spawn_enemy_at_index(sts2_core::MonsterKind::GasBomb, at);
     let ai = crate::ascension_scaling::summoned_ai(
         state,
@@ -1154,6 +1138,7 @@ fn living_fog_bloat_effect(state: &mut CombatState, owner: sts2_core::CreatureUi
         create_gas_bomb_ai(),
     );
     state.set_creature_ai(uid, ai);
+    state.set_enemy_slot(uid, slot);
 }
 
 /// `LivingFog` — ADVANCED_GAS (init) → BLOAT → SUPER_GAS_BLAST → BLOAT …
@@ -4073,7 +4058,7 @@ mod tests {
     }
 
     /// GH #366: bombs 2..5 keep landing between the earlier bombs and the fog,
-    /// and the 6th never spawns.
+    /// and a 6th never spawns while all five live.
     #[test]
     fn living_fog_bloat_fills_five_slots_in_order_then_stops() {
         use sts2_core::{Creature, CreatureUid, IntentHistory, MonsterId, MonsterKind};
@@ -4095,7 +4080,7 @@ mod tests {
         });
         state.enemy_uids.push(owner);
 
-        for expected in 1..=LIVING_FOG_BOMB_SLOTS {
+        for expected in 1..=usize::from(LIVING_FOG_BOMB_SLOTS) {
             living_fog_bloat_effect(&mut state, owner);
             assert_eq!(
                 state.enemy_uids.len(),
@@ -4109,15 +4094,158 @@ mod tests {
             );
         }
 
-        // Sixth bloat: `GetNextSlot` returns "" and `BloatMove` skips the
-        // spawn (LivingFog.cs:91-97). Slots are never recycled — C# only drops
-        // creatures from `_enemies` at combat teardown — so killing a bomb
-        // would not buy another one either.
+        // Sixth bloat with five LIVING bombs: `GetNextSlot` returns "" and
+        // `BloatMove` skips the spawn (LivingFog.cs:91-97). A dead bomb's slot
+        // does free up (F6 step29); see
+        // `living_fog_bloat_reuses_freed_bomb_slots_past_five`.
         living_fog_bloat_effect(&mut state, owner);
         assert_eq!(
             state.enemy_uids.len(),
-            LIVING_FOG_BOMB_SLOTS + 1,
+            usize::from(LIVING_FOG_BOMB_SLOTS) + 1,
             "the 6th bloat finds no free slot and spawns nothing"
+        );
+    }
+
+    /// A Living Fog fight as combat entry builds it: the fog carries its AI
+    /// and `LivingFogNormal`'s `livingFog` slot (index 5).
+    fn living_fog_fight() -> (CombatState, sts2_core::CreatureUid) {
+        use sts2_core::{Creature, CreatureUid, IntentHistory, MonsterId, MonsterKind};
+        let owner = CreatureUid::new(1).expect("nz");
+        let mut state = CombatState::default();
+        state.player.current_hp = 70;
+        state.player.max_hp = 70;
+        state.creatures.push(Creature {
+            id: owner.0,
+            current_hp: 80,
+            max_hp: 80,
+            block: 0,
+            powers: smallvec::SmallVec::new(),
+            species: Some(MonsterKind::LivingFog),
+            intent: None,
+            intent_history: IntentHistory::default(),
+            monster_id: MonsterId("LivingFog"),
+            ai: Some(create_living_fog_ai()),
+        });
+        state.enemy_uids.push(owner);
+        state.assign_encounter_slots(&[5]);
+        (state, owner)
+    }
+
+    fn bombs(state: &CombatState) -> Vec<sts2_core::CreatureUid> {
+        state
+            .enemy_uids
+            .iter()
+            .copied()
+            .filter(|u| {
+                state
+                    .creatures
+                    .iter()
+                    .any(|c| c.id == u.0 && c.species == Some(sts2_core::MonsterKind::GasBomb))
+            })
+            .collect()
+    }
+
+    fn kill(state: &mut CombatState, uid: sts2_core::CreatureUid) {
+        let c = state
+            .creatures
+            .iter_mut()
+            .find(|c| c.id == uid.0)
+            .expect("bomb");
+        c.current_hp = 0;
+    }
+
+    fn living_order(state: &CombatState) -> Vec<sts2_core::CreatureUid> {
+        state.active_enemy_uids().into_iter().collect()
+    }
+
+    /// F6 step29 (`living-fog-gas-bomb-summon`): a bomb that died — in its own
+    /// EXPLODE or to the player — leaves `CombatState.Enemies` once its move
+    /// is over (`MonsterModel.PerformMove`: after `IsPerformingMove = false`,
+    /// `IsDead && ShouldCreatureBeRemovedFromCombatAfterDeath` →
+    /// `RemoveCreature`; `CreatureCmd.Kill` removes it directly when it isn't
+    /// performing). Its slot is free again for `GetNextSlot`, so the sixth and
+    /// later BLOATs summon. Native witnesses: YUWRABYAE2 route@151 and
+    /// 2RHDFEJBWZ route@121 show Gas Bomb combat_id 6 at round 13.
+    #[test]
+    fn living_fog_bloat_reuses_freed_bomb_slots_past_five() {
+        let (mut state, owner) = living_fog_fight();
+        let mut slots = Vec::new();
+        for n in 1..=8 {
+            living_fog_bloat_effect(&mut state, owner);
+            let all = bombs(&state);
+            assert_eq!(all.len(), n, "bloat {n} summons a bomb");
+            let new = *all.iter().max_by_key(|u| u.0).expect("a bomb");
+            assert_eq!(
+                living_order(&state),
+                vec![new, owner],
+                "the new bomb acts before the fog"
+            );
+            slots.push(state.enemy_slot(new));
+            // Its EXPLODE kills it; the next BLOAT finds bomb1 free again.
+            kill(&mut state, new);
+            assert_eq!(living_order(&state), vec![owner]);
+        }
+        assert_eq!(
+            slots,
+            vec![Some(0); 8],
+            "every bomb takes the freed bomb1 slot"
+        );
+        // Corpses stay in `enemy_uids` (bead c8why) without holding a slot.
+        assert_eq!(state.enemy_uids.len(), 9);
+        assert_eq!(state.enemy_uids.last(), Some(&owner), "the fog stays last");
+    }
+
+    /// Slots are occupancy, not a lifetime count: living bombs and corpses a
+    /// hook retains still hold theirs; a removed corpse's slot is refilled in
+    /// slot order (`GetNextSlot` first-free, `SortEnemiesBySlotName`).
+    #[test]
+    fn living_fog_bloat_slot_occupancy_living_retained_removed() {
+        let (mut state, owner) = living_fog_fight();
+        for _ in 0..5 {
+            living_fog_bloat_effect(&mut state, owner);
+        }
+        let five = bombs(&state);
+        assert_eq!(five.len(), 5);
+        let slots: Vec<_> = five.iter().map(|u| state.enemy_slot(*u)).collect();
+        assert_eq!(slots, (0..5).map(Some).collect::<Vec<_>>());
+        // Five living bombs: no free slot, BLOAT summons nothing.
+        living_fog_bloat_effect(&mut state, owner);
+        assert_eq!(bombs(&state).len(), 5, "five living bombs fill every slot");
+
+        // The player kills bomb3 (slot 2): its slot frees and the next bomb
+        // takes it, between bomb2 and bomb4.
+        kill(&mut state, five[2]);
+        let snapshot = state.clone();
+        living_fog_bloat_effect(&mut state, owner);
+        let six = bombs(&state);
+        assert_eq!(six.len(), 6);
+        let new = *six.iter().max_by_key(|u| u.0).unwrap();
+        assert_eq!(state.enemy_slot(new), Some(2));
+        assert_eq!(
+            living_order(&state),
+            vec![five[0], five[1], new, five[3], five[4], owner]
+        );
+        // An independent clone taken before the summon is untouched and
+        // summons the same way.
+        assert_eq!(bombs(&snapshot).len(), 5);
+        let mut again = snapshot.clone();
+        living_fog_bloat_effect(&mut again, owner);
+        assert_eq!(living_order(&again), living_order(&state));
+
+        // A corpse a hook retains (an Illusion owner) keeps its slot.
+        sts2_core::card_effects::apply_power_to_creature(
+            &mut state,
+            five[0],
+            sts2_core::PowerKind::Illusion,
+            1,
+        );
+        kill(&mut state, five[0]);
+        assert!(!state.is_removed_corpse(five[0]));
+        living_fog_bloat_effect(&mut state, owner);
+        assert_eq!(
+            bombs(&state).len(),
+            6,
+            "a retained corpse still holds bomb1"
         );
     }
 
