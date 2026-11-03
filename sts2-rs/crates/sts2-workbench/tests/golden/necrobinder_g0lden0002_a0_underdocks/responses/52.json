@@ -730,8 +730,8 @@
      "target": "Corpse Slug",
      "target_side": "enemy",
      "target_uid": 3,
-     "text": "Corpse Slug gained 4 Strength.",
-     "verb": "gained"
+     "text": "Corpse Slug applied 4 Strength to Corpse Slug.",
+     "verb": "applied"
     }
    ],
    "decision": "combat_play",

@@ -48,9 +48,9 @@
 {"i": 47, "method": "POST", "route": "/api/live/action", "body": {"action": "play_card", "args": {"card_index": 0}}, "status": 200, "sha256": "aad628733c6a3cad342d5cf667215804191ebad8d7e89d80000886596faa7016", "decision": "combat_play"}
 {"i": 48, "method": "GET", "route": "/api/live/map", "body": null, "status": 200, "sha256": "1196529089f74df178485df4c910474085fb13e747bd6ca51ecd43fa76b6c958", "decision": null}
 {"i": 49, "method": "POST", "route": "/api/live/action", "body": {"action": "end_turn", "args": {}}, "status": 200, "sha256": "7ee2539735fb008f11df593fbf5398c4b2eb75e622a63762faaba1046becc9f4", "decision": "combat_play"}
-{"i": 50, "method": "GET", "route": "/api/live/timeline", "body": null, "status": 200, "sha256": "04616dea98b9558ded58424845431f8ca9bdb586432037e34bae031f2fcaaa3c", "decision": null}
+{"i": 50, "method": "GET", "route": "/api/live/timeline", "body": null, "status": 200, "sha256": "cc07c469d6ab8169b481ff77d2eebcf065f2d55d33f56c3234a5516cb4e7d1fe", "decision": null}
 {"i": 51, "method": "POST", "route": "/api/live/action", "body": {"action": "play_card", "args": {"card_index": 0}}, "status": 200, "sha256": "a9476605ef7097257cc59fff14d68597d8d20071cd66b0ea9b5c36450bcfceac", "decision": "combat_play"}
-{"i": 52, "method": "GET", "route": "/api/live/timeline", "body": null, "status": 200, "sha256": "3813a10042242cea0a9256468beccc0816996a48b2e84c4f1986ec38654be585", "decision": null}
+{"i": 52, "method": "GET", "route": "/api/live/timeline", "body": null, "status": 200, "sha256": "0e8660438df195df70c59e38baa981fb33eec7592595a0582736fc37ffb4a844", "decision": null}
 {"i": 53, "method": "POST", "route": "/api/live/seek", "body": {"node_id": 37}, "status": 200, "sha256": "f2928ffa53677928cdd6e05a9be98e1c3a0dbb86a88320ef4fcd57096a5469bc", "decision": "combat_play"}
 {"i": 54, "method": "POST", "route": "/api/live/action", "body": {"action": "play_card", "args": {"card_index": 0, "target_index": 1}}, "status": 200, "sha256": "13b33a6ed1f222e267e129622b1dc8f48899b79d1037c94049279cc320142755", "decision": "combat_play"}
 {"i": 55, "method": "POST", "route": "/api/live/action", "body": {"action": "play_card", "args": {"card_index": 0}}, "status": 200, "sha256": "b6713d1871e2b4e93583228ef8d8b5a5df0983c61ceacfaab582652858031d24", "decision": "combat_play"}
@@ -192,11 +192,11 @@
 {"i": 191, "method": "POST", "route": "/api/live/action", "body": {"action": "play_card", "args": {"card_index": 1}}, "status": 200, "sha256": "7a15f1f977f61eeaf2d60bfc838a0122e7f8aff85ca1c3e971d9ef4987ba85e6", "decision": "combat_play"}
 {"i": 192, "method": "POST", "route": "/api/live/quit", "body": null, "status": 200, "sha256": "4062edaf750fb8074e7e83e0c9028c94e32468a8b6f1614774328ef045150f93", "decision": null}
 {"i": 193, "method": "GET", "route": "/api/runs", "body": null, "status": 200, "sha256": "7d6ee1a7a92b499609e3acb840b98dda1b43b04c1db1083477c9eed09f24fca2", "decision": null}
-{"i": 194, "method": "GET", "route": "/api/runs/stat?path=<work>/logs/20260101_000000_Defect_G0LDEN0001.jsonl", "body": null, "status": 200, "sha256": "a6644bf7e4fde749e9eeed6b43d2e11c5567038d9df2c28b9852af8b16364a29", "decision": null}
+{"i": 194, "method": "GET", "route": "/api/runs/stat?path=<work>/logs/20260101_000000_Defect_G0LDEN0001.jsonl", "body": null, "status": 200, "sha256": "36a5ee80447ccd0079320a8ad44a84549decbe29e765e1b8f7e0192031fdfd41", "decision": null}
 {"i": 195, "method": "POST", "route": "/api/load", "body": {"path": "<work>/logs/20260101_000000_Defect_G0LDEN0001.jsonl"}, "status": 200, "sha256": "9a16c0169b5943beb17fed3673f0ce61888ac9923625406c090ecdbe1faea316", "decision": null}
-{"i": 196, "method": "GET", "route": "/api/timeline", "body": null, "status": 200, "sha256": "74f591dec918fe171c19e150d88c5be4861c91c8c9a9df7b1f05d27191d22e53", "decision": null}
+{"i": 196, "method": "GET", "route": "/api/timeline", "body": null, "status": 200, "sha256": "38861d3dbdf083be56bd45d9caa0f3dfc985218c2d356717f5c84cccab3ba62c", "decision": null}
 {"i": 197, "method": "GET", "route": "/api/map", "body": null, "status": 200, "sha256": "d01715432b33ec80c030c3360e624d6a0d6a36b3c2e335c34c822929b11bd2c2", "decision": null}
-{"i": 198, "method": "GET", "route": "/api/timeline", "body": null, "status": 200, "sha256": "74f591dec918fe171c19e150d88c5be4861c91c8c9a9df7b1f05d27191d22e53", "decision": null}
+{"i": 198, "method": "GET", "route": "/api/timeline", "body": null, "status": 200, "sha256": "38861d3dbdf083be56bd45d9caa0f3dfc985218c2d356717f5c84cccab3ba62c", "decision": null}
 {"i": 199, "method": "GET", "route": "/api/step/0", "body": null, "status": 200, "sha256": "4b37be84eb9b4c8c160fa426dfa4b3aa9dc4bb5a31cdf53b66759d2426e50aec", "decision": null}
 {"i": 200, "method": "GET", "route": "/api/step/3", "body": null, "status": 200, "sha256": "dfff4db94eea35e939424fc738cf5643624634faf565ef03e4e0fcf32f3303e7", "decision": null}
 {"i": 201, "method": "GET", "route": "/api/step/72", "body": null, "status": 200, "sha256": "5fef9d1af728748fe11e6087c2fd8f4c2c4dcda1400c7252c5d33328181dc2a9", "decision": null}

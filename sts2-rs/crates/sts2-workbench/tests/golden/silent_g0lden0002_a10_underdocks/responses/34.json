@@ -72,7 +72,7 @@
    "is_best": false,
    "losses": 0,
    "low_confidence": false,
-   "q": 1.1231,
+   "q": 1.1263,
    "q_saturated": false,
    "stable_idx": -1,
    "target_index": null,

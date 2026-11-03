@@ -1321,7 +1321,7 @@
       "uid": 3
      }
     ],
-    "energy": 2,
+    "energy": 3,
     "player_block": 0,
     "player_hp": 14,
     "player_max_hp": 75,
@@ -1534,7 +1534,7 @@
       "uid": 3
      }
     ],
-    "energy": 2,
+    "energy": 3,
     "player_block": 0,
     "player_hp": 14,
     "player_max_hp": 75,
@@ -1830,7 +1830,7 @@
       "uid": 3
      }
     ],
-    "energy": 3,
+    "energy": 2,
     "player_block": 0,
     "player_hp": 14,
     "player_max_hp": 75,

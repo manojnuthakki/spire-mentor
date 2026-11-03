@@ -26,6 +26,20 @@
    "wins": 6
   },
   {
+   "action": "Defend",
+   "is_best": false,
+   "losses": 0,
+   "low_confidence": false,
+   "q": 1.0641,
+   "q_saturated": false,
+   "stable_idx": 3,
+   "target_index": null,
+   "ties": 0,
+   "visits": 5,
+   "win_prob": 1.0,
+   "wins": 5
+  },
+  {
    "action": "Venerate",
    "is_best": false,
    "losses": 0,
@@ -54,20 +68,6 @@
    "wins": 5
   },
   {
-   "action": "Defend",
-   "is_best": false,
-   "losses": 0,
-   "low_confidence": false,
-   "q": 1.0577,
-   "q_saturated": false,
-   "stable_idx": 3,
-   "target_index": null,
-   "ties": 0,
-   "visits": 5,
-   "win_prob": 1.0,
-   "wins": 5
-  },
-  {
    "action": "Photon Cut",
    "is_best": false,
    "losses": 0,
@@ -86,7 +86,7 @@
    "is_best": false,
    "losses": 0,
    "low_confidence": false,
-   "q": 1.0477,
+   "q": 1.0384,
    "q_saturated": false,
    "stable_idx": 1,
    "target_index": 0,
@@ -114,7 +114,7 @@
    "is_best": false,
    "losses": 1,
    "low_confidence": false,
-   "q": 0.6812,
+   "q": 0.6782,
    "q_saturated": false,
    "stable_idx": 1,
    "target_index": 2,
