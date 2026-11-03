@@ -406,21 +406,30 @@ fn a_living_fog_rebuild_keeps_retained_bomb_corpses_in_their_slots() {
         bomb(1), bomb(2), bomb(3), bomb(4), bomb(5)
     ]);
     let mut state = state_from_json_str(&value.to_string()).expect("rebuilds");
+    let fresh = state.clone();
     let slots: Vec<Option<u8>> = state
         .enemy_uids
         .iter()
         .map(|uid| state.enemy_slot(*uid))
         .collect();
-    assert_eq!(
-        slots,
-        [Some(5), Some(0), Some(1), Some(2), Some(3), Some(4)]
-    );
+    // `Enemies` is slot-sorted: the retained corpses keep their places
+    // ahead of the fog although the wire lists them after it.
+    assert_eq!(slots, (0..=5).map(Some).collect::<Vec<_>>());
     assert_eq!(
         state.active_enemy_uids().len(),
         6,
         "all five corpses retained"
     );
-    let fog = state.enemy_uids[0];
+    let fog = *state
+        .enemy_uids
+        .iter()
+        .find(|u| {
+            state
+                .creatures
+                .iter()
+                .any(|c| c.id == u.0 && c.species == Some(sts2_core::MonsterKind::LivingFog))
+        })
+        .expect("fog");
     if let Some(c) = state.creatures.iter_mut().find(|c| c.id == fog.0) {
         c.intent = Some(sts2_core::Intent::Attack { damage: 5 });
         if let Some(ai) = c.ai.as_mut() {
@@ -430,6 +439,22 @@ fn a_living_fog_rebuild_keeps_retained_bomb_corpses_in_their_slots() {
     state.phase = sts2_core::CombatPhase::EnemyTurnExec;
     let _ = sts2_core::combat_loop::enemy_turn_exec(&mut state);
     assert_eq!(state.enemy_uids.len(), 6, "no free bomb slot: no summon");
+
+    // Continuation: through a real end turn the corpses revive and act in
+    // slot order, the five bombs before the fog (`enemy_uids` is the turn
+    // order), as in the game.
+    let mut state = fresh;
+    let _ = sts2_core::combat_loop::end_turn_dispatch(&mut state);
+    let living: Vec<Option<sts2_core::MonsterKind>> = state
+        .active_enemy_uids()
+        .iter()
+        .filter_map(|u| state.creatures.iter().find(|c| c.id == u.0))
+        .filter(|c| c.current_hp > 0)
+        .map(|c| c.species)
+        .collect();
+    let mut expected = vec![Some(sts2_core::MonsterKind::GasBomb); 5];
+    expected.push(Some(sts2_core::MonsterKind::LivingFog));
+    assert_eq!(living, expected, "revived bombs act before the fog");
 }
 
 /// C# `BrilliantScarf.AfterCardPlayed` skips auto-plays: Havoc's auto-played

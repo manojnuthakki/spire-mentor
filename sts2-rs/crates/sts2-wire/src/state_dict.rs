@@ -4073,6 +4073,7 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
     // slots 0..k in wire order (living bombs, listed before the fog, then
     // the retained corpses the wire re-appends last; exact unless a lower
     // bomb left while a higher one stayed).
+    let mut living_fog_roster = false;
     if let Some(fog_pos) = parsed
         .encounter
         .iter()
@@ -4112,6 +4113,11 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
         if let Some((_, uid)) = listed.iter().find(|(i, _)| *i == fog_pos) {
             state.set_enemy_slot(*uid, LIVING_FOG_SLOT);
         }
+        living_fog_roster = parsed
+            .encounter
+            .iter()
+            .filter(|e| !e.is_escaped)
+            .all(|e| matches!(e.kind, MonsterKind::LivingFog | MonsterKind::GasBomb));
     }
 
     // --- C# `Enemies`-order (slot) restoration for reviver rosters ---
@@ -4178,6 +4184,23 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
             order.sort_by_key(|(rank, _)| *rank);
             enemy_uids = order.into_iter().map(|(_, uid)| uid).collect();
         }
+    }
+    // Living Fog roster order. The wire re-appends retained corpses LAST
+    // (see the reviver block above), but C# keeps them at their slot in
+    // `Enemies` (`SortEnemiesBySlotName`), and `enemy_uids` is the turn
+    // order: left in wire order, retained bombs that revive would act AFTER
+    // the fog where the game has them act before it. Once the slots are
+    // stamped (above), sort a pure fog/bomb roster by slot (stable; a
+    // removed corpse holds no slot and sorts last, where the wire lists it).
+    // Runs after the reviver block, whose rank list is zipped with the wire
+    // order.
+    if living_fog_roster {
+        let mut order: SmallVec<[(u8, CreatureUid); 8]> = enemy_uids
+            .iter()
+            .map(|uid| (state.enemy_slot(*uid).unwrap_or(u8::MAX), *uid))
+            .collect();
+        order.sort_by_key(|(slot, _)| *slot);
+        enemy_uids = order.into_iter().map(|(_, uid)| uid).collect();
     }
     state.enemy_uids = enemy_uids;
 
