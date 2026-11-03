@@ -996,6 +996,20 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
         // species-`roll_intent` path instead of a `MonsterAi`.
         if let Some(ai) = &c.ai {
             set(&mut m, "move_state", ai.current_state_id());
+            if species == MonsterKind::CorpseSlug
+                && ai.current_state_id() == "STUNNED"
+                && ai.forced_next_state().is_some()
+            {
+                m.insert(
+                    "ravenous_resume".to_owned(),
+                    serde_json::json!({
+                        "performed_first": ai.performed_first_move(),
+                        "performed_current": ai.performed_current_move(),
+                        "initial_resolved": ai.initial_resolved(),
+                        "resume": ai.forced_next_state(),
+                    }),
+                );
+            }
             // Hidden AI counters the wire dialect discloses (2026-08-02):
             // emit them so a native round-trip keeps what the C# producers
             // now ship. The Fabricator's counter IS the last-spawned bot

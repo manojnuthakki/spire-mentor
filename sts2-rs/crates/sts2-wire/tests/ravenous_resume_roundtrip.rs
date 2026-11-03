@@ -31,6 +31,11 @@ fn roundtrip(original: &'static str, performed_stun: bool) {
     let before = sts2_wire::emit::combat_state_to_value(&s).expect("emits");
     assert_eq!(before, sts2_wire::emit::combat_state_to_value(&s).unwrap());
     let mut restored = sts2_wire::state_from_json_str(&before.to_string()).expect("roundtrip");
+    assert_eq!(
+        before["encounter"][0]["ravenous_resume"],
+        sts2_wire::emit::combat_state_to_value(&restored).unwrap()["encounter"][0]
+            ["ravenous_resume"]
+    );
     let mut clone = s.clone();
     for state in [&mut s, &mut clone, &mut restored] {
         state.side = Side::Enemy;
@@ -65,4 +70,64 @@ fn unperformed_glomp_resume_survives_engine_wire_and_clone() {
 #[test]
 fn performed_goop_resume_and_completion_survive_engine_wire_and_clone() {
     roundtrip("GOOP", true);
+}
+
+fn stunned_wire() -> serde_json::Value {
+    let mut s = CombatState::default();
+    s.init_player_creature();
+    let uid = s.spawn_enemy(MonsterKind::CorpseSlug);
+    let mut ai = create_corpse_slug_ai(1);
+    ai.force_current_state("STUNNED");
+    ai.force_next_state("GLOMP");
+    s.set_creature_ai(uid, ai);
+    s.creatures
+        .iter_mut()
+        .find(|c| c.id == uid.0)
+        .unwrap()
+        .intent = Some(sts2_core::Intent::Stun);
+    sts2_wire::emit::combat_state_to_value(&s).unwrap()
+}
+
+#[test]
+fn undisclosed_native_stun_import_does_not_fabricate_an_exact_resume() {
+    let mut wire = stunned_wire();
+    wire["encounter"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("ravenous_resume");
+    // Existing native imports remain approximate, including strict goldens.
+    // Missing information must not become an advertised exact engine queue.
+    let state = sts2_wire::state_from_json(&wire).unwrap();
+    assert_eq!(
+        state
+            .creatures
+            .iter()
+            .find_map(|c| c.ai.as_ref())
+            .unwrap()
+            .forced_next_state(),
+        None
+    );
+    assert!(
+        sts2_wire::emit::combat_state_to_value(&state).unwrap()["encounter"][0]
+            .get("ravenous_resume")
+            .is_none()
+    );
+}
+
+#[test]
+fn stale_or_invalid_private_resume_is_rejected() {
+    let good = stunned_wire();
+    for (key, value) in [
+        ("resume", serde_json::json!("STUNNED")),
+        ("resume", serde_json::Value::Null),
+        ("performed_first", serde_json::json!(false)),
+        ("performed_current", serde_json::json!(1)),
+    ] {
+        let mut wire = good.clone();
+        wire["encounter"][0]["ravenous_resume"][key] = value;
+        assert!(sts2_wire::state_from_json(&wire).is_err(), "{key}");
+    }
+    let mut wire = good;
+    wire["encounter"][0]["move_state"] = serde_json::json!("GLOMP");
+    assert!(sts2_wire::state_from_json(&wire).is_err());
 }

@@ -826,6 +826,44 @@ impl MonsterAi {
         self.performed_first_move
     }
 
+    /// Whether the current move has actually begun executing.
+    #[must_use]
+    pub fn performed_current_move(&self) -> bool {
+        self.performed_at_least_once
+    }
+
+    /// Restore existing execution flags and a queued move from engine-private
+    /// transport. Validate the queue before changing any field. This carries
+    /// no performed/observed history and does not infer a missing resume.
+    #[must_use]
+    pub fn restore_move_execution(
+        &mut self,
+        performed_first: bool,
+        performed_current: bool,
+        initial_resolved: bool,
+        forced_next: Option<&str>,
+    ) -> bool {
+        let queued = match forced_next {
+            Some(name) => {
+                let Some(id) = self
+                    .states
+                    .keys()
+                    .copied()
+                    .find(|id| *id == name && self.states[*id].is_move())
+                else {
+                    return false;
+                };
+                Some(id)
+            }
+            None => None,
+        };
+        self.performed_first_move = performed_first;
+        self.performed_at_least_once = performed_current;
+        self.initial_resolved = initial_resolved;
+        self.forced_next_state = queued;
+        true
+    }
+
     /// Whether [`Self::resolve_initial_move_with_combat`] has run. See the
     /// `initial_resolved` field docs for why a mid-combat summon needs it.
     #[must_use]
@@ -1102,7 +1140,9 @@ impl MonsterAi {
         (rb.branches[idx].state_id, certainty)
     }
 
-    fn can_transition_away(&self) -> bool {
+    /// Native immediate replacement is refused until a must-perform move ran.
+    #[must_use]
+    pub fn can_transition_away(&self) -> bool {
         match self.cur() {
             MonsterState::Move(m) if m.must_perform_once => self.performed_at_least_once,
             _ => true,

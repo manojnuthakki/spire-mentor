@@ -8920,13 +8920,22 @@ pub fn after_death(
             if creature_ref_side(owner) != ctx.dead_side {
                 return None;
             }
-            // C# resume target: the currently-telegraphed state id.
-            let resume = state
+            // Slug's ordinary graph is deterministic. An admitted stun resumes
+            // the interrupted ordinary state; restunning a performed STUNNED
+            // before its roll must retain that original queued state. Refused
+            // replacement leaves both the instance and its queue untouched.
+            let ai = state
                 .creatures
                 .iter()
                 .find(|c| c.id == owner_uid.0)
-                .and_then(|c| c.ai.as_ref())
-                .map(crate::monster_ai::MonsterAi::current_state_id);
+                .and_then(|c| c.ai.as_ref());
+            let admission = ai.filter(|ai| ai.can_transition_away()).and_then(|ai| {
+                if ai.current_state_id() == "STUNNED" {
+                    ai.forced_next_state()
+                } else {
+                    Some(ai.current_state_id())
+                }
+            });
             let mut effects: SmallVec<[Effect; 2]> = SmallVec::new();
             // C# `RavenousPower.cs:28` flashes inside this same guard, before
             // the stun/Strength grant.
@@ -8936,24 +8945,25 @@ pub fn after_death(
                     power: PowerKind::Ravenous,
                 });
             }
-            effects.push(Effect::ApplyPower {
-                target: owner,
-                kind: PowerKind::Strength,
-                amount: power.amount,
-                applier: None,
-            });
             // Order is load-bearing: ForceMonsterMove clears any queued
-            // forced-next, so the resume must be queued AFTER it.
-            effects.push(Effect::ForceMonsterMove {
-                target: owner_uid,
-                state_id: "STUNNED",
-            });
-            if let Some(resume) = resume {
+            // forced-next, so queue AFTER it and BEFORE native Strength grant.
+            if let Some(resume) = admission {
+                effects.push(Effect::ForceMonsterMove {
+                    target: owner_uid,
+                    state_id: "STUNNED",
+                });
                 effects.push(Effect::ForceMonsterNextMove {
                     target: owner_uid,
                     state_id: resume,
                 });
             }
+            // Even a refused replacement still grants Strength.
+            effects.push(Effect::ApplyPower {
+                target: owner,
+                kind: PowerKind::Strength,
+                amount: power.amount,
+                applier: Some(owner_uid),
+            });
             Some(effects)
         }
         PowerKind::Surrounded => {

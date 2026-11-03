@@ -2,7 +2,10 @@
 //! still grants Strength. Slug resumes its original deterministic move once.
 use sts2_content::monsters::act1_underdocks::create_corpse_slug_ai;
 use sts2_core::combat_loop::{enemy_turn_end, enemy_turn_exec};
-use sts2_core::hooks::{dispatch_after_death, AfterDeathCtx};
+use sts2_core::hooks::{
+    after_death, apply_effect, dispatch_after_death, AfterDeathCtx, CreatureRef, Effect,
+    ListenerRef, ValueProps,
+};
 use sts2_core::{CombatPhase, CombatState, CreatureUid, MonsterKind, PowerKind, Side, StepResult};
 
 fn board(starter: u8, side: Side) -> (CombatState, CreatureUid, [CreatureUid; 3]) {
@@ -22,7 +25,7 @@ fn board(starter: u8, side: Side) -> (CombatState, CreatureUid, [CreatureUid; 3]
         .find(|c| c.id == slug.0)
         .unwrap()
         .intent = intent;
-    sts2_core::card_effects::apply_power_to_creature(&mut s, slug, PowerKind::Ravenous, 4);
+    // spawn_enemy already installs the species' Ravenous4; do not double it.
     let allies = std::array::from_fn(|_| s.spawn_enemy(MonsterKind::Tunneler));
     (s, slug, allies)
 }
@@ -114,12 +117,13 @@ fn goop_resumes_once_after_three_ally_deaths() {
 fn performed_stun_can_be_replaced_before_roll_without_losing_original_resume() {
     let (mut s, slug, allies) = board(1, Side::Enemy);
     death(&mut s, allies[0], Side::Enemy);
+    death(&mut s, allies[2], Side::Enemy);
     s.phase = CombatPhase::EnemyTurnExec;
     assert_eq!(enemy_turn_exec(&mut s), StepResult::Advanced);
     assert_eq!(current(&s, slug), "STUNNED");
     // A different ally dies after this slot actually performed, before rolling.
     death(&mut s, allies[1], Side::Enemy);
-    assert_eq!(strength(&s, slug), 8);
+    assert_eq!(strength(&s, slug), 12);
     assert_eq!(enemy_turn_end(&mut s), StepResult::Advanced);
     assert_eq!(current(&s, slug), "STUNNED");
     let hp = s.player.current_hp;
@@ -149,5 +153,176 @@ fn dead_owner_self_death_and_opposite_side_do_not_trigger_ravenous() {
         }
         assert_eq!(strength(&s, slug), 0);
         assert_eq!(current(&s, slug), "GOOP");
+    }
+}
+
+#[test]
+fn actual_damage_deaths_preserve_pending_resume_and_grant_each_strength() {
+    let (mut s, slug, allies) = board(1, Side::Player);
+    for (index, uid) in allies.into_iter().enumerate() {
+        let c = s.creatures.iter_mut().find(|c| c.id == uid.0).unwrap();
+        c.current_hp = 1;
+        c.block = 0;
+        sts2_core::damage::apply_damage(
+            &mut s,
+            CreatureRef::Player,
+            uid,
+            1,
+            ValueProps::MOVE,
+            None,
+        );
+        assert_eq!(current(&s, slug), "STUNNED");
+        assert_eq!(
+            s.creatures
+                .iter()
+                .find(|c| c.id == slug.0)
+                .unwrap()
+                .ai
+                .as_ref()
+                .unwrap()
+                .forced_next_state(),
+            Some("GLOMP")
+        );
+        assert_eq!(strength(&s, slug), i32::try_from(index + 1).unwrap() * 4);
+    }
+    let hp = s.player.current_hp;
+    turn(&mut s);
+    assert_eq!(s.player.current_hp, hp);
+    assert_eq!(current(&s, slug), "GLOMP");
+}
+
+#[test]
+fn stun_and_resume_precede_strength_even_when_replacement_is_refused() {
+    let (mut s, slug, allies) = board(2, Side::Player);
+    let power = s
+        .creatures
+        .iter()
+        .find(|c| c.id == slug.0)
+        .unwrap()
+        .powers
+        .iter()
+        .copied()
+        .find(|id| s.powers.get_by_id(id.0).unwrap().kind == PowerKind::Ravenous)
+        .unwrap();
+    for (index, dead) in allies[..2].iter().copied().enumerate() {
+        let effects = after_death(
+            &s,
+            ListenerRef::Power(power),
+            &AfterDeathCtx {
+                dead,
+                dead_side: Side::Enemy,
+            },
+        )
+        .unwrap();
+        let mut strength_seen = false;
+        for effect in effects {
+            if let Effect::ApplyPower {
+                kind: PowerKind::Strength,
+                applier,
+                ..
+            } = &effect
+            {
+                assert_eq!(*applier, Some(slug));
+                assert_eq!(current(&s, slug), "STUNNED");
+                assert_eq!(
+                    s.creatures
+                        .iter()
+                        .find(|c| c.id == slug.0)
+                        .unwrap()
+                        .ai
+                        .as_ref()
+                        .unwrap()
+                        .forced_next_state(),
+                    Some("GOOP")
+                );
+                assert_eq!(strength(&s, slug), i32::try_from(index).unwrap() * 4);
+                strength_seen = true;
+            } else {
+                assert!(!strength_seen, "Strength is last");
+            }
+            apply_effect(&mut s, effect);
+        }
+        assert!(strength_seen);
+    }
+    assert_eq!(strength(&s, slug), 8);
+}
+
+#[test]
+fn actual_deaths_with_steam_illusion_and_reattach_retention_still_trigger() {
+    for kind in [
+        MonsterKind::WaterfallGiant,
+        MonsterKind::Parafright,
+        MonsterKind::DecimillipedeSegment,
+    ] {
+        let (mut s, slug, _) = board(1, Side::Player);
+        let ally = s.spawn_enemy(kind);
+        let (ai, power) = match kind {
+            MonsterKind::WaterfallGiant => (
+                sts2_content::monsters::act1_underdocks::create_waterfall_giant_ai(),
+                PowerKind::SteamEruption,
+            ),
+            MonsterKind::Parafright => (
+                sts2_content::monsters::act1_overgrowth::create_parafright_ai(),
+                PowerKind::Illusion,
+            ),
+            _ => (
+                sts2_content::monsters::act2_hive::create_decimillipede_segment_ai(0),
+                PowerKind::Reattach,
+            ),
+        };
+        s.set_creature_ai(ally, ai);
+        let has_power = s
+            .creatures
+            .iter()
+            .find(|c| c.id == ally.0)
+            .unwrap()
+            .powers
+            .iter()
+            .any(|id| s.powers.get_by_id(id.0).unwrap().kind == power);
+        if !has_power {
+            sts2_core::card_effects::apply_power_to_creature(&mut s, ally, power, 1);
+        }
+        if power == PowerKind::Reattach {
+            let sibling = s.spawn_enemy(MonsterKind::DecimillipedeSegment);
+            sts2_core::card_effects::apply_power_to_creature(
+                &mut s,
+                sibling,
+                PowerKind::Reattach,
+                1,
+            );
+        }
+        let c = s.creatures.iter_mut().find(|c| c.id == ally.0).unwrap();
+        c.current_hp = 1;
+        c.block = 0;
+        sts2_core::damage::apply_damage(
+            &mut s,
+            CreatureRef::Player,
+            ally,
+            1,
+            ValueProps::MOVE,
+            None,
+        );
+        assert_eq!(current(&s, slug), "STUNNED", "{kind:?}");
+        assert_eq!(strength(&s, slug), 4, "{kind:?}");
+        let corpse = s
+            .creatures
+            .iter()
+            .find(|c| c.id == ally.0)
+            .expect("retained");
+        match power {
+            PowerKind::SteamEruption => assert!(corpse.current_hp > 0),
+            PowerKind::Illusion => {
+                assert_eq!(corpse.current_hp, 0);
+                assert!(matches!(
+                    corpse.intent,
+                    Some(sts2_core::Intent::Heal { .. })
+                ));
+            }
+            _ => {
+                assert_eq!(corpse.current_hp, 0);
+                assert_eq!(corpse.ai.as_ref().unwrap().current_state_id(), "DEAD");
+                assert_eq!(corpse.intent, None);
+            }
+        }
     }
 }

@@ -523,6 +523,14 @@ pub struct ParsedCard {
 }
 
 #[derive(Debug, Clone)]
+pub struct ParsedRavenousResume {
+    pub performed_first: bool,
+    pub performed_current: bool,
+    pub initial_resolved: bool,
+    pub resume: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct ParsedEnemy {
     pub kind: MonsterKind,
     pub uid: i64,
@@ -559,6 +567,9 @@ pub struct ParsedEnemy {
     /// (bead `sts2-rs-3f3rz`). `None` for wires that omit it (older
     /// adapters / the C# backend, which never emitted it).
     pub move_state: Option<String>,
+    /// Engine-private transport of existing Slug execution fields, only while
+    /// STUNNED. Native observations do not disclose the interrupted move.
+    pub ravenous_resume: Option<ParsedRavenousResume>,
     /// Reflection-exported `Fabricator._lastSpawned` (canonical bot id,
     /// e.g. `"ZAPBOT"`), on the Fabricator's own entry. 2026-08-02 wire
     /// disclosure; when present it supersedes the max-uid inference,
@@ -1576,6 +1587,51 @@ fn parse_enemy<V: WireValue>(d: &V, path: &str) -> WireResult<ParsedEnemy> {
         None => None,
     };
 
+    let ravenous_resume = if let Some(v) = extract_optional(d, "ravenous_resume") {
+        let field = format!("{path}.ravenous_resume");
+        if !v.is_object()
+            || kind != MonsterKind::CorpseSlug
+            || move_state.as_deref() != Some("STUNNED")
+        {
+            return Err(schema_err(&field, "requires a CorpseSlug STUNNED move"));
+        }
+        require_keys(
+            &v,
+            &field,
+            &[
+                "performed_first",
+                "performed_current",
+                "initial_resolved",
+                "resume",
+            ],
+        )?;
+        let performed_first = extract_bool(&v, &field, "performed_first")?;
+        let performed_current = extract_bool(&v, &field, "performed_current")?;
+        let initial_resolved = extract_bool(&v, &field, "initial_resolved")?;
+        let resume = v
+            .get("resume")
+            .and_then(|r| r.as_str())
+            .filter(|id| matches!(id.as_str(), "WHIP_SLAP" | "GLOMP" | "GOOP"))
+            .ok_or_else(|| schema_err(&field, "resume must name an ordinary Slug move"))?;
+        if !performed_first || (!is_dead && intent != Some(Intent::Stun)) {
+            return Err(schema_err(
+                &field,
+                "stale or inconsistent stunned execution fields",
+            ));
+        }
+        Some(ParsedRavenousResume {
+            performed_first,
+            performed_current,
+            initial_resolved,
+            resume,
+        })
+    } else {
+        // Preserve absent-field native import compatibility, including strict
+        // workbench fixtures. Its old defensive initial follow-up is only an
+        // approximation; no exact interrupted move or private payload is invented.
+        None
+    };
+
     // Optional reflection-exported hidden counters (2026-08-02 producers).
     let fabricator_last_spawned = match extract_optional(d, "fabricator_last_spawned") {
         Some(v) => Some(
@@ -1606,6 +1662,7 @@ fn parse_enemy<V: WireValue>(d: &V, path: &str) -> WireResult<ParsedEnemy> {
         is_escaped,
         intent_damage_known,
         move_state,
+        ravenous_resume,
         fabricator_last_spawned,
         curse_of_knowledge_counter,
     })
@@ -3718,6 +3775,19 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
         // the 1st revive, removed on the 2nd — `adaptable_after_death`), and
         // the telegraphed MULTI_CLAW hit count is Base(3) + extra.
         let mut ai = ai;
+        if let Some(resume) = &m.ravenous_resume {
+            let ai = ai
+                .as_mut()
+                .ok_or_else(|| schema_err("$.encounter", "missing Ravenous AI"))?;
+            if !ai.restore_move_execution(
+                resume.performed_first,
+                resume.performed_current,
+                resume.initial_resolved,
+                Some(&resume.resume),
+            ) {
+                return Err(schema_err("$.encounter", "invalid Ravenous resume"));
+            }
+        }
         if m.kind == MonsterKind::TestSubject
             && m.powers.iter().any(|p| p.kind == PowerKind::PainfulStabs)
         {

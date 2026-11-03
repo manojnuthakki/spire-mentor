@@ -348,10 +348,11 @@ pub fn create_corpse_slug_ai(starter_idx: u8) -> MonsterAi {
     // the stun turn. The prebuilt state's static follow-up is a defensive
     // WHIP_SLAP; the Ravenous arm queues the real resume via
     // `Effect::ForceMonsterNextMove`.
-    s.insert(
-        "STUNNED",
-        mv("STUNNED", smallvec![Intent::Stun], "WHIP_SLAP"),
-    );
+    let mut stunned = mv("STUNNED", smallvec![Intent::Stun], "WHIP_SLAP");
+    if let MonsterState::Move(m) = &mut stunned {
+        m.must_perform_once = true;
+    }
+    s.insert("STUNNED", stunned);
     s.insert(
         "GLOMP",
         mv("GLOMP", smallvec![Intent::Attack { damage: 8 }], "GOOP"),
