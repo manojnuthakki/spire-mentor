@@ -3810,8 +3810,8 @@ pub fn enemy_turn_exec(state: &mut CombatState) -> StepResult {
         }
     }
 
-    // Step 3+: the perform walk, the `on_move_performed` walk and the phase
-    // advance live in [`run_enemy_perform_walk`] so a mid-turn blocking player
+    // Step 3+: per-body admission/completion and the phase advance live in
+    // [`run_enemy_perform_walk`] so a mid-turn blocking player
     // choice (KnowledgeDemon CURSE_OF_KNOWLEDGE) can suspend and resume the
     // walk at the monster it stopped on.
     run_enemy_perform_walk(state, acting_enemies, 0)
@@ -3823,9 +3823,8 @@ pub fn enemy_turn_exec(state: &mut CombatState) -> StepResult {
 /// `acting` is the `(uid, intent)` roster snapshot taken at `enemy_turn_exec`
 /// entry (see its Step-2 rationale for why it is snapshotted rather than
 /// re-queried). Monsters `[0, start_index)` have already performed; the walk
-/// resumes at `start_index` and, once every monster has acted, runs the
-/// `on_move_performed` walk over the WHOLE snapshot and advances the phase to
-/// `EnemyTurnEnd`.
+/// resumes at `start_index` and advances to `EnemyTurnEnd` after each actual
+/// body's admission/completion has been recorded at that actor's slot.
 ///
 /// **Mid-walk suspension.** C#'s monster move bodies are `async Task`s that can
 /// `await` a blocking player choice: `KnowledgeDemon.CurseOfKnowledge`
@@ -3843,10 +3842,9 @@ pub fn enemy_turn_exec(state: &mut CombatState) -> StepResult {
 /// The suspend check sits after the per-monster tail (intent-history record +
 /// `after_death` dispatch) rather than immediately after `perform_intent`:
 /// both are inert bookkeeping for the curse move (it deals no damage and the
-/// history is not observable on the wire), and the AI state machine — which IS
-/// observable, via the telegraphed intent — is only advanced by the
-/// `on_move_performed` walk BELOW the loop, so a suspended state still reports
-/// the curse move as the monster's current move exactly like C#.
+/// history is not observable on the wire). The current instance is marked at
+/// admission; first-performance completion is deferred across the blocking
+/// choice. Neither changes the current telegraph while the body is suspended.
 fn run_enemy_perform_walk(
     state: &mut CombatState,
     acting_enemies: smallvec::SmallVec<[(CreatureUid, Option<Intent>); 8]>,
@@ -3869,7 +3867,34 @@ fn run_enemy_perform_walk(
     while slot < acting_enemies.len() {
         let (enemy_uid, intent) = acting_enemies[slot];
         slot += 1;
+        // Recheck admission at the actual slot: an earlier body may have
+        // removed/killed this actor. Retained Reattach corpses legitimately
+        // perform their intent-less move; ordinary dead/missing actors do not.
+        let Some(idx) = crate::creature_pos(&state.creatures, enemy_uid.0) else {
+            continue;
+        };
+        let reattach = is_acting_reattach_corpse(state, &state.creatures[idx]);
+        if !reattach && (state.creatures[idx].current_hp <= 0 || intent.is_none()) {
+            continue;
+        }
+        if let Some(ai) = state.creatures[idx].ai.as_mut() {
+            ai.on_move_started();
+        }
         let result = perform_intent(state, enemy_uid, intent);
+        let blocked = state
+            .pending_choice
+            .as_ref()
+            .is_some_and(|pc| pc.kind == crate::ChoiceKind::MonsterCurseSelect);
+        if !blocked {
+            // Completion belongs to the admitted body, including a body
+            // whose dealer died/revived. It changes only the machine's first-
+            // performance flag, never the replacement move's performed flag.
+            if let Some(ai) = crate::creature_pos(&state.creatures, enemy_uid.0)
+                .and_then(|i| state.creatures[i].ai.as_mut())
+            {
+                ai.on_move_completed();
+            }
+        }
         if matches!(result, StepResult::CombatWon | StepResult::CombatLost) {
             // Even on combat-end, the just-performed intent's history
             // bookkeeping is moot — combat won't roll another intent.
@@ -3915,8 +3940,8 @@ fn run_enemy_perform_walk(
             .is_some_and(|pc| pc.kind == crate::ChoiceKind::MonsterCurseSelect)
         {
             // Cloned rather than moved: the walk is inside a loop, so the
-            // snapshot must stay live for the (possible) next iteration and
-            // for the `on_move_performed` walk below. Only paid on suspend.
+            // snapshot must stay live for the possible next iteration. Its
+            // next_index also identifies the blocked body on resume.
             state.pending_enemy_exec_resume = Some(crate::PendingEnemyExecResume {
                 acting: acting_enemies.clone(),
                 next_index: slot,
@@ -3925,40 +3950,8 @@ fn run_enemy_perform_walk(
         }
     }
 
-    // Bead sts2-rs-iod: For DSL-driven enemies (those with a
-    // `MonsterAi`), record the just-performed move into `ai.state_log`
-    // so the upcoming step-4 roll sees the correct history. Mirrors
-    // Python's `state_machine.on_move_performed()` at
-    // `sts2-rl-agent@01c094d:sts2_env/monsters/state_machine.py:67-71`,
-    // called from `combat.py` between the perform loop and the next
-    // `roll_move`. Without this, `ai.current` and `ai.state_log` stay
-    // frozen after the first turn and Rust diverges from Python from
-    // turn 1 onwards. Collect indices first to avoid the same borrow
-    // conflict the step-4 loop guards against.
-    //
-    // Bead `sts2-rs-z4jsg`: walk ONLY the enemies that actually
-    // performed (the `acting_enemies` snapshot), not every alive
-    // ai-driven enemy. A monster summoned mid-turn (Ovicopter's
-    // ToughEggs, Fabricator bots, Fogmog's illusion) has performed
-    // nothing, and a phantom `on_move_performed` both poisons its
-    // `state_log` and sets `performed_first_move` — which makes the
-    // step-4 roll TRANSITION AWAY from its never-performed initial
-    // move (the eggs skipped HATCH_MOVE straight to NIBBLE). C# only
-    // advances the machine from `PerformMove` → `OnMovePerformed`.
-    let ai_indices: smallvec::SmallVec<[usize; 8]> = acting_enemies
-        .iter()
-        .filter_map(|(uid, _)| {
-            crate::creature_pos(&state.creatures, uid.0).filter(|&i| {
-                let c = &state.creatures[i];
-                (c.current_hp > 0 || is_acting_reattach_corpse(state, c)) && c.ai.is_some()
-            })
-        })
-        .collect();
-    for idx in ai_indices {
-        if let Some(ai) = state.creatures[idx].ai.as_mut() {
-            ai.on_move_performed();
-        }
-    }
+    // Admission and completion were recorded per actual body above. A final
+    // roster pass would incorrectly mark newly forced moves as performed.
 
     // Step 4: roll the next intent for each surviving enemy. We collect
     // the alive-enemy creature indices first to avoid borrow conflicts
@@ -4003,8 +3996,8 @@ fn run_enemy_perform_walk(
 /// (KnowledgeDemon CURSE_OF_KNOWLEDGE). Called from
 /// `apply(Action::ResolveChoice)` once the curse pick has been applied.
 ///
-/// Finishes the parked perform walk (the monsters that had not yet acted, then
-/// the `on_move_performed` walk + the `EnemyTurnExec -> EnemyTurnEnd` advance),
+/// Completes the blocked body, then finishes the parked perform walk and the
+/// `EnemyTurnExec -> EnemyTurnEnd` advance,
 /// then runs the rest of what `end_turn_dispatch` still owes: `enemy_turn_end`
 /// (turn-end hooks, next-intent roll, round increment) and `start_player_turn`.
 /// Same shape as [`resume_end_turn_after_before_turn_end`] — each sub-step
@@ -4016,6 +4009,20 @@ pub(crate) fn resume_enemy_turn_exec(state: &mut CombatState) -> StepResult {
     let Some(parked) = state.pending_enemy_exec_resume.take() else {
         return StepResult::Advanced;
     };
+    // The existing continuation points just past the body awaiting its
+    // choice. Complete that body once; do not admit it again or mark the
+    // current/replacement instance performed.
+    if let Some((uid, _)) = parked
+        .next_index
+        .checked_sub(1)
+        .and_then(|i| parked.acting.get(i))
+    {
+        if let Some(ai) = crate::creature_pos(&state.creatures, uid.0)
+            .and_then(|i| state.creatures[i].ai.as_mut())
+        {
+            ai.on_move_completed();
+        }
+    }
     let walk = run_enemy_perform_walk(state, parked.acting, parked.next_index);
     if !matches!(walk, StepResult::Advanced) {
         // Either combat ended mid-walk, or a LATER monster raised its own

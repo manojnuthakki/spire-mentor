@@ -1134,7 +1134,13 @@ pub fn create_tunneler_ai() -> MonsterAi {
     );
     s.insert(
         "DIZZY_MOVE",
-        mv("DIZZY_MOVE", smallvec![Intent::Stun], "BITE_MOVE"),
+        MonsterState::Move(MoveState {
+            id: "DIZZY_MOVE",
+            effect: super::dsl::noop_effect,
+            intents: smallvec![Intent::Stun],
+            follow_up: Some("BITE_MOVE"),
+            must_perform_once: true,
+        }),
     );
     MonsterAi::new(s, "BITE_MOVE")
 }

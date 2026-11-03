@@ -872,13 +872,28 @@ impl MonsterAi {
         self.roll_move_with_combat(&mut rng, combat)
     }
 
-    pub fn on_move_performed(&mut self) {
-        self.performed_first_move = true;
+    /// Admit the current move before its body can force a replacement. Keep
+    /// this engine's existing performed-state history contract: the admitted
+    /// move owns the entry, even when its body replaces `current`.
+    pub fn on_move_started(&mut self) {
         self.performed_at_least_once = true;
         let state = self.cur();
         if state.should_appear_in_logs() {
             self.state_log.push(self.current);
         }
+    }
+
+    /// The admitted body has completed. A newly forced current move has not
+    /// performed merely because the old body's await has finished.
+    pub fn on_move_completed(&mut self) {
+        self.performed_first_move = true;
+    }
+
+    /// Atomic convenience for AI-only callers that perform a whole move.
+    /// The combat walk splits these writes around the actual move body.
+    pub fn on_move_performed(&mut self) {
+        self.on_move_started();
+        self.on_move_completed();
     }
 
     /// Peek the next `k` move intents without mutating self.
