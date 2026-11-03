@@ -10,13 +10,7 @@ use super::prelude::*;
 /// the relic's per-instance `counter` (mirrors the HappyFlower every-3rd
 /// shape); `counter % 3 == 0` after the increment selects turns 3, 6, 9.
 /// Bead `sts2-rs-q6bix` (F-T).
-pub(crate) fn on_after_side_turn_start_pendulum(
-    state: &mut CombatState,
-    side: Side,
-) -> EffectResult {
-    if side != Side::Player {
-        return EffectResult::NotImplemented;
-    }
+pub(crate) fn on_after_player_turn_start_pendulum(state: &mut CombatState) -> EffectResult {
     if !player_owns_relic(state, crate::RelicKind::Pendulum) {
         return EffectResult::NotImplemented;
     }
@@ -26,14 +20,19 @@ pub(crate) fn on_after_side_turn_start_pendulum(
             continue;
         }
         if relic.kind == crate::RelicKind::Pendulum {
-            relic.counter = relic.counter.saturating_add(1);
-            if relic.counter % 3 == 0 {
+            relic.counter = (relic.counter % 3 + 1) % 3;
+            if relic.counter == 0 {
                 draw = true;
             }
             break;
         }
     }
-    if draw {
+    if draw && !crate::combat_loop::combat_is_ending(state) {
+        // The admitted Normal walk continues after an earlier listener ends
+        // combat, so its counter still advances. CardPileCmd.Draw is a NEW
+        // command and refuses IsOverOrEnding before touching the pile/RNG.
+        // If this draw parks, the existing Normal relic equip cursor awaits
+        // its draw/autoplay completion before later listeners are resumed.
         // C# `CardPileCmd.Draw(fromHandDraw = false)` — vetoed by NoDraw/Fiddle.
         let _ = state.draw_into_hand_card_effect(1);
         EffectResult::Resolved
@@ -43,8 +42,8 @@ pub(crate) fn on_after_side_turn_start_pendulum(
 }
 
 pub(crate) fn install() {
-    register_after_side_turn_start(
+    register_after_player_turn_start(
         RelicId::Pendulum,
-        on_after_side_turn_start_pendulum as AfterSideTurnStartFn,
+        on_after_player_turn_start_pendulum as AfterPlayerTurnStartFn,
     );
 }
