@@ -34,7 +34,11 @@ fn roundtrip(original: &'static str, performed_stun: bool) {
     let mut clone = s.clone();
     for state in [&mut s, &mut clone, &mut restored] {
         state.side = Side::Enemy;
-        state.phase = CombatPhase::EnemyTurnExec;
+        state.phase = if performed_stun {
+            CombatPhase::EnemyTurnEnd
+        } else {
+            CombatPhase::EnemyTurnExec
+        };
         if !performed_stun {
             assert_eq!(enemy_turn_exec(state), StepResult::Advanced);
         }
