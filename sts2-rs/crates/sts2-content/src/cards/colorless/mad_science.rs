@@ -66,7 +66,9 @@ pub(crate) fn play_mad_science(
                 // BeforeAttack/AfterAttack, so each hit's damage is computed
                 // after the previous command spent its Vigor.
                 for _ in 0..hits {
-                    sts2_core::attack_command::begin_card_command(state);
+                    // A refused command (the attacker died in an earlier one)
+                    // stands until its end and stops its hit.
+                    let _ = sts2_core::attack_command::begin_card_command(state);
                     let damage = current_damage(state);
                     let _ = deal_damage_player_to_enemy(state, t, damage);
                     sts2_core::attack_command::end_card_command(state);

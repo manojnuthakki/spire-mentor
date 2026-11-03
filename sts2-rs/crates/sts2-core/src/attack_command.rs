@@ -59,6 +59,10 @@ pub struct AttackCommandFrame {
     pub props: ValueProps,
     /// `command.Results`, flattened in order: (receiver, unblocked damage).
     pub results: smallvec::SmallVec<[(CreatureUid, i32); 6]>,
+    /// False for a command a handler opened explicitly that was refused (C#
+    /// `Execute` returned before `BeforeAttack`): it runs no hooks, and every
+    /// hit it attempts is stopped.
+    pub admitted: bool,
 }
 
 /// A power's command latch (`commandToModify` and, for Vigor,
@@ -93,12 +97,35 @@ pub struct AttackCommandState {
     /// Shroud after Reaper Form's Doom) is that callback's own damage, never
     /// a hit of the card's command.
     pub damage_depth: u32,
+    /// While one hit fans out over several targets (an all-enemies attack:
+    /// one C# `CreatureCmd.Damage` over its target list), what its first target
+    /// decided for the whole hit (`Some(None)`: no target reached yet). `None`
+    /// when no fan-out runs. The attacker's death on an earlier target doesn't
+    /// abandon the hit's later targets; only the next hit is stopped.
+    pub fanout: Option<Option<HitOwner>>,
+}
+
+/// Saved by [`fanout_begin`].
+#[derive(Clone, Copy, Debug)]
+pub struct FanOutMark(Option<Option<HitOwner>>);
+
+/// One hit over several targets begins (pair with [`fanout_end`]): admission
+/// and continuation are decided once, at its first target.
+pub fn fanout_begin(state: &mut CombatState) -> FanOutMark {
+    let mark = FanOutMark(state.attack_commands.fanout);
+    state.attack_commands.fanout = Some(None);
+    mark
+}
+
+/// The fan-out hit is over.
+pub fn fanout_end(state: &mut CombatState, mark: FanOutMark) {
+    state.attack_commands.fanout = mark.0;
 }
 
 /// What one hit on an enemy is to the running card's attack command
 /// ([`before_hit`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum HitOwner {
+pub enum HitOwner {
     /// Not a command hit (no Attack card resolving, not a `Move` hit of the
     /// player or Osty, a hit nested in another damage call, or a hit after the
     /// card's command already closed): plain damage, not recorded.
@@ -165,6 +192,7 @@ pub fn begin(
         source,
         props,
         results: smallvec::SmallVec::new(),
+        admitted: true,
     });
     if source.is_some() && source == state.resolving_card {
         state.attack_commands.dispatch_opened = true;
@@ -219,6 +247,9 @@ pub fn end(state: &mut CombatState) {
     let Some(frame) = state.attack_commands.frames.pop() else {
         return;
     };
+    if !frame.admitted {
+        return;
+    }
     // ── AfterAttack ───────────────────────────────────────────────────────
     // C# `VigorPower.AfterAttack`: `ModifyAmount(-amountWhenAttackStarted)` for
     // its latched command; removed at 0 (`ShouldRemoveDueToAmount`).
@@ -280,9 +311,28 @@ pub fn end_card_command(state: &mut CombatState) {
 /// player: for a handler that issues more than one command in one `OnPlay`
 /// (Mad Science's attack hits, each its own `Execute`). Pair with
 /// [`end_card_command`].
-pub fn begin_card_command(state: &mut CombatState) {
+///
+/// Returns whether it was admitted. A refused command still stands as a frame
+/// until `end_card_command` (no hooks): its attempted hits are stopped, never
+/// ordinary damage.
+pub fn begin_card_command(state: &mut CombatState) -> bool {
     let card = state.resolving_card;
-    let _ = begin(state, CreatureRef::Player, ValueProps::MOVE, card);
+    if begin(state, CreatureRef::Player, ValueProps::MOVE, card) {
+        return true;
+    }
+    state.attack_commands.frames.push(AttackCommandFrame {
+        id: state.attack_commands.next_id,
+        attacker: CreatureRef::Player,
+        source: card,
+        props: ValueProps::MOVE,
+        results: smallvec::SmallVec::new(),
+        admitted: false,
+    });
+    state.attack_commands.next_id = state.attack_commands.next_id.wrapping_add(1);
+    if card.is_some() {
+        state.attack_commands.dispatch_opened = true;
+    }
+    false
 }
 
 fn card_attacker(state: &CombatState, dealer: CreatureRef) -> bool {
@@ -305,13 +355,24 @@ pub(crate) fn before_hit(
     dealer: CreatureRef,
     props: ValueProps,
 ) -> HitOwner {
+    if state.attack_commands.damage_depth > 0 {
+        return HitOwner::Plain;
+    }
+    if let Some(Some(decided)) = state.attack_commands.fanout {
+        return decided;
+    }
+    let owner = hit_owner(state, dealer, props);
+    if let Some(slot) = state.attack_commands.fanout.as_mut() {
+        *slot = Some(owner);
+    }
+    owner
+}
+
+fn hit_owner(state: &mut CombatState, dealer: CreatureRef, props: ValueProps) -> HitOwner {
     let Some(card) = state.resolving_card else {
         return HitOwner::Plain;
     };
-    if state.attack_commands.damage_depth > 0
-        || !props.contains(ValueProps::MOVE)
-        || !card_attacker(state, dealer)
-    {
+    if !props.contains(ValueProps::MOVE) || !card_attacker(state, dealer) {
         return HitOwner::Plain;
     }
     if state
@@ -320,7 +381,15 @@ pub(crate) fn before_hit(
         .last()
         .is_some_and(|f| f.source == Some(card) && f.attacker == dealer)
     {
-        return if crate::combat_loop::combat_is_ending(state) || !attacker_alive(state, dealer) {
+        let admitted = state
+            .attack_commands
+            .frames
+            .last()
+            .is_some_and(|f| f.admitted);
+        return if !admitted
+            || crate::combat_loop::combat_is_ending(state)
+            || !attacker_alive(state, dealer)
+        {
             HitOwner::Stopped
         } else {
             HitOwner::Command
@@ -357,6 +426,7 @@ pub(crate) struct DispatchMark {
     depth: usize,
     opened: bool,
     damage_depth: u32,
+    fanout: Option<Option<HitOwner>>,
 }
 
 pub(crate) fn dispatch_enter(state: &mut CombatState) -> DispatchMark {
@@ -364,7 +434,9 @@ pub(crate) fn dispatch_enter(state: &mut CombatState) -> DispatchMark {
         depth: state.attack_commands.frames.len(),
         opened: state.attack_commands.dispatch_opened,
         damage_depth: state.attack_commands.damage_depth,
+        fanout: state.attack_commands.fanout,
     };
+    state.attack_commands.fanout = None;
     state.attack_commands.dispatch_opened = false;
     // A card played from inside a damage call (an auto-play a reaction
     // triggers) runs its own command from the top.
@@ -401,6 +473,7 @@ pub(crate) fn dispatch_exit(state: &mut CombatState, mark: DispatchMark, card: C
     }
     state.attack_commands.dispatch_opened = mark.opened;
     state.attack_commands.damage_depth = mark.damage_depth;
+    state.attack_commands.fanout = mark.fanout;
 }
 
 /// Vigor's additive bonus for a hit from `card` (`None`: not a card's damage).

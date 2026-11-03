@@ -15,6 +15,8 @@ use super::prelude::*;
 pub(crate) fn play_thunderclap(state: &mut CombatState, _t: Option<CreatureUid>) -> EffectResult {
     let dmg = current_damage(state);
     let dmg_uids: Vec<CreatureUid> = state.enemy_uids.iter().copied().collect();
+    // One hit over every target (C# one `CreatureCmd.Damage`).
+    let fan = sts2_core::attack_command::fanout_begin(state);
     for uid in dmg_uids {
         if state
             .creatures
@@ -24,6 +26,7 @@ pub(crate) fn play_thunderclap(state: &mut CombatState, _t: Option<CreatureUid>)
             let _ = deal_damage_player_to_enemy(state, uid, dmg);
         }
     }
+    sts2_core::attack_command::fanout_end(state, fan);
     sts2_core::attack_command::end_card_command(state);
     // Re-snapshot AFTER damage: C# applies Vulnerable to `HittableEnemies`
     // evaluated post-damage, so death-spawned minions are included and dead

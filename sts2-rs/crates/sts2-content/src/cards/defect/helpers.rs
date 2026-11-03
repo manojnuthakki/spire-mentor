@@ -154,6 +154,8 @@ pub(crate) fn current_card_energy_spent(state: &CombatState) -> i32 {
 /// Deal `base` damage to every alive enemy.
 pub(crate) fn deal_damage_player_to_all(state: &mut CombatState, base: i32) {
     let uids: Vec<CreatureUid> = state.enemy_uids.iter().copied().collect();
+    // One hit over every target (C# one `CreatureCmd.Damage`).
+    let fan = sts2_core::attack_command::fanout_begin(state);
     for uid in uids {
         let alive = state
             .creatures
@@ -163,6 +165,7 @@ pub(crate) fn deal_damage_player_to_all(state: &mut CombatState, base: i32) {
             let _ = deal_damage_player_to_enemy(state, uid, base);
         }
     }
+    sts2_core::attack_command::fanout_end(state, fan);
 }
 
 /// The Defect 10-card starter deck: 4×StrikeDefect, 4×DefendDefect,

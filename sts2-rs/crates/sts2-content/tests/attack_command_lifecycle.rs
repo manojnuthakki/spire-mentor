@@ -611,3 +611,95 @@ fn living_attacker_lands_every_hit_into_thorns() {
     assert_eq!(state.player.current_hp, 80 - 2);
     assert_eq!(state.creatures[1].current_hp, 50 - 10);
 }
+
+// ── review r2: later explicit commands and area hits ─────────────────────
+
+fn mad_science_violence(state: &mut CombatState) -> sts2_core::CardUid {
+    let ms = attack(state, CardId::MadScience, 12);
+    // Attack mode (0 << 4) with the Violence rider (2): three commands.
+    state.cards[ms.0.get() as usize - 1].set_combat_var(sts2_core::cards::VarKey::Generic, 2);
+    ms
+}
+
+/// Review r2 F2: Mad Science (Attack/Violence) at 1 HP into Thorns 1: its first
+/// command lands and Thorns kills the attacker; the two later commands are
+/// refused and deal nothing (the DLL's [21,11] shape: one hit).
+#[test]
+fn later_explicit_command_refused_after_attacker_death() {
+    let mut state = base_state();
+    state.player.current_hp = 1;
+    enemy(&mut state, 10, 100, 0, None);
+    enemy_power(&mut state, 1, 70, PowerKind::Thorns, 1);
+    let ms = mad_science_violence(&mut state);
+    state.player.hand.push(ms);
+    let _ = sts2_core::combat_loop::play_card(&mut state, 0, Some(0));
+    assert!(state.player.current_hp <= 0);
+    assert_eq!(
+        state.creatures[1].current_hp,
+        100 - 12,
+        "only the first command hits"
+    );
+    assert!(
+        state.attack_commands.frames.is_empty(),
+        "the refused commands closed"
+    );
+}
+
+/// Control: the same Mad Science with a living attacker runs all three commands.
+#[test]
+fn mad_science_violence_runs_three_commands() {
+    let mut state = base_state();
+    enemy(&mut state, 10, 100, 0, None);
+    enemy_power(&mut state, 1, 70, PowerKind::Thorns, 1);
+    let ms = mad_science_violence(&mut state);
+    state.player.hand.push(ms);
+    let _ = sts2_core::combat_loop::play_card(&mut state, 0, Some(0));
+    assert_eq!(state.creatures[1].current_hp, 100 - 36);
+    assert_eq!(state.player.current_hp, 80 - 3);
+}
+
+/// Review r2 F5: Thunderclap at 1 HP with Thorns on its first target: the one
+/// area hit still reaches every target (C# `CreatureCmd.Damage` checks the dealer
+/// once, before its target loop), so both enemies take 4 (the DLL's [19,20]).
+#[test]
+fn area_hit_finishes_every_target_after_attacker_death() {
+    let mut state = base_state();
+    state.player.current_hp = 1;
+    enemy(&mut state, 10, 23, 0, None);
+    enemy(&mut state, 11, 24, 0, None);
+    enemy_power(&mut state, 1, 70, PowerKind::Thorns, 1);
+    let tc = card(
+        &mut state,
+        CardId::Thunderclap,
+        CardType::Attack,
+        TargetType::AllEnemies,
+        4,
+    );
+    state.player.hand.push(tc);
+    let _ = sts2_core::combat_loop::play_card(&mut state, 0, None);
+    assert!(state.player.current_hp <= 0);
+    assert_eq!(state.creatures[1].current_hp, 19);
+    assert_eq!(state.creatures[2].current_hp, 20);
+}
+
+/// The shared all-enemies helper (Breakthrough's) keeps the same rule.
+#[test]
+fn shared_area_helper_finishes_every_target_after_attacker_death() {
+    let mut state = base_state();
+    state.player.current_hp = 2;
+    enemy(&mut state, 10, 50, 0, None);
+    enemy(&mut state, 11, 50, 0, None);
+    enemy_power(&mut state, 1, 70, PowerKind::Thorns, 1);
+    let bt = card(
+        &mut state,
+        CardId::Breakthrough,
+        CardType::Attack,
+        TargetType::AllEnemies,
+        9,
+    );
+    state.player.hand.push(bt);
+    let _ = sts2_core::combat_loop::play_card(&mut state, 0, None);
+    assert!(state.player.current_hp <= 0);
+    assert_eq!(state.creatures[1].current_hp, 50 - 9);
+    assert_eq!(state.creatures[2].current_hp, 50 - 9);
+}

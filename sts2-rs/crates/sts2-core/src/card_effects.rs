@@ -231,6 +231,8 @@ pub fn deal_damage_to_all_alive_enemies(
         precomputed.push((uid, dmg));
     }
     let mut total = 0_i32;
+    // One hit over every target (C# one `CreatureCmd.Damage`).
+    let fan = crate::attack_command::fanout_begin(state);
     for (target_uid, final_damage) in precomputed {
         // Per-iteration alive recheck: a previous iteration may have
         // killed a chained-listener target (or this very target through
@@ -253,6 +255,7 @@ pub fn deal_damage_to_all_alive_enemies(
         .hp_loss;
         total = total.saturating_add(hp_loss);
     }
+    crate::attack_command::fanout_end(state, fan);
     total
 }
 
@@ -318,6 +321,7 @@ pub fn deal_damage_from_osty_to_all_alive_enemies(state: &mut CombatState, base:
         })
         .collect();
     let mut total = 0_i32;
+    let fan = crate::attack_command::fanout_begin(state);
     for target_uid in targets {
         let alive = state
             .creatures
@@ -335,6 +339,7 @@ pub fn deal_damage_from_osty_to_all_alive_enemies(state: &mut CombatState, base:
             card,
         ));
     }
+    crate::attack_command::fanout_end(state, fan);
     total
 }
 
