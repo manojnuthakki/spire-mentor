@@ -133,23 +133,17 @@ pub fn infested_after_death_spawn(state: &mut CombatState, _owner: CreatureUid) 
             MonsterKind::Wriggler,
             create_infested_wriggler_ai(slot),
         );
-        // Telegraph the spawned wriggler's initial move (SPAWNED_MOVE = Stun)
-        // on the fresh creature so the NEXT enemy turn's `acting_enemies`
-        // snapshot — which filters on `creature.intent.is_some()` — includes
-        // it. C# `CombatManager.AfterCreatureAdded` calls `Monster.RollMove`
-        // immediately when a creature is added while `CurrentSide == Player`
-        // (`CombatManager.cs:689-695`); InfestedPower's wrigglers are spawned
-        // mid-player-turn (the killing blow on the PhrogParasite), so C# gives
-        // them their SPAWNED_MOVE telegraph at once and they perform the stun
-        // on the very next enemy turn — advancing to NASTY_BITE/WRIGGLE the
-        // turn after. Without this the wriggler's `intent` stayed `None` until
-        // the post-exec re-roll, so it sat out one enemy turn and trailed C#
-        // by a full move-state step (the bite/wriggle landed one turn late —
-        // an off-by-one that under-damaged the player and desynced the
-        // downstream discard/reshuffle pile size, surfacing as a `shuffle`
-        // RNG-counter divergence). Mirrors the Axebot respawn telegraph in
-        // `act3_glory::respawn_axebot`.
-        let initial_intent = ai.current_move().intents.first().copied();
+        // CombatManager.AfterCreatureAdded rolls an added monster immediately
+        // only on the player side. Player-side kills must telegraph SPAWNED_MOVE
+        // now so the next enemy walk performs it. Enemy-side deaths (notably
+        // Poison before the perform roster is collected) must leave intent None:
+        // those newborns first roll at enemy-turn end and perform next round.
+        // Their existing unresolved-initial AI already preserves that boundary.
+        let initial_intent = if state.side == sts2_core::Side::Player {
+            ai.current_move().intents.first().copied()
+        } else {
+            None
+        };
         state.set_creature_ai(uid, ai);
         if let Some(c) = state.creatures.iter_mut().find(|c| c.id == uid.0) {
             c.intent = initial_intent;
