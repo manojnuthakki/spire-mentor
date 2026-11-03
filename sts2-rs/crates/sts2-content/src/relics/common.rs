@@ -1380,13 +1380,16 @@ mod tests {
     fn pendulum_draws_every_third_player_turn_start() {
         use std::num::NonZeroU32;
         use sts2_core::cards::{Card, CardId, CardType, TargetType};
-        use sts2_core::relic_effects::dispatch_after_side_turn_start;
-        use sts2_core::{CardUid, CombatState, Relic, RelicKind, Side};
+        use sts2_core::relic_effects::dispatch_after_player_turn_start;
+        use sts2_core::{CardUid, CombatState, MonsterKind, Relic, RelicKind};
 
         crate::relics::dispatch::ensure_installed();
         assert!(
-            sts2_core::relic_effects::lookup_after_side_turn_start(RelicId::Pendulum).is_some(),
-            "Pendulum listener must register on after_side_turn_start channel"
+            sts2_core::relic_effects::lookup_after_player_turn_start(RelicId::Pendulum).is_some(),
+            "Pendulum listener must register on after_player_turn_start channel"
+        );
+        assert!(
+            sts2_core::relic_effects::lookup_after_side_turn_start(RelicId::Pendulum).is_none()
         );
 
         let mut state = CombatState::default();
@@ -1394,6 +1397,13 @@ mod tests {
         state.player.max_hp = 80;
         let _ = state.init_player_creature();
         state.sync_player_creature();
+        let enemy = state.spawn_enemy(MonsterKind::Nibbit);
+        state
+            .creatures
+            .iter_mut()
+            .find(|c| c.id == enemy.0)
+            .unwrap()
+            .current_hp = 100;
 
         for n in 1..=3u32 {
             let uid = CardUid(NonZeroU32::new(n).expect("non-zero"));
@@ -1421,12 +1431,12 @@ mod tests {
         });
 
         // Turns 1 and 2: no draw.
-        let _ = dispatch_after_side_turn_start(&mut state, Side::Player);
+        let _ = dispatch_after_player_turn_start(&mut state);
         assert_eq!(state.player.hand.len(), 0, "no draw on turn 1");
-        let _ = dispatch_after_side_turn_start(&mut state, Side::Player);
+        let _ = dispatch_after_player_turn_start(&mut state);
         assert_eq!(state.player.hand.len(), 0, "no draw on turn 2");
         // Turn 3: draw exactly 1.
-        let _ = dispatch_after_side_turn_start(&mut state, Side::Player);
+        let _ = dispatch_after_player_turn_start(&mut state);
         assert_eq!(
             state.player.hand.len(),
             1,
@@ -1444,8 +1454,10 @@ mod tests {
     fn pendulum_turn_start_owner_gated_and_enemy_side_noop() {
         use std::num::NonZeroU32;
         use sts2_core::cards::{Card, CardId, CardType, TargetType};
-        use sts2_core::relic_effects::dispatch_after_side_turn_start;
-        use sts2_core::{CardUid, CombatState, Relic, RelicKind, Side};
+        use sts2_core::relic_effects::{
+            dispatch_after_player_turn_start, dispatch_after_side_turn_start,
+        };
+        use sts2_core::{CardUid, CombatState, MonsterKind, Relic, RelicKind, Side};
 
         crate::relics::dispatch::ensure_installed();
 
@@ -1455,6 +1467,13 @@ mod tests {
         state.player.max_hp = 80;
         let _ = state.init_player_creature();
         state.sync_player_creature();
+        let enemy = state.spawn_enemy(MonsterKind::Nibbit);
+        state
+            .creatures
+            .iter_mut()
+            .find(|c| c.id == enemy.0)
+            .unwrap()
+            .current_hp = 100;
         let uid = CardUid(NonZeroU32::new(1).expect("non-zero"));
         state.cards.push(Card {
             uid,
@@ -1469,7 +1488,7 @@ mod tests {
         });
         state.player.draw.push(uid);
         for _ in 0..3 {
-            let _ = dispatch_after_side_turn_start(&mut state, Side::Player);
+            let _ = dispatch_after_player_turn_start(&mut state);
         }
         assert_eq!(
             state.player.hand.len(),
@@ -1487,12 +1506,19 @@ mod tests {
         });
         for _ in 0..3 {
             let _ = dispatch_after_side_turn_start(&mut state, Side::Enemy);
+            let _ = dispatch_after_side_turn_start(&mut state, Side::Player);
         }
         assert_eq!(
             state.player.hand.len(),
             0,
             "enemy-side turn starts never advance Pendulum"
         );
+        assert_eq!(
+            state.relics[0].counter, 0,
+            "neither Side channel advances Pendulum"
+        );
+        let _ = dispatch_after_player_turn_start(&mut state);
+        assert_eq!(state.relics[0].counter, 1);
     }
 
     /// Bead `sts2-rs-u8qa`: Strawberry's `after_obtained` listener
