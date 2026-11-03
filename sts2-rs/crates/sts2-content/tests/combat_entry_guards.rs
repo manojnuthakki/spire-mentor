@@ -125,6 +125,92 @@ fn observe_strikes() {
     sts2_core::card_effects::register(CardId::StrikeIronclad, observed_strike);
 }
 
+static EXHAUST_BODY: OnceLock<PlayCardFn> = OnceLock::new();
+fn observed_exhaust_body(s: &mut CombatState, t: Option<CreatureUid>) -> EffectResult {
+    let uid = sts2_core::card_effects::resolving_card_uid(s).unwrap();
+    BODIES
+        .lock()
+        .unwrap()
+        .push((uid, t, sts2_core::combat_loop::combat_is_ending(s)));
+    EXHAUST_BODY.get().unwrap()(s, t)
+}
+
+fn exhaust_listener_admission(id: CardId) {
+    for hp in [1, 100] {
+        let (mut s, e) = board(hp);
+        EXHAUST_BODY.get_or_init(|| sts2_core::card_effects::lookup(id).unwrap());
+        sts2_core::card_effects::register(id, observed_exhaust_body);
+        let sentinel = add(&mut s, CardId::DefendIronclad, PileKind::Exhaust);
+        let first = add(&mut s, id, PileKind::Exhaust);
+        let second = add(&mut s, id, PileKind::Exhaust);
+        // Avoid turn-start draw reshuffling the resolved Howl or Bombardment.
+        for _ in 0..5 {
+            add(&mut s, CardId::DefendIronclad, PileKind::Draw);
+        }
+        s.relics.push(Relic {
+            id: NonZeroU32::new(1).unwrap(),
+            kind: RelicKind::Nunchaku,
+            counter: 0,
+            is_melted: false,
+            is_wax: false,
+        });
+        let mut cloned = s.clone();
+        for state in [&mut s, &mut cloned] {
+            BODIES.lock().unwrap().clear();
+            if id == CardId::Bombardment {
+                state.phase = CombatPhase::PlayerTurnStart;
+                let _ = sts2_core::combat_loop::start_player_turn(state);
+            } else {
+                let _ = sts2_core::combat_loop::end_player_turn_phase_one(state);
+            }
+            let target = (id == CardId::Bombardment).then_some(e);
+            let mut expected = vec![(first, target, false)];
+            if hp > 1 {
+                expected.push((second, target, false));
+            }
+            assert_eq!(*BODIES.lock().unwrap(), expected, "{id:?}, hp={hp}");
+            let plays = if hp == 1 { 1 } else { 2 };
+            assert_eq!(state.combat_log.player_card_plays_this_combat, plays);
+            assert_eq!(state.relics[0].counter, plays as i32, "started callbacks");
+            // The started lethal Bombardment's result-pile Exhaust command
+            // is itself refused after ending. Preserve that existing rule;
+            // only the unstarted sibling must remain at its source.
+            let expected_play = if id == CardId::Bombardment && hp == 1 {
+                vec![first]
+            } else {
+                vec![]
+            };
+            assert_eq!(state.player.play.as_slice(), expected_play);
+            let expected_exhaust = match (id, hp == 1) {
+                (CardId::Bombardment, true) => vec![sentinel, second],
+                (CardId::Bombardment, false) => vec![sentinel, first, second],
+                (_, true) => vec![sentinel, second],
+                _ => vec![sentinel],
+            };
+            assert_eq!(state.player.exhaust.as_slice(), expected_exhaust);
+            assert_eq!(
+                state.run_rng.combat_targets.counter(),
+                if id == CardId::Bombardment { plays } else { 0 },
+                "only admitted single-target commands consume target RNG"
+            );
+        }
+        assert_eq!(
+            s, cloned,
+            "native identities, piles and RNG survive cloning"
+        );
+    }
+}
+
+#[test]
+fn bombardment_listener_preserves_refused_exhaust_source_and_started_callbacks() {
+    exhaust_listener_admission(CardId::Bombardment);
+}
+
+#[test]
+fn howl_listener_preserves_refused_exhaust_source_and_started_callbacks() {
+    exhaust_listener_admission(CardId::HowlFromBeyond);
+}
+
 #[test]
 fn admitted_collection_keeps_unstarted_sibling_and_lethal_card_callbacks() {
     let (mut s, e) = board(1);
