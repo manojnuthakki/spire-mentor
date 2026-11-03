@@ -180,6 +180,9 @@ fn stratagem_third_draw_parks_later_mercury_and_resumes_once() {
     let extra = card(&mut s, CardId::Bash);
     s.player.draw.pop();
     s.player.discard.push(extra);
+    let other = card(&mut s, CardId::DefendIronclad);
+    s.player.draw.pop();
+    s.player.discard.push(other);
     start_player_turn(&mut s);
     assert!(s.pending_choice.is_some());
     assert_eq!(counter(&s), 0);
@@ -196,7 +199,11 @@ fn stratagem_third_draw_parks_later_mercury_and_resumes_once() {
         100
     );
     resolve(&mut s);
-    assert!(s.player.hand.contains(&extra));
+    assert_eq!(
+        s.player.hand.len(),
+        7,
+        "Stratagem also moves its chosen card to hand"
+    );
     assert_eq!(s.cards_drawn, 6);
     assert_eq!(counter(&s), 0);
     assert!(s.pending_cluster_resume.is_none());
@@ -226,7 +233,7 @@ fn tyranny_parked_normal_walk_enters_pendulum_once_after_pick() {
     resolve(&mut s);
     assert_eq!(counter(&s), 0);
     assert!(combat_is_ending(&s));
-    assert_eq!(s.cards_drawn, 5);
+    assert_eq!(s.cards_drawn, 6, "Tyranny adds one to the natural draw");
     assert!(s.pending_cluster_resume.is_none());
 }
 
@@ -283,6 +290,7 @@ fn natural_stratagem_draw_resumes_before_pendulum_is_admitted() {
     relic(&mut s, RelicKind::Pendulum, 2);
     natural(&mut s);
     let extra = card(&mut s, CardId::Bash);
+    card(&mut s, CardId::Bash);
     s.player.discard = std::mem::take(&mut s.player.draw);
     start_player_turn(&mut s);
     assert_eq!(counter(&s), 2);
