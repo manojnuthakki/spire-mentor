@@ -1816,11 +1816,9 @@ pub(crate) fn run_turn_start_relic_tail(
             if state.is_over {
                 break;
             }
-            if let Some(pos) = state.player.exhaust.iter().position(|&u| u == uid) {
-                state.player.exhaust.remove(pos);
-                state.player.play.push(uid);
-                resolve_auto_played_card(state, uid, /*force_exhaust=*/ false);
-            }
+            // Each listener issues a new CardCmd.AutoPlay. Admission must
+            // precede the source move if an earlier listener ended combat.
+            auto_play_specific_card_from_exhaust_at_target(state, uid, None, false);
         }
     }
 
@@ -2159,11 +2157,9 @@ fn end_player_turn_phase_one_after_auto_post_play_stampede(state: &mut CombatSta
             if state.is_over {
                 break;
             }
-            if let Some(pos) = state.player.exhaust.iter().position(|&u| u == uid) {
-                state.player.exhaust.remove(pos);
-                state.player.play.push(uid);
-                resolve_auto_played_card(state, uid, /*force_exhaust=*/ false);
-            }
+            // Keep walking the snapshot, but refused new commands leave
+            // their native card in Exhaust, just like CardCmd.AutoPlay.
+            auto_play_specific_card_from_exhaust_at_target(state, uid, None, false);
         }
         // A lethal Howl ends combat during AutoPostPlay, before BeforeTurnEnd.
         match check_combat_end(state) {
