@@ -313,10 +313,7 @@ fn actual_deaths_with_steam_illusion_and_reattach_retention_still_trigger() {
             PowerKind::SteamEruption => assert!(corpse.current_hp > 0),
             PowerKind::Illusion => {
                 assert_eq!(corpse.current_hp, 0);
-                assert!(matches!(
-                    corpse.intent,
-                    Some(sts2_core::Intent::Heal { .. })
-                ));
+                assert!(matches!(corpse.intent, Some(sts2_core::Intent::Heal)));
             }
             _ => {
                 assert_eq!(corpse.current_hp, 0);
