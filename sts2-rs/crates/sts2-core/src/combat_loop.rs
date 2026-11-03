@@ -1186,6 +1186,15 @@ pub(crate) fn finish_player_turn_setup(state: &mut CombatState) -> StepResult {
     // dispatch fixes it natively: the boulder now precedes the shield. Bead
     // `sts2-rs-adsld` (cascade triage).
 
+    // A completed natural draw (including a resumed Hellraiser draw) may
+    // already have killed the last primary enemy. Hook.AfterPlayerTurnStart
+    // admits its NEW walk through Hook.IterateCombatHookListeners; it refuses
+    // ending combat. Test only at entry, never on the admitted cluster/relic
+    // resume paths below. The started draw/card has already finished its tail.
+    if combat_is_ending(state) {
+        return finish_turn_start_tail(state);
+    }
+
     // Snapshot the player's power instances NOW, before the turn-start
     // auto-play cluster runs. EntropyPower's `AfterPlayerTurnStart` fires over
     // the powers present at the TOP of the turn (C# dispatch snapshots its
@@ -1343,6 +1352,11 @@ fn auto_play_collect_suspending(
 /// DemonForm / PrepTime / CreativeAi). Skips the folded `AfterPlayerTurnStart`
 /// kinds (those are dispatched in the cluster). Bead `sts2-rs-o0rz3`.
 fn fire_after_side_turn_start(state: &mut CombatState) {
+    // This is a NEW walk after AfterPlayerTurnStart, so a lethal Inferno
+    // refuses it. Once admitted, both buses finish even if a listener kills.
+    if combat_is_ending(state) {
+        return;
+    }
     hooks::dispatch_after_side_turn_start(state, &hooks::TurnSideCtx::default());
     if relic_channel_live(state, PlannedChannel::AfterSideTurnStart) {
         let _ = crate::relic_effects::dispatch_after_side_turn_start(state, Side::Player);
