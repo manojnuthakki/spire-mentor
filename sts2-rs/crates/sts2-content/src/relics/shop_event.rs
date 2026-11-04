@@ -4342,6 +4342,14 @@ fn listener_nutritious_soup(rs: &mut RunState) -> EffectResult {
     for card in &mut rs.master_deck {
         if is_basic_strike(card.card_id) {
             card.set_enchantment(EnchantmentId::TezcatarasEmber, 1);
+            // C# `TezcatarasEmber.OnEnchant` (`CardCmd.Enchant` -> `OnEnchant`):
+            // `EnergyCost.UpgradeBy(-EnergyCost.GetWithModifiers(None))`, i.e. the
+            // card's BASE cost becomes 0 for good (`SetCustomBaseCost(0)`), which
+            // every later combat copy inherits. The static arm in
+            // `enchantments::apply_static_enchantment` does the same; this run
+            // path set only the enchantment, so the Sim's Strikes stayed at 1 (F6
+            // `ember-enchanted-cost`: the deck at cost 0 in the game, 1 on the Sim).
+            card.cost = 0;
         }
     }
     EffectResult::Resolved
