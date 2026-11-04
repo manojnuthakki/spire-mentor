@@ -8133,11 +8133,32 @@ impl CombatState {
         bank: cards::VarKey,
     ) {
         for c in &mut self.cards {
-            if c.card_id == card_id && c.cost > 0 {
-                c.cost -= 1;
-                let banked = c.combat_var(bank);
-                c.set_combat_var(bank, banked.saturating_add(1));
+            if c.card_id != card_id {
+                continue;
             }
+            if c.cost > 0 {
+                c.cost -= 1;
+            } else {
+                // C# `GetWithModifiers` folds the local modifiers in order and
+                // clamps only the result, so an `AddThisTurn(-1)` that lands
+                // while a temporary absolute cap (Enlightenment's base form,
+                // Snecko: banked as the negative delta cap - cost in
+                // `SneckoCostDeltaThisTurn`) holds the card at 0 still lowers
+                // the cost beneath the cap. The displayed cost stays 0; the cap
+                // gives back one less when it expires (played: Enlightenment,
+                // Strike, then Stomp's own discount leaves Stomp at 1 in the
+                // discard, not 2), and the turn end still restores the full
+                // nominal shave. Exact while the cost beneath stays >= 0;
+                // below that the engine's clamped cost cannot hold it (F6
+                // step32 review r1).
+                let cap = c.combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn);
+                if cap >= 0 {
+                    continue;
+                }
+                c.set_combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn, cap + 1);
+            }
+            let banked = c.combat_var(bank);
+            c.set_combat_var(bank, banked.saturating_add(1));
         }
     }
 

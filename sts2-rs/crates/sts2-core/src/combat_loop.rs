@@ -2871,14 +2871,22 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
 /// short-circuit, and finally advances the phase. Returns the same
 /// [`StepResult`] the inlined tail used to.
 fn end_player_turn_phase_two_flush_tail(state: &mut CombatState) -> StepResult {
-    // Combat may have ended between the suspend point and the resume (e.g.
-    // a listener that fired during a chained choice). Short-circuit.
-    if state.is_over {
-        return if state.player_won {
-            StepResult::CombatWon
-        } else {
-            StepResult::CombatLost
-        };
+    // C# `EndPlayerTurnPhaseOneInternal` ends with `CheckWinCondition()`
+    // after the whole DoTurnEnd batch (orb passive, ethereal, OnTurnEndInHand)
+    // and `Hook.BeforeFlush`; phase two (`EndPlayerTurnPhaseTwoInternal`:
+    // `FlushPlayerHand` -> the flush, `Hook.AfterFlush`, `EndOfTurnCleanup`,
+    // then `Hook.AfterTurnEnd`) runs only while `IsInProgress`. Everything
+    // before this point is phase one, so this is that check: the FULL
+    // `check_combat_end` (an end-of-turn Lightning zap only zeroes the last
+    // enemy's HP, nothing flips `is_over` on the way), not a bare `is_over`
+    // read. Without it the flush and Bookmark's AfterFlush (a card mutation
+    // and a `combat_card_selection` draw) ran on a turn C# had already won
+    // (F6 step32 review r1). Also covers a resume after a chained choice.
+    if state.is_over || !state.enemy_uids.is_empty() {
+        match check_combat_end(state) {
+            StepResult::Advanced => {}
+            end => return end,
+        }
     }
 
     // Rebuild the retain set. (b) Explicitly-flagged cards still in hand —

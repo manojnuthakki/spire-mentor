@@ -264,8 +264,11 @@ fn enlightenment_cap_then_upgrade_expires_to_the_new_base() {
 
 #[test]
 fn enlightenment_and_stomp_shave_compose_in_order() {
-    // Control: base 3, cap 1, an Attack shaves 1 -> 0; played, the cap goes
-    // (3 - 1 = 2 in the discard); then the turn's end restores 3.
+    // C# folds the local modifiers in order and clamps only the result: base
+    // 3, cap 1, the Strike's -1 (shown 0), then Stomp's own BeforeCardPlayed
+    // -1 lands beneath the cap although the shown cost is already 0. Played,
+    // the cap goes: 3 - 1 - 1 = 1 in the discard (Headless: 1; review r1 of
+    // step32, which this test first asserted as 2). The turn's end restores 3.
     let mut s = board(3);
     let stomp = add(&mut s, CardId::Stomp, false);
     let enl = add(&mut s, CardId::Enlightenment, false);
@@ -277,9 +280,70 @@ fn enlightenment_and_stomp_shave_compose_in_order() {
     assert_eq!(cost(&s, stomp), 0);
     play(&mut s, stomp);
     assert!(s.player.discard.contains(&stomp));
-    assert_eq!(cost(&s, stomp), 2);
+    assert_eq!(cost(&s, stomp), 1, "both shaves survive the cap's expiry");
     end_player_turn(&mut s);
     assert_eq!(cost(&s, stomp), 3);
+}
+
+#[test]
+fn stomp_shaves_beneath_an_enlightenment_cap_survive_its_turn_end_expiry() {
+    // Held, not played: cap 1, then two Attacks (-1 shown, -1 beneath the
+    // cap). A third Attack's shave is beneath too; playing Stomp now adds its
+    // own: 3 - 4 = -1, shown 0 after the cap goes. The turn's end restores 3.
+    let mut s = board(9);
+    let stomp = add(&mut s, CardId::Stomp, false);
+    let held = add(&mut s, CardId::Stomp, false);
+    let enl = add(&mut s, CardId::Enlightenment, false);
+    s.player.hand.extend([stomp, held, enl]);
+    play(&mut s, enl);
+    for u in strikes(&mut s, 2) {
+        play(&mut s, u);
+    }
+    assert_eq!((cost(&s, stomp), cost(&s, held)), (0, 0));
+    play(&mut s, stomp);
+    assert_eq!(cost(&s, stomp), 0, "3 - 3 shaves, the cap gone");
+    assert_eq!(cost(&s, held), 0, "still capped");
+    end_player_turn(&mut s);
+    assert_eq!((cost(&s, stomp), cost(&s, held)), (3, 3));
+}
+
+#[test]
+fn bookmark_skips_a_turn_whose_orb_passive_already_won_the_combat() {
+    // C# checks the win after phase one (DoTurnEnd's orb passive included);
+    // phase two, FlushPlayerHand with its AfterFlush (Bookmark), only runs
+    // while the combat is in progress: no cost change, no combat_card_selection
+    // draw (review r1 of step32: Cracked Core's Lightning killing the last
+    // enemy on a Bookmark turn).
+    let mut s = board(3);
+    relic(&mut s, RelicKind::Bookmark);
+    let e = s.enemy_uids[0];
+    let enemy = s.creatures.iter_mut().find(|c| c.id == e.0).unwrap();
+    enemy.current_hp = 3;
+    s.player.orbs = sts2_core::orbs::OrbSlots::with_default_capacity();
+    s.player.orbs.channel(sts2_core::orbs::Orb::Lightning);
+    let st = strikes(&mut s, 1)[0];
+    s.player.retain_this_turn.push(st);
+    let before = s.run_rng.combat_card_selection.counter();
+    end_player_turn(&mut s);
+    assert!(s.is_over && s.player_won, "the zap won the combat");
+    assert_eq!(cost(&s, st), 1, "Bookmark did not run");
+    assert_eq!(s.run_rng.combat_card_selection.counter(), before, "no draw");
+}
+
+#[test]
+fn bookmark_runs_when_the_orb_passive_leaves_an_enemy_alive() {
+    // The control: the same turn with the enemy surviving the zap.
+    let mut s = board(3);
+    relic(&mut s, RelicKind::Bookmark);
+    s.player.orbs = sts2_core::orbs::OrbSlots::with_default_capacity();
+    s.player.orbs.channel(sts2_core::orbs::Orb::Lightning);
+    let st = strikes(&mut s, 1)[0];
+    s.player.retain_this_turn.push(st);
+    let before = s.run_rng.combat_card_selection.counter();
+    end_player_turn(&mut s);
+    assert!(!s.is_over);
+    assert_eq!(cost(&s, st), 0);
+    assert_eq!(s.run_rng.combat_card_selection.counter(), before + 1);
 }
 
 // ---------------------------------------------------------------- Ember --
