@@ -424,6 +424,13 @@ fn install_listeners() {
     // CombatState::add_to_master_deck; re-entry guarded by
     // AddSource::BingBongDuplicate on the dispatch ctx).
     register_on_card_added_to_deck(RelicId::BingBong, listener_bing_bong as OnCardAddedToDeckFn);
+    // F6 step35 (`bing-bong`): the run-side deck add (reward pick, event gain,
+    // shop, transform) fires the same relic; the combat-side listener above is
+    // only the in-combat master-deck add.
+    register_on_card_added_to_deck_run(
+        RelicId::BingBong,
+        listener_bing_bong_run as OnCardAddedToDeckRunFn,
+    );
 
     // Wave 6 (sts2-rs-9wx7) — reward-flow hooks for DreamCatcher /
     // FresnelLens / WongosMysteryTicket. All five channels live in
@@ -2448,6 +2455,28 @@ fn listener_bing_bong(state: &mut CombatState, ctx: &CardAddedCtx) -> EffectResu
     if !state.duplicate_last_added_card() {
         return EffectResult::NotImplemented;
     }
+    EffectResult::Resolved
+}
+
+/// `BingBong.AfterCardChangedPiles` (run side): a card that enters the Deck pile
+/// (not the relic's own clone, `clonedBy == null` / `CardsToSkip`) is cloned
+/// (`RunState.CloneCard`) and the clone added to the deck's bottom through
+/// `CardPileCmd.Add` (the deck-add hooks fire for it too; the source tags it so
+/// the clone's own add does not clone again). The just-added card is the
+/// master deck's last: every run-side add pushes it and then dispatches this
+/// channel. F6 step35, `bing-bong`.
+#[allow(clippy::trivially_copy_pass_by_ref)]
+fn listener_bing_bong_run(rs: &mut RunState, ctx: &CardAddedRunCtx) -> EffectResult {
+    if ctx.source == sts2_core::relic_effects::AddSource::BingBongDuplicate {
+        return EffectResult::NotImplemented;
+    }
+    if !rs.owns_active_relic(RelicId::BingBong) {
+        return EffectResult::NotImplemented;
+    }
+    let Some(&card) = rs.master_deck.last() else {
+        return EffectResult::NotImplemented;
+    };
+    rs.add_card_to_deck(card, sts2_core::relic_effects::AddSource::BingBongDuplicate);
     EffectResult::Resolved
 }
 

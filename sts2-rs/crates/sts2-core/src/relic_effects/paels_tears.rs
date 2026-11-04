@@ -51,6 +51,18 @@ pub(crate) fn on_after_side_turn_start_paels_tears(
     EffectResult::Resolved
 }
 
+/// C# `PaelsTears.AfterCombatEnd`: `HadLeftoverEnergy = false`. Without it the
+/// latch set by the killing turn's `BeforeSideTurnEnd` survives the combat (the
+/// run keeps the relic's counter) and pays its 2 energy again at the next
+/// combat's first turn (F6 step35, `paels-tears-combat-end`).
+pub(crate) fn on_after_combat_end_paels_tears(state: &mut CombatState) -> EffectResult {
+    let Some(r) = paels_tears_relic_mut(state) else {
+        return EffectResult::NotImplemented;
+    };
+    r.counter = 0;
+    EffectResult::Resolved
+}
+
 pub(crate) fn install() {
     register_before_turn_end(
         RelicId::PaelsTears,
@@ -59,5 +71,10 @@ pub(crate) fn install() {
     register_after_side_turn_start(
         RelicId::PaelsTears,
         on_after_side_turn_start_paels_tears as AfterSideTurnStartFn,
+    );
+    register_owned_after_combat_end(
+        RelicId::PaelsTears,
+        crate::RelicKind::PaelsTears,
+        on_after_combat_end_paels_tears as AfterCombatEndFn,
     );
 }

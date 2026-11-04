@@ -8176,6 +8176,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // card replayed this turn still pays its full cost (seed 1798); a
     // Snecko-rolled card back in hand this turn is at its base (seed 5880).
     if !flush_deferred {
+        check_for_empty_hand(state, card_uid);
         state.after_card_played_cost_cleanup(card_uid);
     }
     // else: the card's OnPlay opened a `pending_choice` (Headbutt's
@@ -8295,6 +8296,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
 pub fn flush_played_cards_after_choice(state: &mut CombatState) {
     let remaining: smallvec::SmallVec<[crate::CardUid; 4]> =
         state.player.play.iter().copied().collect();
+    let last_flushed = remaining.last().copied();
     for uid in remaining {
         // A choice-opening card (Armaments / Headbutt / …) was held in Play
         // limbo while its `pending_choice` resolved, so the immediate
@@ -8374,6 +8376,44 @@ pub fn flush_played_cards_after_choice(state: &mut CombatState) {
             let _ = cards::move_card(&mut state.player, uid, PileKind::Play, PileKind::Discard);
         }
     }
+    // C# `CardModel.OnPlayWrapper` ends with `CheckForEmptyHand` once the held
+    // card has left the Play pile: the flushed cards are the plays whose awaited
+    // choice just closed (F6 step35, `unceasing-top`).
+    if let Some(last) = last_flushed {
+        if state.pending_choice.is_none() {
+            check_for_empty_hand(state, last);
+        }
+    }
+}
+
+/// C# `CombatManager.CheckForEmptyHand`, called at the very end of
+/// `CardModel.OnPlayWrapper` (and `PotionModel.OnUseWrapper`), after the card
+/// reached its result pile and before `AfterCardPlayedCleanup`: when the combat
+/// is in progress, NO card or potion effect is executing for the player
+/// (`IsExecutingCardOrPotionEffect`, a depth counter) and the hand is empty, it
+/// fires `Hook.AfterHandEmptied` (Unceasing Top's draw).
+///
+/// The depth counter is read off the Play pile: a card's `OnPlay` (and so every
+/// card it auto-plays, Echo/Havoc/Mayhem children included, and a play parked on
+/// an awaited choice) runs while that card sits in the Play pile, so any card
+/// other than `finished` there means an effect is still executing and the check
+/// belongs to the outer play's own end. A potion's effect is not modelled by it
+/// (a hand emptied by a potion's own use is a known limit).
+/// F6 step35, `unceasing-top`.
+fn check_for_empty_hand(state: &mut CombatState, finished: crate::CardUid) {
+    if !state.player.hand.is_empty() || combat_is_ending(state) {
+        return;
+    }
+    if state.player.play.iter().any(|&u| u != finished) {
+        return;
+    }
+    let live = relic_guarded_channel_live(state, GuardedChannel::AfterHandEmptied);
+    let _ = dispatch_if_live(state, live, crate::EffectResult::NotImplemented, |state| {
+        crate::relic_effects::dispatch_after_hand_emptied(
+            state,
+            &crate::hooks::CombatLifecycleCtx::default(),
+        )
+    });
 }
 
 /// Auto-play the top card of the draw pile, force-exhausting it after the
@@ -10230,7 +10270,9 @@ pub(crate) fn finish_auto_played_card_impl(
 
     // C# `CardEnergyCost.AfterCardPlayedCleanup()` at the end of the
     // auto-play's `OnPlayWrapper`: after `AfterCardPlayed` and the result pile,
-    // the same edge as the hand-play path (`after_card_played_cost_cleanup`).
+    // the same edge as the hand-play path (`after_card_played_cost_cleanup`),
+    // with `CheckForEmptyHand` just before it.
+    check_for_empty_hand(state, top_uid);
     state.after_card_played_cost_cleanup(top_uid);
 
     // FeralPower budget tally: an auto-played 0-cost owner Attack consumes the

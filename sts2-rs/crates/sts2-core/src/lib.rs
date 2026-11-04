@@ -3172,6 +3172,13 @@ pub struct TurnEvents {
     /// hand draw). Read by the `PaleBlueDot` arm of
     /// [`crate::hooks::modify_hand_draw`]: +Amount draw iff `>= 5`.
     pub card_plays_finished_last_player_turn: u32,
+    /// C# `PenNib._attackToDouble`: the Attack whose `BeforeCardPlayed` wrapped
+    /// the relic's count to 0 (the 10th), set there and cleared by that card's
+    /// `AfterCardPlayed`. While it is set every powered player attack hit is
+    /// doubled (the engine's multiplicative channel carries no card identity, so
+    /// a child card auto-played inside the marked play shares the doubling).
+    /// Combat-wide, not reset per turn. F6 step35, `pen-nib`.
+    pub pen_nib_attack_to_double: Option<CardUid>,
     /// Count of `CardDiscardedEntry`s @ Owner == player this turn.
     /// C# `MementoMori.CalculatedDamage` multiplies `ExtraDamage`
     /// by this count. Bumped in

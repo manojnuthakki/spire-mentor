@@ -31,12 +31,13 @@ use sts2_core::hooks::{self, BlockCtx, BlockGainedCtx, CreatureRef, ValueProps};
 use sts2_core::powers::PowerKind;
 use sts2_core::relic_effects::{
     register_after_card_played, register_after_player_turn_start, register_after_side_turn_start,
-    register_before_combat_start, register_before_turn_end, register_modify_damage_additive,
-    register_modify_damage_multiplicative, register_owned_after_card_entered_combat,
-    register_owned_after_potion_used, register_owned_before_hand_draw,
-    register_owned_modify_vulnerable_multiplier, AfterCardEnteredCombatFn, AfterCardPlayedFn,
-    AfterPlayerTurnStartFn, AfterPotionUsedFn, AfterSideTurnStartFn, BeforeCombatStartFn,
-    BeforeHandDrawFn, BeforeTurnEndFn, CardEventCtx, ModifyDamageAdditiveFn, ModifyDamageCtx,
+    register_before_card_played, register_before_combat_start, register_before_turn_end,
+    register_modify_damage_additive, register_modify_damage_multiplicative,
+    register_owned_after_card_entered_combat, register_owned_after_potion_used,
+    register_owned_before_hand_draw, register_owned_modify_vulnerable_multiplier,
+    AfterCardEnteredCombatFn, AfterCardPlayedFn, AfterPlayerTurnStartFn, AfterPotionUsedFn,
+    AfterSideTurnStartFn, BeforeCardPlayedFn, BeforeCombatStartFn, BeforeHandDrawFn,
+    BeforeTurnEndFn, CardEventCtx, ModifyDamageAdditiveFn, ModifyDamageCtx,
     ModifyDamageMultiplicativeFn, ModifyVulnerableMultiplierFn,
 };
 use sts2_core::relics::RelicId;
@@ -141,11 +142,17 @@ pub fn install_pool() {
     //    % THRESHOLD == 0` (the attacks-played count anticipates the
     //    post-card-played increment, so the active window is
     //    `counter == 9`).
-    // 2. `after_card_played` increments `relic.counter` when the just-
-    //    played card was an Attack.
+    // 2. `before_card_played` increments `relic.counter` when the card
+    //    about to be played is an Attack (C# `PenNib.BeforeCardPlayed`),
+    //    and marks the card when the count wraps to 0 (the 10th);
+    //    `after_card_played` clears the mark (F6 step35, `pen-nib`).
     register_modify_damage_multiplicative(
         RelicId::PenNib,
         listener_pen_nib_modify_damage as ModifyDamageMultiplicativeFn,
+    );
+    register_before_card_played(
+        RelicId::PenNib,
+        listener_pen_nib_before_card_played as BeforeCardPlayedFn,
     );
     register_after_card_played(
         RelicId::PenNib,
@@ -1069,19 +1076,30 @@ fn listener_pen_nib_modify_damage(state: &CombatState, ctx: &hooks::DamageCtx) -
     if !is_player_or_osty {
         return DamageMul::ONE;
     }
-    if (relic.counter + 1) % PEN_NIB_THRESHOLD != 0 {
+    // C# `AttackToDouble != null`: the marked 10th attack's own hits (its
+    // count already wrapped to 0); `AttackToDouble == null`: only a card
+    // outside the Play pile (a hand preview, where the count is still 9) is
+    // doubled, a card being played at count 9 (the 9th attack, its own
+    // `BeforeCardPlayed` already counted it) is not.
+    let marked = state.combat_log.pen_nib_attack_to_double.is_some();
+    let preview_of_tenth =
+        (relic.counter + 1) % PEN_NIB_THRESHOLD == 0 && state.player.play.is_empty();
+    if !marked && !preview_of_tenth {
         return DamageMul::ONE;
     }
     DamageMul::new(2, 1)
 }
 
-/// `PenNib::after_card_played` listener body — bead `sts2-rs-w46z`.
-/// Increments the attacks-played counter when the just-played card
-/// was an `Attack`. Counter is the per-relic-instance scratch field
-/// (`Relic.counter`) — wraps at i32::MAX (saturating add); the
-/// `% THRESHOLD` predicate makes wrap-around behavior cosmetic in
-/// practice.
-fn listener_pen_nib_after_card_played(state: &mut CombatState, ctx: &CardEventCtx) -> EffectResult {
+/// `PenNib::before_card_played` listener body: C# `PenNib.BeforeCardPlayed`
+/// (an owner's Attack: `NotifyAttackPlayed` bumps `AttacksPlayed`; wrapping to 0
+/// marks the card in `AttackToDouble`). The count is bumped BEFORE the card's
+/// effects (so a selection the attack opens shows the new count) and once per
+/// play of a replayed card. `Relic.counter` keeps the raw count (the wire shows
+/// it modulo 10).
+fn listener_pen_nib_before_card_played(
+    state: &mut CombatState,
+    ctx: &CardEventCtx,
+) -> EffectResult {
     let Some(uid) = ctx.card_uid else {
         return EffectResult::NotImplemented;
     };
@@ -1090,15 +1108,28 @@ fn listener_pen_nib_after_card_played(state: &mut CombatState, ctx: &CardEventCt
     if !is_attack {
         return EffectResult::NotImplemented;
     }
-    if let Some(r) = state
+    let Some(r) = state
         .relics
         .iter_mut()
         .find(|r| !r.is_melted && r.kind == RelicKind::PenNib)
-    {
-        r.counter = r.counter.saturating_add(1);
-    } else {
+    else {
+        return EffectResult::NotImplemented;
+    };
+    r.counter = r.counter.saturating_add(1);
+    let wrapped = r.counter % PEN_NIB_THRESHOLD == 0;
+    if wrapped {
+        state.combat_log.pen_nib_attack_to_double = Some(uid);
+    }
+    EffectResult::Resolved
+}
+
+/// `PenNib::after_card_played` listener body: C# `PenNib.AfterCardPlayed`
+/// clears `AttackToDouble` when the marked card's play finishes.
+fn listener_pen_nib_after_card_played(state: &mut CombatState, ctx: &CardEventCtx) -> EffectResult {
+    if ctx.card_uid.is_none() || state.combat_log.pen_nib_attack_to_double != ctx.card_uid {
         return EffectResult::NotImplemented;
     }
+    state.combat_log.pen_nib_attack_to_double = None;
     EffectResult::Resolved
 }
 
