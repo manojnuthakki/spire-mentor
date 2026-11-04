@@ -9338,6 +9338,29 @@ fn resolve_choice_atomic(
             return crate::combat_loop::resume_after_relic_hand_draw_select(state, draw_count);
         }
     }
+    // F6 step34: an Imbued listener's chain (its surfaced card's tail, siblings,
+    // replays and any draw it suspended) resumes step by step with inline
+    // resolution off, so each nested select surfaces (agent mode never
+    // auto-picks a resumed play's follow-on choice). It owns the draw's
+    // ordering, so it runs before the generic draw and autoplay arms.
+    if state.pending_choice.is_none()
+        && state.pending_cluster_resume.as_ref().is_some_and(|r| {
+            r.imbued_phase
+                && (state.pending_autoplay_resume.is_some()
+                    || state.pending_draw_resume.is_some()
+                    || !r.imbued_steps.is_empty())
+        })
+    {
+        let resume = state.pending_autoplay_resume.take();
+        crate::combat_loop::resume_imbued_autoplay(state, resume);
+        if state.pending_choice.is_some() {
+            return StepResult::PendingChoice;
+        }
+        if let Some(r) = state.pending_cluster_resume.take() {
+            return crate::combat_loop::resume_player_turn_start_cluster(state, r);
+        }
+        return StepResult::Advanced;
+    }
     // Bead `sts2-rs-63mew`: resume a draw suspended mid-reshuffle
     // by an `after_shuffle` choice (Stratagem). C# awaits the
     // grid-select INSIDE `CardPileCmd.Draw`'s per-card loop, so
@@ -9489,23 +9512,6 @@ fn resolve_choice_atomic(
     // chained select keeps the resume parked and re-surfaces).
     if state.pending_choice.is_none() {
         if let Some(resume) = state.pending_autoplay_resume.take() {
-            // F6 step34: an Imbued listener's chain resumes step by step with
-            // inline resolution off, so nested selects surface (agent mode never
-            // auto-picks a resumed play's follow-on choice).
-            if state
-                .pending_cluster_resume
-                .as_ref()
-                .is_some_and(|r| r.imbued_phase)
-            {
-                crate::combat_loop::resume_imbued_autoplay(state, resume);
-                if state.pending_choice.is_some() {
-                    return StepResult::PendingChoice;
-                }
-                if let Some(r) = state.pending_cluster_resume.take() {
-                    return crate::combat_loop::resume_player_turn_start_cluster(state, r);
-                }
-                return StepResult::Advanced;
-            }
             let crate::PendingAutoplayResume {
                 finish,
                 remaining,

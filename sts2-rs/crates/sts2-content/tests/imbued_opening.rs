@@ -354,3 +354,60 @@ fn imbued_cascade_keeps_every_nested_select() {
     assert!(state.player.play.is_empty(), "{:?}", state.player.play);
     assert!(state.pending_autoplay_resume.is_none() && state.pending_cluster_resume.is_none());
 }
+
+#[test]
+fn imbued_cascade_replay_surfaces_the_replays_select() {
+    // The first Armaments carries Spiral, so Cascade's auto-play resolves it
+    // twice. Each resolution opens its own upgrade select: answering the first
+    // must surface the replay's, not answer it (F6 step34, review r3 F1).
+    let mut deck = vec![(D, false); 5];
+    deck.push((CardId::Armaments, false));
+    deck.push((D, false));
+    deck.push((D, false));
+    deck.push((CardId::Cascade, true));
+    deck.push((D, true));
+    let (mut state, u) = board(&deck, &[]);
+    state.cards[u[8].get() as usize - 1].cost = -1;
+    state.cards[u[5].get() as usize - 1].set_enchantment(EnchantmentId::Spiral, 1);
+    assert_eq!(start_player_turn(&mut state), StepResult::PendingChoice);
+    let upgraded = |s: &CombatState| s.cards.iter().filter(|c| c.upgraded).count();
+    assert_eq!(answer_choice(&mut state), StepResult::PendingChoice);
+    assert!(
+        state.pending_choice.is_some(),
+        "the replay's select surfaces"
+    );
+    assert_eq!(upgraded(&state), 1, "only the first pick has landed");
+    assert!(
+        !state.player.discard.contains(&u[9]),
+        "the later Imbued listener waits for the replay"
+    );
+    let _ = answer_choice(&mut state);
+    assert!(state.pending_choice.is_none());
+    assert_eq!(upgraded(&state), 2);
+    assert!(state.player.discard.contains(&u[9]));
+    assert!(state.player.play.is_empty(), "{:?}", state.player.play);
+    assert!(state.pending_autoplay_resume.is_none() && state.pending_cluster_resume.is_none());
+}
+
+#[test]
+fn imbued_listeners_suspended_draw_completes_before_play_opens() {
+    // An Imbued Offering draws three with only the discard to draw from; the
+    // shuffle opens Stratagem's select. Answering it must finish the draw (eight
+    // cards in hand) before the opening yields (review r3 F5).
+    let mut deck = vec![(D, false); 5];
+    deck.push((CardId::Offering, true));
+    let (mut state, _u) = board(&deck, &[]);
+    let puid = state.player.creature_uid.unwrap();
+    sts2_core::card_effects::apply_power_to_creature(&mut state, puid, PowerKind::Stratagem, 1);
+    for _ in 0..3 {
+        let uid = push_card(&mut state.cards, D, CardType::Skill);
+        state.player.discard.push(uid);
+    }
+    assert_eq!(start_player_turn(&mut state), StepResult::PendingChoice);
+    assert!(state.pending_draw_resume.is_some(), "the draw is suspended");
+    let _ = answer_choice(&mut state);
+    assert!(state.pending_choice.is_none());
+    assert!(state.pending_draw_resume.is_none(), "the draw completed");
+    assert_eq!(state.player.hand.len(), 8);
+    assert!(state.pending_autoplay_resume.is_none() && state.pending_cluster_resume.is_none());
+}
