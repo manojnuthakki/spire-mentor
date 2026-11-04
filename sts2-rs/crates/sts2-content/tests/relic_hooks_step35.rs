@@ -207,6 +207,60 @@ fn pen_nib_doubles_the_tenth_attack_and_only_it() {
     assert_eq!(counter(&s, RelicKind::PenNib), 11);
 }
 
+#[test]
+fn unceasing_top_draws_inside_the_auto_pre_play_phase() {
+    // Mayhem auto-plays Fiend Fire (exhausting the hand) in AutoPrePlay: the
+    // DLL's `IsValidPhase` allows Top there, so one more card is drawn.
+    let mut s = board(3);
+    relic(&mut s, RelicKind::UnceasingTop, 0);
+    let puid = s.player.creature_uid.expect("player creature");
+    sts2_core::card_effects::apply_power_to_creature(&mut s, puid, sts2_core::PowerKind::Mayhem, 1);
+    let mut draw = Vec::new();
+    for _ in 0..5 {
+        draw.push(add(&mut s, CardId::DefendIronclad));
+    }
+    draw.push(add(&mut s, CardId::FiendFire));
+    let extra = add(&mut s, CardId::DefendIronclad);
+    draw.push(extra);
+    s.player.draw = draw.into();
+    s.phase = CombatPhase::PlayerTurnStart;
+    let _ = sts2_core::combat_loop::start_player_turn(&mut s);
+    assert_eq!(s.phase, CombatPhase::PlayerPlayPhase);
+    assert_eq!(
+        s.player.hand.as_slice(),
+        &[extra],
+        "Top drew in AutoPrePlay"
+    );
+    assert!(
+        !s.combat_log.auto_pre_play_open,
+        "the window closes with the phase"
+    );
+}
+
+#[test]
+fn unceasing_top_waits_for_late_card_hooks_to_refill_the_hand() {
+    // Make It So returns to hand (AfterCardPlayedLate) when the 3rd skill is
+    // played; the empty-hand check runs after it, so the hand is not empty.
+    let mut s = board(10);
+    relic(&mut s, RelicKind::UnceasingTop, 0);
+    let mis = add(&mut s, CardId::MakeItSo);
+    let anger = add(&mut s, CardId::Anger);
+    let defs: Vec<_> = (0..3)
+        .map(|_| add(&mut s, CardId::DefendIronclad))
+        .collect();
+    s.player.hand.extend([mis, anger]);
+    s.player.hand.extend(defs.iter().copied());
+    let extra = add(&mut s, CardId::StrikeIronclad);
+    s.player.draw.push(extra);
+    play(&mut s, mis);
+    play(&mut s, anger);
+    for d in defs {
+        play(&mut s, d);
+    }
+    assert_eq!(s.player.hand.as_slice(), &[mis], "Make It So came back");
+    assert_eq!(s.player.draw.as_slice(), &[extra], "Top drew nothing");
+}
+
 // ---------------------------------------------------------------- bing bong --
 
 #[test]

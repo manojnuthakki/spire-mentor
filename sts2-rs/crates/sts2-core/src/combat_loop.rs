@@ -1957,6 +1957,9 @@ pub(crate) fn run_turn_start_relic_tail(
     if !side_turn_start_fired && !state.is_over {
         fire_after_side_turn_start(state);
     }
+    // C# sets `PlayerTurnPhase.AutoPrePlay` before `RunAutoPrePlayPhase`
+    // (Bombardment, Mayhem, Imbued): Unceasing Top is valid from here on.
+    state.combat_log.auto_pre_play_open = true;
 
     // ── Bombardment AutoPrePlay(Early) exhaust-pile auto-play ──────────────
     //
@@ -2147,6 +2150,7 @@ fn finish_turn_start_tail(state: &mut CombatState) -> StepResult {
     }
 
     // Step 11: advance phase.
+    state.combat_log.auto_pre_play_open = false;
     state.phase = CombatPhase::PlayerPlayPhase;
 
     // Bead `sts2-rs-ummci`: relic-side `before_play_phase_start` dispatch.
@@ -8176,7 +8180,6 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // card replayed this turn still pays its full cost (seed 1798); a
     // Snecko-rolled card back in hand this turn is at its base (seed 5880).
     if !flush_deferred {
-        check_for_empty_hand(state, card_uid);
         state.after_card_played_cost_cleanup(card_uid);
     }
     // else: the card's OnPlay opened a `pending_choice` (Headbutt's
@@ -8237,6 +8240,13 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // late-effects key off the *watched* card's identity rather than
     // a power's owner, so the dispatch site differs.
     crate::card_effects::fire_late_effects(state, &hook_played_ctx);
+
+    // C# `OnPlayWrapper` ends with `CheckForEmptyHand` only after
+    // `Hook.AfterCardPlayed` has run every listener's `AfterCardPlayedLate`
+    // (MakeItSo returning to hand can refill the hand first).
+    if !flush_deferred {
+        check_for_empty_hand(state, card_uid);
+    }
 
     // ── VoidForm-style end-turn-after-current-play rider ─────────────────
     // Bead `sts2-rs-3guy`: if the resolved card handler called the Rust

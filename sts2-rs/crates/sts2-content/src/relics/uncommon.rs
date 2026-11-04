@@ -1058,13 +1058,13 @@ fn listener_eternal_feather(rs: &mut RunState, room_type: RoomType) -> EffectRes
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn listener_pen_nib_modify_damage(state: &CombatState, ctx: &hooks::DamageCtx) -> hooks::DamageMul {
     use hooks::DamageMul;
-    let Some(relic) = state
+    if !state
         .relics
         .iter()
-        .find(|r| !r.is_melted && r.kind == RelicKind::PenNib)
-    else {
+        .any(|r| !r.is_melted && r.kind == RelicKind::PenNib)
+    {
         return DamageMul::ONE;
-    };
+    }
     if !ctx.props.is_powered() {
         return DamageMul::ONE;
     }
@@ -1077,14 +1077,9 @@ fn listener_pen_nib_modify_damage(state: &CombatState, ctx: &hooks::DamageCtx) -
         return DamageMul::ONE;
     }
     // C# `AttackToDouble != null`: the marked 10th attack's own hits (its
-    // count already wrapped to 0); `AttackToDouble == null`: only a card
-    // outside the Play pile (a hand preview, where the count is still 9) is
-    // doubled, a card being played at count 9 (the 9th attack, its own
-    // `BeforeCardPlayed` already counted it) is not.
-    let marked = state.combat_log.pen_nib_attack_to_double.is_some();
-    let preview_of_tenth =
-        (relic.counter + 1) % PEN_NIB_THRESHOLD == 0 && state.player.play.is_empty();
-    if !marked && !preview_of_tenth {
+    // count already wrapped to 0). A hand preview reads a staged copy on which
+    // `stage_pen_nib_preview` has run `BeforeCardPlayed`, so it is marked too.
+    if state.combat_log.pen_nib_attack_to_double.is_none() {
         return DamageMul::ONE;
     }
     DamageMul::new(2, 1)
@@ -1121,6 +1116,24 @@ fn listener_pen_nib_before_card_played(
         state.combat_log.pen_nib_attack_to_double = Some(uid);
     }
     EffectResult::Resolved
+}
+
+/// Preview staging for Pen Nib: run `PenNib.BeforeCardPlayed` for `card_uid` on
+/// a staged copy of the combat (the card already moved to the Play pile), so a
+/// hand preview sees the count and the doubling mark the real play would. The
+/// wire's `staged_for_play` calls it; the live combat is never touched.
+pub fn stage_pen_nib_preview(staged: &mut CombatState, card_uid: CardUid) {
+    let Some(card) = sts2_core::card_by_uid(&staged.cards, card_uid).copied() else {
+        return;
+    };
+    let ctx = CardEventCtx {
+        card_id: card.card_id,
+        card_uid: Some(card_uid),
+        target: None,
+        card_tags: card.tags,
+        energy_spent: 0,
+    };
+    let _ = listener_pen_nib_before_card_played(staged, &ctx);
 }
 
 /// `PenNib::after_card_played` listener body: C# `PenNib.AfterCardPlayed`

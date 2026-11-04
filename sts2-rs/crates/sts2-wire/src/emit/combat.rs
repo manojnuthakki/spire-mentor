@@ -1341,6 +1341,8 @@ pub fn staged_for_play(state: &CombatState, card_uid: CardUid) -> CombatState {
         staged.player.hand.remove(pos);
     }
     staged.player.play.push(card_uid);
+    // The real play runs `BeforeCardPlayed` first: Pen Nib's count and mark.
+    sts2_content::relics::uncommon::stage_pen_nib_preview(&mut staged, card_uid);
     staged
 }
 

@@ -5,7 +5,12 @@ pub(crate) fn on_after_hand_emptied_unceasing_top(
     state: &mut CombatState,
     _ctx: &crate::hooks::CombatLifecycleCtx,
 ) -> EffectResult {
-    if state.phase != crate::CombatPhase::PlayerPlayPhase {
+    // C# `IsValidPhase`: AutoPrePlay, Play, AutoPostPlay (not Start/End). The
+    // engine's PlayerTurnStart spans Start and AutoPrePlay.
+    let valid = state.phase == crate::CombatPhase::PlayerPlayPhase
+        || (state.phase == crate::CombatPhase::PlayerTurnStart
+            && state.combat_log.auto_pre_play_open);
+    if !valid {
         return EffectResult::NotImplemented;
     }
     if !player_owns_relic(state, crate::RelicKind::UnceasingTop) {

@@ -3179,6 +3179,12 @@ pub struct TurnEvents {
     /// a child card auto-played inside the marked play shares the doubling).
     /// Combat-wide, not reset per turn. F6 step35, `pen-nib`.
     pub pen_nib_attack_to_double: Option<CardUid>,
+    /// C# `PlayerTurnPhase.AutoPrePlay` is open: set once `AfterSideTurnStart`
+    /// has run (the Start phase's `AfterPlayerTurnStart` cluster is over), cleared
+    /// when the turn advances to the Play phase. Unceasing Top's valid-phase test
+    /// (AutoPrePlay, Play, AutoPostPlay) reads it, because the engine's
+    /// `PlayerTurnStart` phase spans Start and AutoPrePlay. F6 step35.
+    pub auto_pre_play_open: bool,
     /// Count of `CardDiscardedEntry`s @ Owner == player this turn.
     /// C# `MementoMori.CalculatedDamage` multiplies `ExtraDamage`
     /// by this count. Bumped in
@@ -3394,6 +3400,7 @@ impl TurnEvents {
     /// `Self::default()` so a fresh enemy-turn hit landing in the
     /// previous round still contributes to the combat-wide tally.
     pub fn reset_per_turn(&mut self) {
+        self.auto_pre_play_open = false;
         self.cards_drawn_by_effect_this_turn = 0;
         self.status_cards_drawn_this_turn = 0;
         self.doom_applied_by_player_this_turn = false;
