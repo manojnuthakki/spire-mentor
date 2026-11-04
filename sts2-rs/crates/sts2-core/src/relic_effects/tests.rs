@@ -9003,7 +9003,7 @@ fn shell_enemy(state: &mut CombatState, amount: i32, counter: i32) -> crate::Cre
         crate::PowerKind::HardenedShell,
         amount,
     );
-    for p in state.powers.iter_mut() {
+    for p in &mut state.powers {
         if p.kind == crate::PowerKind::HardenedShell {
             p.counter = counter;
         }
