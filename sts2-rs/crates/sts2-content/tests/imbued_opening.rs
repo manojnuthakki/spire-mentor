@@ -316,3 +316,41 @@ fn imbued_sibling_is_not_moved_after_combat_ends() {
         "the refused card never left the draw pile"
     );
 }
+
+#[test]
+fn imbued_cascade_keeps_every_nested_select() {
+    // An Imbued Cascade auto-plays the top three cards: Armaments, Armaments,
+    // Defend. Each Armaments opens its own upgrade select; answering the first
+    // must surface the second (not answer it), and only then does the Defend
+    // and the later Imbued Defend play.
+    let mut deck = vec![(D, false); 5];
+    deck.push((CardId::Armaments, false));
+    deck.push((CardId::Armaments, false));
+    deck.push((D, false));
+    deck.push((CardId::Cascade, true));
+    deck.push((D, true));
+    let (mut state, u) = board(&deck, &[]);
+    state.cards[u[8].get() as usize - 1].cost = -1; // X cost: plays three
+    assert_eq!(start_player_turn(&mut state), StepResult::PendingChoice);
+    let upgraded = |s: &CombatState| s.cards.iter().filter(|c| c.upgraded).count();
+    assert_eq!(upgraded(&state), 0);
+    assert_eq!(answer_choice(&mut state), StepResult::PendingChoice);
+    assert!(
+        state.pending_choice.is_some(),
+        "the second Armaments' select surfaces"
+    );
+    assert_eq!(upgraded(&state), 1, "only the first pick has landed");
+    assert!(
+        !state.player.discard.contains(&u[9]),
+        "the last Imbued listener waits for both selects"
+    );
+    let _ = answer_choice(&mut state);
+    assert!(state.pending_choice.is_none());
+    assert_eq!(upgraded(&state), 2);
+    assert!(
+        state.player.discard.contains(&u[9]),
+        "the last listener played"
+    );
+    assert!(state.player.play.is_empty(), "{:?}", state.player.play);
+    assert!(state.pending_autoplay_resume.is_none() && state.pending_cluster_resume.is_none());
+}

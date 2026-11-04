@@ -1364,6 +1364,86 @@ fn auto_play_collect_suspending(
     None
 }
 
+/// One unit of work an Imbued listener's resumed autoplay chain still owes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImbuedStep {
+    /// A card's post-dispatch tail.
+    Finish(AutoPlayFinish),
+    /// Not-yet-played collected siblings, with their `force_exhaust`.
+    Siblings(smallvec::SmallVec<[crate::CardUid; 8]>, bool),
+    /// A re-selection auto-play loop's continuation.
+    Cont(crate::AutoPlayLoopCont),
+}
+
+/// Resume an Imbued listener's autoplay chain after its surfaced select was
+/// answered, WITHOUT raising inline resolution: the chain is flattened into an
+/// ordered queue (the surfaced card's tail, its siblings, each parent frame's
+/// continuation, tail and siblings, then the outer continuation, as the legacy
+/// resume arm orders them) and run one unit at a time. When a unit opens another
+/// select the rest of the queue is parked on the cluster record
+/// ([`crate::PendingClusterResume::imbued_steps`]) and the next answer resumes it.
+pub(crate) fn resume_imbued_autoplay(
+    state: &mut CombatState,
+    resume: crate::PendingAutoplayResume,
+) {
+    let mut queue: std::collections::VecDeque<ImbuedStep> = std::collections::VecDeque::new();
+    queue.push_back(ImbuedStep::Finish(resume.finish));
+    if !resume.remaining.is_empty() {
+        queue.push_back(ImbuedStep::Siblings(resume.remaining, resume.force_exhaust));
+    }
+    for frame in resume.parent_chain {
+        if let Some(c) = frame.continuation {
+            queue.push_back(ImbuedStep::Cont(c));
+        }
+        queue.push_back(ImbuedStep::Finish(frame.finish));
+        if !frame.remaining.is_empty() {
+            queue.push_back(ImbuedStep::Siblings(frame.remaining, frame.force_exhaust));
+        }
+    }
+    if let Some(c) = resume.continuation {
+        queue.push_back(ImbuedStep::Cont(c));
+    }
+    if let Some(r) = state.pending_cluster_resume.as_mut() {
+        queue.extend(std::mem::take(&mut r.imbued_steps));
+    }
+    let mut first = true;
+    while let Some(step) = queue.pop_front() {
+        // The surfaced card's own tail always runs; later steps stop once
+        // combat is over (as the legacy arm's loops do).
+        if !first && state.is_over {
+            queue.clear();
+            break;
+        }
+        first = false;
+        match step {
+            ImbuedStep::Finish(f) => finish_auto_played_card(state, f),
+            ImbuedStep::Siblings(uids, force) => {
+                let mut it = uids.into_iter();
+                while let Some(u) = it.next() {
+                    if state.is_over {
+                        break;
+                    }
+                    resolve_auto_played_card(state, u, force);
+                    if state.pending_choice.is_some() {
+                        let rest: smallvec::SmallVec<[crate::CardUid; 8]> = it.collect();
+                        if !rest.is_empty() {
+                            queue.push_front(ImbuedStep::Siblings(rest, force));
+                        }
+                        break;
+                    }
+                }
+            }
+            ImbuedStep::Cont(c) => (c.resume_fn)(state, c.iters, &c.uids, c.force_exhaust),
+        }
+        if state.pending_choice.is_some() {
+            break;
+        }
+    }
+    if let Some(r) = state.pending_cluster_resume.as_mut() {
+        r.imbued_steps = queue.into();
+    }
+}
+
 /// Play a card captured earlier (an AutoPrePlay listener's `Card` reference) by
 /// reference: C# `OnPlayWrapper` stably moves the source to Play from whatever
 /// pile it sits in now (no draw-pile restriction, no swap with the draw top),
@@ -1492,6 +1572,8 @@ fn run_after_player_turn_start_cluster(
                     mayhem_phase: false,
                     relic_start: None,
                     imbued: smallvec::SmallVec::new(),
+                    imbued_phase: false,
+                    imbued_steps: Vec::new(),
                 });
                 return StepResult::PendingChoice;
             }
@@ -1619,6 +1701,8 @@ fn run_after_player_turn_start_cluster(
                             mayhem_phase: false,
                             relic_start: None,
                             imbued: smallvec::SmallVec::new(),
+                            imbued_phase: false,
+                            imbued_steps: Vec::new(),
                         });
                         return StepResult::PendingChoice;
                     }
@@ -1711,6 +1795,8 @@ fn run_after_player_turn_start_cluster(
                                 mayhem_phase: false,
                                 relic_start: None,
                                 imbued: smallvec::SmallVec::new(),
+                                imbued_phase: false,
+                                imbued_steps: Vec::new(),
                             });
                             return StepResult::PendingChoice;
                         }
@@ -1775,6 +1861,8 @@ pub(crate) fn run_turn_start_relic_tail(
                 mayhem_phase: false,
                 relic_start: Some(next),
                 imbued: smallvec::SmallVec::new(),
+                imbued_phase: false,
+                imbued_steps: Vec::new(),
             });
             return StepResult::PendingChoice;
         }
@@ -1960,6 +2048,8 @@ fn finish_normal_pass(
                     mayhem_phase: true,
                     relic_start: None,
                     imbued: normal_cards,
+                    imbued_phase: false,
+                    imbued_steps: Vec::new(),
                 });
                 return StepResult::PendingChoice;
             }
@@ -1975,6 +2065,8 @@ fn finish_normal_pass(
                 mayhem_phase: true,
                 relic_start: None,
                 imbued: rest,
+                imbued_phase: true,
+                imbued_steps: Vec::new(),
             });
             return StepResult::PendingChoice;
         }

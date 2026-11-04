@@ -2832,6 +2832,14 @@ pub struct PendingClusterResume {
     /// surfaced select (whose tail rides `pending_autoplay_resume`), so each is
     /// played afresh, its own selects surfacing as decisions.
     pub imbued: smallvec::SmallVec<[CardUid; 4]>,
+    /// `true` while an Imbued card listener's surfaced select is the pending
+    /// decision (F6 step34): the resumed autoplay chain then runs with inline
+    /// resolution OFF, one step at a time, so every select inside the listener's
+    /// nested autoplay (siblings, parent frames, continuations) surfaces.
+    pub imbued_phase: bool,
+    /// Work still owed by that chain once the pending select's own resume
+    /// finishes (see [`crate::combat_loop::ImbuedStep`]), in order.
+    pub imbued_steps: Vec<crate::combat_loop::ImbuedStep>,
 }
 
 /// Pending mid-play state for a card that resumes after a choice.
@@ -9481,6 +9489,23 @@ fn resolve_choice_atomic(
     // chained select keeps the resume parked and re-surfaces).
     if state.pending_choice.is_none() {
         if let Some(resume) = state.pending_autoplay_resume.take() {
+            // F6 step34: an Imbued listener's chain resumes step by step with
+            // inline resolution off, so nested selects surface (agent mode never
+            // auto-picks a resumed play's follow-on choice).
+            if state
+                .pending_cluster_resume
+                .as_ref()
+                .is_some_and(|r| r.imbued_phase)
+            {
+                crate::combat_loop::resume_imbued_autoplay(state, resume);
+                if state.pending_choice.is_some() {
+                    return StepResult::PendingChoice;
+                }
+                if let Some(r) = state.pending_cluster_resume.take() {
+                    return crate::combat_loop::resume_player_turn_start_cluster(state, r);
+                }
+                return StepResult::Advanced;
+            }
             let crate::PendingAutoplayResume {
                 finish,
                 remaining,

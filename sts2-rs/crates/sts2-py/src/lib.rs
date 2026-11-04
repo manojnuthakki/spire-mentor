@@ -1865,6 +1865,8 @@ impl PyCombatState {
             mayhem_phase: false,
             relic_start: Some(next),
             imbued: smallvec::SmallVec::new(),
+            imbued_phase: false,
+            imbued_steps: Vec::new(),
         });
         Ok(true)
     }
@@ -1932,6 +1934,8 @@ impl PyCombatState {
             mayhem_phase: false,
             relic_start: None,
             imbued: smallvec::SmallVec::new(),
+            imbued_phase: false,
+            imbued_steps: Vec::new(),
         });
         Ok(true)
     }
