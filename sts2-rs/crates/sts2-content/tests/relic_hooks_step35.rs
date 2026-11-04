@@ -238,6 +238,36 @@ fn unceasing_top_draws_inside_the_auto_pre_play_phase() {
 }
 
 #[test]
+fn unceasing_top_draws_between_queued_mayhem_siblings() {
+    // Mayhem(2) queues both Fiend Fires on Play before the first starts. The
+    // first one's end sees only a queued sibling (not an executing parent), so
+    // Top draws before the second Fiend Fire, which then exhausts that card and
+    // Top draws again: the hand ends as the last Defend, the draw pile empty.
+    let mut s = board(3);
+    relic(&mut s, RelicKind::UnceasingTop, 0);
+    let puid = s.player.creature_uid.expect("player creature");
+    sts2_core::card_effects::apply_power_to_creature(&mut s, puid, sts2_core::PowerKind::Mayhem, 2);
+    let mut draw = Vec::new();
+    for _ in 0..5 {
+        draw.push(add(&mut s, CardId::DefendIronclad));
+    }
+    draw.push(add(&mut s, CardId::FiendFire));
+    draw.push(add(&mut s, CardId::FiendFire));
+    let a = add(&mut s, CardId::DefendIronclad);
+    let b = add(&mut s, CardId::DefendIronclad);
+    draw.extend([a, b]);
+    s.player.draw = draw.into();
+    s.phase = CombatPhase::PlayerTurnStart;
+    let _ = sts2_core::combat_loop::start_player_turn(&mut s);
+    assert_eq!(
+        s.player.hand.as_slice(),
+        &[b],
+        "Top drew between the Fiend Fires"
+    );
+    assert!(s.player.draw.is_empty());
+}
+
+#[test]
 fn unceasing_top_waits_for_late_card_hooks_to_refill_the_hand() {
     // Make It So returns to hand (AfterCardPlayedLate) when the 3rd skill is
     // played; the empty-hand check runs after it, so the hand is not empty.

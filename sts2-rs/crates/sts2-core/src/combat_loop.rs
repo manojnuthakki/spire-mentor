@@ -1319,6 +1319,12 @@ fn auto_play_collect_suspending(
         // suppressing a chance node.
         cards::unpin(&mut state.player, top_uid);
         state.player.play.push(top_uid);
+        // Queued, not started: the same batch-pending marker as
+        // `auto_play_n_from_draw_top` (cleared when its own play starts), so
+        // the empty-hand check and the Nostalgia redirect see it as queued.
+        if let Some(c) = state.cards.get_mut(top_uid.0.get() as usize - 1) {
+            c.set_combat_var(crate::cards::VarKey::PendingBatchAutoPlay, 1);
+        }
         ap.collected.push(top_uid);
         ap.remaining -= 1;
     }
@@ -8414,7 +8420,17 @@ fn check_for_empty_hand(state: &mut CombatState, finished: crate::CardUid) {
     if !state.player.hand.is_empty() || combat_is_ending(state) {
         return;
     }
-    if state.player.play.iter().any(|&u| u != finished) {
+    // A batch sibling queued by `AutoPlayFromDrawPile` (Mayhem's collected
+    // cards) sits on Play with `PendingBatchAutoPlay` set until its own play
+    // starts: it is queued, not executing, so it does not hold the check off.
+    let executing = state.player.play.iter().any(|&u| {
+        u != finished
+            && state
+                .cards
+                .get(u.0.get() as usize - 1)
+                .is_none_or(|c| c.combat_var(crate::cards::VarKey::PendingBatchAutoPlay) == 0)
+    });
+    if executing {
         return;
     }
     let live = relic_guarded_channel_live(state, GuardedChannel::AfterHandEmptied);
