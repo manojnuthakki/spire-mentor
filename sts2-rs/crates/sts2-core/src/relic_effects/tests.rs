@@ -9131,7 +9131,7 @@ fn bookmark_reduces_one_retained_card_cost() {
         state.cards.iter_mut().find(|c| c.uid == uid).unwrap().cost = 2;
         state.player.hand.push(uid);
     }
-    let _ = dispatch_after_turn_end(&mut state, Side::Player);
+    let _ = super::bookmark::on_after_flush_bookmark(&mut state);
     let cost_a = state.cards.iter().find(|c| c.uid == a).unwrap().cost;
     let cost_b = state.cards.iter().find(|c| c.uid == b).unwrap().cost;
     assert_eq!(
@@ -9146,7 +9146,7 @@ fn bookmark_reduces_one_retained_card_cost() {
 }
 
 /// `Bookmark` is a no-op when no retained hand card costs energy
-/// (all 0-cost), and on the enemy side.
+/// (all 0-cost).
 #[test]
 #[serial_test::serial(global_registry)]
 fn bookmark_noop_without_costing_retained_card() {
@@ -9156,7 +9156,7 @@ fn bookmark_noop_without_costing_retained_card() {
     let z = push_card(&mut state, 80, crate::cards::CardType::Attack);
     state.cards.iter_mut().find(|c| c.uid == z).unwrap().cost = 0;
     state.player.hand.push(z);
-    let _ = dispatch_after_turn_end(&mut state, Side::Player);
+    let _ = super::bookmark::on_after_flush_bookmark(&mut state);
     assert_eq!(
         state.cards.iter().find(|c| c.uid == z).unwrap().cost,
         0,

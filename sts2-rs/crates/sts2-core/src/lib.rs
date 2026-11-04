@@ -8170,10 +8170,11 @@ impl CombatState {
     }
 
     /// Undo the per-turn Stomp discount banked by
-    /// [`Self::discount_stomp_on_attack_played`]. Called at player-turn
-    /// start (mirrors C# `EnergyCost.AddThisTurn`'s reset-each-turn
-    /// semantics): restore each Stomp's cost by the banked amount and
-    /// clear the slot. Bead `sts2-rs-stomp`.
+    /// [`Self::discount_stomp_on_attack_played`]. Called by the turn-end
+    /// cost cleanup (C# `CardEnergyCost.EndOfTurnCleanup` drops
+    /// `AddThisTurn`'s modifier when the turn ends; the name predates F6
+    /// step32, which moved it from the next player-turn start): restore each
+    /// Stomp's cost by the banked amount and clear the slot. Bead `sts2-rs-stomp`.
     pub fn restore_stomp_costs_for_turn_start(&mut self) {
         self.restore_banked_costs_for_turn_start(
             crate::cards::CardId::Stomp,
@@ -8302,16 +8303,12 @@ impl CombatState {
     /// reconstruction records the shave here instead, and this restores it at
     /// the next player-turn start.
     ///
-    /// Not literally C#'s boundary: `CardEnergyCost.EndOfTurnCleanup()` drops
-    /// the `EndOfTurn` modifiers when the turn ENDS, so between end-of-player-
-    /// turn and the next player-turn start this engine still holds the discount.
-    /// Deliberate, and the same convention as
-    /// [`Self::restore_snecko_costs_for_turn_start`] /
-    /// [`Self::restore_stomp_costs_for_turn_start`], which is why it is here and
-    /// not in the end-turn path — nothing between those two points can read a
-    /// card's cost (the player is not deciding, and the monster turn does not
-    /// price player cards), so the window is unobservable. Moving it would mean
-    /// moving all three.
+    /// C#'s boundary since F6 step32: `CardEnergyCost.EndOfTurnCleanup()` drops
+    /// the `EndOfTurn` modifiers when the turn ENDS, and the turn-end cleanup
+    /// calls this with the three per-effect restores. (It used to run at the
+    /// next player-turn start on the theory that nothing in between reads a
+    /// card's cost; an enemy-turn selection does: Knowledge Demon's TO_OBTAIN
+    /// shows the piles, F6 `this-turn-cost-turn-end`.)
     ///
     /// Disjoint from the per-effect banks by construction: this one covers
     /// what happened BEFORE the reconstruction, they cover what this engine

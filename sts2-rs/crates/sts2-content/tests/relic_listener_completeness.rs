@@ -35,6 +35,10 @@ use sts2_core::relics::RelicId;
 /// registry channel. Behaviour exists; there is intentionally no
 /// listener registration. (Plan §"Gaps surfaced": 10 relics.)
 const INLINE_HANDLED: &[RelicId] = &[
+    // Bookmark is the game's only `AfterFlush` override; the player's flush
+    // tail calls it inline at that point, before the turn-end cost cleanup
+    // (F6 step32, `combat_loop::end_player_turn_phase_two_flush_tail`).
+    RelicId::Bookmark,
     RelicId::Bread,
     RelicId::IceCream,
     RelicId::LizardTail,

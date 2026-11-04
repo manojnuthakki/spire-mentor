@@ -8,11 +8,14 @@ use super::prelude::*;
 ///
 /// [decompiled C# omitted — see the cited path]
 ///
-/// The Rust relic `after_turn_end` dispatch runs AFTER the end-of-turn
-/// flush (`combat_loop::end_player_turn_phase_two_flush_tail` Step 5 moves
-/// non-retained cards to discard before the Step 7 `after_turn_end` walk),
-/// so the player's `hand` at this point is exactly the C# `retainedCards`
-/// set. Selection now uses the `CombatCardSelection` RNG (`NextItem` ==
+/// Called by `combat_loop::end_player_turn_phase_two_flush_tail` right
+/// after the hand flush and BEFORE the end-of-turn cost cleanup
+/// (`clear_per_turn_card_vars`), C# `FlushPlayerHand`'s order (`AfterFlush`,
+/// then `EndOfTurnCleanup`); Bookmark is the game's only `AfterFlush`
+/// override, so it has no bus of its own. The player's `hand` here is
+/// exactly the C# `retainedCards` set, and a card's cost still carries this
+/// turn's modifiers (F6 step32: it used to run on the `AfterTurnEnd` bus,
+/// after the cleanup the step moved there). Selection now uses the `CombatCardSelection` RNG (`NextItem` ==
 /// `NextInt(0, count)`), replacing the prior Python-pin first-card pick.
 ///
 /// Fidelity caveats: (a) the −1 is applied as a direct `card.cost`
@@ -22,10 +25,7 @@ use super::prelude::*;
 /// (b) `c.cost` is the local (non-global-modifier) cost, matching
 /// `GetWithModifiers(CostModifiers.Local)`. Bead `sts2-rs-gsda` (initial) /
 /// `…wb8lk.9` (v0.107.1 AfterFlush + random pick).
-pub(crate) fn on_after_turn_end_bookmark(state: &mut CombatState, side: Side) -> EffectResult {
-    if side != Side::Player {
-        return EffectResult::NotImplemented;
-    }
+pub(crate) fn on_after_flush_bookmark(state: &mut CombatState) -> EffectResult {
     if !player_owns_relic(state, crate::RelicKind::Bookmark) {
         return EffectResult::NotImplemented;
     }
@@ -60,9 +60,6 @@ pub(crate) fn on_after_turn_end_bookmark(state: &mut CombatState, side: Side) ->
 }
 
 pub(crate) fn install() {
-    register_owned_after_turn_end(
-        RelicId::Bookmark,
-        crate::RelicKind::Bookmark,
-        on_after_turn_end_bookmark as AfterTurnEndFn,
-    );
+    // No bus registration: the flush tail calls `on_after_flush_bookmark`
+    // directly at C#'s `AfterFlush` point (see above).
 }
