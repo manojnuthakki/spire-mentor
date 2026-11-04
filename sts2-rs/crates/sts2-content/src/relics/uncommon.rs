@@ -1463,7 +1463,11 @@ mod tests {
             sts2_core::relic_effects::lookup_modify_damage_multiplicative(CoreRelicId::PenNib)
                 .expect("PenNib multiplicative listener registered");
 
+        // The count before the attack; the attack's `BeforeCardPlayed` (run on
+        // a staged copy for a preview) marks it when the count wraps.
         let set_counter = |state: &mut CombatState, n: i32| {
+            state.combat_log.pen_nib_attack_to_double =
+                ((n + 1) % 10 == 0).then(|| sts2_core::CardUid::new(1).unwrap());
             state
                 .relics
                 .iter_mut()
@@ -1533,10 +1537,12 @@ mod tests {
         state.relics.push(Relic {
             id: NonZeroU32::new(201).expect("non-zero"),
             kind: CoreRelicKind::PenNib,
-            counter: 9,
+            counter: 0,
             is_wax: false,
             is_melted: false,
         });
+        // The 10th attack's `BeforeCardPlayed` has marked the card.
+        state.combat_log.pen_nib_attack_to_double = Some(sts2_core::CardUid::new(1).unwrap());
 
         let ctx = DamageCtx {
             dealer: CreatureRef::Player,
