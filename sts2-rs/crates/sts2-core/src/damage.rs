@@ -1077,6 +1077,9 @@ fn apply_damage_hit(
         // player carries no enemy-death-spawn power).
         if dead_side == crate::Side::Enemy {
             crate::enemy_death_effects::fire_for_owner(state, target);
+            // C# `KillWithoutCheckingWinCondition`: the last primary's death kills
+            // the secondary (Minion) teammates in the same processing.
+            crate::combat_loop::collapse_minion_only_survivors(state);
         }
     }
 

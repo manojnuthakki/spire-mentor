@@ -6152,6 +6152,70 @@ pub fn exhaust_may_begin(state: &CombatState) -> bool {
     !combat_is_ending(state)
 }
 
+/// C# `CreatureCmd.KillWithoutCheckingWinCondition` (`CreatureCmd.cs:392`): when a
+/// primary enemy dies and every alive teammate is a SECONDARY enemy (a Minion),
+/// the teammates are killed right there, inside the death processing. Called at
+/// the damage death chokepoint, so a multi-hit attack's NEXT hit finds no live
+/// target (Sword Boomerang's second hit after it kills The Obscura, whose
+/// Parafright is a Minion: step39 `random-targets-differ`), and again from
+/// [`check_combat_end`] (idempotent). No-op while a Minion power isn't live.
+pub(crate) fn collapse_minion_only_survivors(state: &mut CombatState) {
+    // Perf: `is_minion(c)` can only be true when a live Minion power exists;
+    // gate the whole collapse scan on the presence summary (bit-identical —
+    // with no Minion live, `minion_only_survivors` always returns `None` and
+    // this block was a pure no-op walk).
+    let minion_possible = state
+        .powers
+        .present_kinds()
+        .contains(crate::PowerKind::Minion);
+    let is_minion = |state: &CombatState, c: &crate::Creature| -> bool {
+        c.powers.iter().any(|puid| {
+            state
+                .powers
+                .get_by_id(puid.0)
+                .is_some_and(|p| p.kind == crate::PowerKind::Minion)
+        })
+    };
+    let minion_only_survivors =
+        |state: &CombatState| -> Option<smallvec::SmallVec<[CreatureUid; 4]>> {
+            let mut any_primary_present = false;
+            let mut alive_primary = 0usize;
+            let mut alive_minions: smallvec::SmallVec<[CreatureUid; 4]> = smallvec::SmallVec::new();
+            for uid in &state.enemy_uids {
+                let Some(c) = crate::creature_by_id(&state.creatures, uid.0) else {
+                    continue;
+                };
+                if is_minion(state, c) {
+                    if c.current_hp > 0 {
+                        alive_minions.push(*uid);
+                    }
+                } else {
+                    any_primary_present = true;
+                    if c.current_hp > 0 {
+                        alive_primary += 1;
+                    }
+                }
+            }
+            if any_primary_present && alive_primary == 0 && !alive_minions.is_empty() {
+                Some(alive_minions)
+            } else {
+                None
+            }
+        };
+    if minion_possible && minion_only_survivors(state).is_some() {
+        // C# AfterDeath (on-death spawns) precede the teammate-kill check.
+        let _ = crate::enemy_death_effects::fire_pending(state);
+        // Re-check: only collapse if a spawn did not re-introduce a primary.
+        if let Some(minions) = minion_only_survivors(state) {
+            for uid in minions {
+                if let Some(c) = state.creatures.iter_mut().find(|c| c.id == uid.0) {
+                    c.current_hp = 0;
+                }
+            }
+        }
+    }
+}
+
 /// [`apply`]: crate::apply
 pub fn check_combat_end(state: &mut CombatState) -> StepResult {
     // Idempotency: a second invocation on an already-resolved combat
@@ -6208,60 +6272,7 @@ pub fn check_combat_end(state: &mut CombatState) -> StepResult {
     // `AfterDeath` (on-death spawns) BEFORE this check, so we drain
     // `fire_pending` first and abort the collapse if a spawn re-introduced a
     // live primary (e.g. an Infested split into non-minion reinforcements).
-    // Perf: `is_minion(c)` can only be true when a live Minion power exists;
-    // gate the whole collapse scan on the presence summary (bit-identical —
-    // with no Minion live, `minion_only_survivors` always returns `None` and
-    // this block was a pure no-op walk).
-    let minion_possible = state
-        .powers
-        .present_kinds()
-        .contains(crate::PowerKind::Minion);
-    let is_minion = |state: &CombatState, c: &crate::Creature| -> bool {
-        c.powers.iter().any(|puid| {
-            state
-                .powers
-                .get_by_id(puid.0)
-                .is_some_and(|p| p.kind == crate::PowerKind::Minion)
-        })
-    };
-    let minion_only_survivors =
-        |state: &CombatState| -> Option<smallvec::SmallVec<[CreatureUid; 4]>> {
-            let mut any_primary_present = false;
-            let mut alive_primary = 0usize;
-            let mut alive_minions: smallvec::SmallVec<[CreatureUid; 4]> = smallvec::SmallVec::new();
-            for uid in &state.enemy_uids {
-                let Some(c) = crate::creature_by_id(&state.creatures, uid.0) else {
-                    continue;
-                };
-                if is_minion(state, c) {
-                    if c.current_hp > 0 {
-                        alive_minions.push(*uid);
-                    }
-                } else {
-                    any_primary_present = true;
-                    if c.current_hp > 0 {
-                        alive_primary += 1;
-                    }
-                }
-            }
-            if any_primary_present && alive_primary == 0 && !alive_minions.is_empty() {
-                Some(alive_minions)
-            } else {
-                None
-            }
-        };
-    if minion_possible && minion_only_survivors(state).is_some() {
-        // C# AfterDeath (on-death spawns) precede the teammate-kill check.
-        let _ = crate::enemy_death_effects::fire_pending(state);
-        // Re-check: only collapse if a spawn did not re-introduce a primary.
-        if let Some(minions) = minion_only_survivors(state) {
-            for uid in minions {
-                if let Some(c) = state.creatures.iter_mut().find(|c| c.id == uid.0) {
-                    c.current_hp = 0;
-                }
-            }
-        }
-    }
+    collapse_minion_only_survivors(state);
 
     // All-enemies-dead branch. Python's `self.alive_enemies` filter is
     // `current_hp > 0`; we walk `enemy_uids` and check whether any matched
@@ -16352,6 +16363,49 @@ mod tests {
             "a live primary keeps combat going regardless of minions"
         );
         assert!(!state.is_over, "no premature victory while a primary lives");
+    }
+
+    /// C# `KillWithoutCheckingWinCondition` kills the Minion teammates the moment
+    /// the last primary dies (`CreatureCmd.cs:392`), not at the end of the card:
+    /// a multi-hit attack's next hit then finds no live target (step39
+    /// `random-targets-differ`: Sword Boomerang's second hit read the combat-
+    /// targets stream for a Parafright that C# had already killed). Controls: a
+    /// non-lethal hit, and a lethal hit while another primary lives, leave the
+    /// minion alive.
+    #[test]
+    #[serial_test::serial(global_registry)]
+    fn the_last_primarys_death_kills_the_minions_at_once() {
+        for (primaries, damage, minion_dies) in [(1, 99, true), (1, 1, false), (2, 99, false)] {
+            let mut state =
+                state_for_enemy_turn_exec(primaries + 1, MonsterKind::ShrinkerBeetle, Intent::Stun);
+            let minion_uid = *state.enemy_uids.last().expect("a minion");
+            crate::card_effects::apply_power_to_creature(
+                &mut state,
+                minion_uid,
+                PowerKind::Minion,
+                1,
+            );
+            state.player.current_hp = 30;
+            let victim = state.enemy_uids[0];
+            let _ = crate::damage::apply_damage(
+                &mut state,
+                crate::hooks::CreatureRef::Player,
+                victim,
+                damage,
+                crate::hooks::ValueProps::MOVE,
+                None,
+            );
+            let minion_hp = state
+                .creatures
+                .iter()
+                .find(|c| c.id == minion_uid.0)
+                .map_or(99, |c| c.current_hp);
+            assert_eq!(
+                minion_hp <= 0,
+                minion_dies,
+                "{primaries} primaries, {damage} damage: minion hp {minion_hp}"
+            );
+        }
     }
 
     /// `check_combat_end` returns `CombatLost` and sets `is_over=true /
