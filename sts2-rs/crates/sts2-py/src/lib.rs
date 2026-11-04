@@ -825,6 +825,36 @@ impl PyCombatState {
         crate::value_to_pylist(py, &sts2_wire::emit::legal_actions(&self.inner))
     }
 
+    /// The hand indices the combat would let the player play if an enemy
+    /// were alive: the engine's own `legal_actions` (energy, stars, Unplayable,
+    /// every hook and card gate) on a throwaway copy that has a living enemy
+    /// when the real board has none. A host's `CanPlay` does not depend on
+    /// target availability, so an enemy-targeted card with no enemy left is
+    /// playable-but-untargetable there (F6 step36, no-target-unplayable-reason).
+    fn playable_hand_indices_ignoring_targets(&self) -> Vec<u8> {
+        let mut s = self.inner.clone();
+        let any_alive = s
+            .enemy_uids
+            .iter()
+            .any(|u| s.creatures.iter().any(|c| c.id == u.0 && c.current_hp > 0));
+        if !any_alive {
+            let e = s.spawn_enemy(sts2_core::MonsterKind::Nibbit);
+            if let Some(c) = s.creatures.iter_mut().find(|c| c.id == e.0) {
+                c.current_hp = 1000;
+                c.max_hp = 1000;
+            }
+        }
+        let mut out: Vec<u8> = sts2_core::legal_actions(&s)
+            .iter()
+            .filter_map(|a| match a {
+                sts2_core::Action::PlayCard { hand_index, .. } => Some(*hand_index),
+                _ => None,
+            })
+            .collect();
+        out.dedup();
+        out
+    }
+
     /// Deterministic structural hash of the current state, suitable as
     /// an MCTS transposition-table key. Stable across runs of the same
     /// compiled binary; **not** stable across pin bumps (Rust stdlib

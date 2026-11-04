@@ -3612,13 +3612,12 @@ mod tests {
         crate::cards::dispatch::install_default_registry();
         let mut state = CombatState::default();
         let _enemy = history_course_setup(&mut state, 2);
-        let mut cry = crate::cards::spec_index::card_pod_from_id(CardId::BansheesCry, false)
-            .unwrap();
+        let mut cry =
+            crate::cards::spec_index::card_pod_from_id(CardId::BansheesCry, false).unwrap();
         cry.uid = sts2_core::CardUid::new(state.cards.len() as u32 + 1).unwrap();
         state.cards.push(cry);
         state.player.hand.push(cry.uid);
-        state.combat_log.prev_round_last_attack_skill_played =
-            Some((CardId::Defy, false, None));
+        state.combat_log.prev_round_last_attack_skill_played = Some((CardId::Defy, false, None));
         let _ = sts2_core::relic_effects::dispatch_before_play_phase_start(&mut state);
         assert_eq!(state.cards[cry.uid.get() as usize - 1].cost, 7);
     }

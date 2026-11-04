@@ -135,7 +135,11 @@ fn banshees_cry_discount_survives_a_temporary_cost_expiring() {
     let _ = play_card(&mut s, i, Some(0));
     assert_eq!(s.cards[cry.get() as usize - 1].cost, 0, "clamped at 0 now");
     s.restore_snecko_costs_for_turn_start();
-    assert_eq!(s.cards[cry.get() as usize - 1].cost, 7, "9 - 2 once it expires");
+    assert_eq!(
+        s.cards[cry.get() as usize - 1].cost,
+        7,
+        "9 - 2 once it expires"
+    );
 }
 
 // ----------------------------------------------------------- dark embrace --
