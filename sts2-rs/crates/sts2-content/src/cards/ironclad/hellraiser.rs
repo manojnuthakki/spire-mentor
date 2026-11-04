@@ -250,6 +250,49 @@ mod tests {
         }
     }
 
+    /// Step39 review F2: `Hook.AfterCardDrawn` awaits every `AfterCardDrawnEarly`
+    /// (Hellraiser's auto-play, here Seeker Strike's selection) before the
+    /// regular pass, so Confused's cost read waits for the selection to resolve.
+    #[test]
+    fn confused_waits_for_a_suspended_hellraiser_autoplay_selection() {
+        crate::cards::colorless::install_pool();
+        let (mut state, _enemy) = state_with_enemy_and_player_mirror(100);
+        let player_cuid = state.player.creature_uid.expect("mirror set");
+        apply_power_to_creature(&mut state, player_cuid, PowerKind::Hellraiser, 1);
+        apply_power_to_creature(&mut state, player_cuid, PowerKind::Confused, 1);
+        let _other_a = push_strike_in_draw(&mut state);
+        let _other_b = push_strike_in_draw(&mut state);
+        let seeker = push_strike_in_draw(&mut state);
+        {
+            let c = &mut state.cards[seeker.get() as usize - 1];
+            c.card_id = CardId::SeekerStrike;
+            c.base_damage = 9;
+        }
+        let cost_before = state.run_rng.combat_energy_costs.counter();
+        state.draw_into_hand(1);
+        assert!(
+            state.pending_choice.is_some(),
+            "Seeker Strike's pick is open"
+        );
+        assert_eq!(
+            state.run_rng.combat_energy_costs.counter() - cost_before,
+            0,
+            "no regular rider (Confused) while the early hook is suspended"
+        );
+        let mut sel: SmallVec<[u8; 4]> = SmallVec::new();
+        sel.push(0);
+        let _ = sts2_core::apply(
+            &mut state,
+            sts2_core::Action::ResolveChoice { selection: sel },
+        );
+        assert!(state.pending_choice.is_none());
+        assert_eq!(
+            state.run_rng.combat_energy_costs.counter() - cost_before,
+            1,
+            "the regular pass ran once the auto-play finished"
+        );
+    }
+
     /// Bead `sts2-rs-bsj93`, two-enemy targeting:
     /// With two alive enemies, the Hellraiser auto-play target is chosen by
     /// rolling `CombatTargets.NextItem` over the alive list (C#

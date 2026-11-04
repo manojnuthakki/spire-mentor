@@ -1079,7 +1079,12 @@ fn apply_damage_hit(
             crate::enemy_death_effects::fire_for_owner(state, target);
             // C# `KillWithoutCheckingWinCondition`: the last primary's death kills
             // the secondary (Minion) teammates in the same processing.
-            crate::combat_loop::collapse_minion_only_survivors(state);
+            // Inside a fan-out hit (one `CreatureCmd.Damage` over a target list) the
+            // kill waits: C# damages every target first, then kills
+            // (`attack_command::fanout_end` runs the collapse).
+            if state.attack_commands.fanout.is_none() {
+                crate::combat_loop::collapse_minion_only_survivors(state);
+            }
         }
     }
 

@@ -16416,6 +16416,43 @@ mod tests {
         }
     }
 
+    /// Step39 review F1: inside one fan-out hit the Minion survives until every target
+    /// was damaged (C# `CreatureCmd.Damage` all targets, then `Kill`); the collapse runs at `fanout_end`.
+    #[test]
+    #[serial_test::serial(global_registry)]
+    fn the_minion_collapse_waits_for_the_fanout_hit_to_finish() {
+        let mut state = state_for_enemy_turn_exec(2, MonsterKind::ShrinkerBeetle, Intent::Stun);
+        let minion_uid = *state.enemy_uids.last().expect("a minion");
+        crate::card_effects::apply_power_to_creature(&mut state, minion_uid, PowerKind::Minion, 1);
+        let primary = state.enemy_uids[0];
+        let hp_of = |state: &CombatState| {
+            state
+                .creatures
+                .iter()
+                .find(|c| c.id == minion_uid.0)
+                .map_or(99, |c| c.current_hp)
+        };
+        let fan = crate::attack_command::fanout_begin(&mut state);
+        let hit = |state: &mut CombatState, uid, dmg: i32| {
+            let _ = crate::damage::apply_damage(
+                state,
+                crate::hooks::CreatureRef::Player,
+                uid,
+                dmg,
+                crate::hooks::ValueProps::MOVE,
+                None,
+            );
+        };
+        hit(&mut state, primary, 99);
+        assert!(
+            hp_of(&state) > 0,
+            "primary dead, hit still running: the minion lives"
+        );
+        hit(&mut state, minion_uid, 1);
+        crate::attack_command::fanout_end(&mut state, fan);
+        assert!(hp_of(&state) <= 0, "after the hit the minion is collapsed");
+    }
+
     /// `check_combat_end` returns `CombatLost` and sets `is_over=true /
     /// player_won=false` when `state.player.current_hp <= 0`. Mirrors
     /// Python's `_check_combat_end` (line 2455) where the

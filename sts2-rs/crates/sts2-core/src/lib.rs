@@ -2760,6 +2760,11 @@ pub struct PendingDrawResume {
     /// draw completes, the remaining turn-setup steps
     /// (`combat_loop::finish_player_turn_setup`) must run.
     pub resume_turn_setup: bool,
+    /// The card whose regular `AfterCardDrawn` riders wait on the early pass:
+    /// Hellraiser's auto-play (`AfterCardDrawnEarly`) suspended on a selection,
+    /// and C# `Hook.AfterCardDrawn` awaits every early listener before the
+    /// regular pass starts. Run first on resume (step39 review F2).
+    pub regular_riders: Option<CardUid>,
 }
 
 /// In-flight state of a turn-start Mayhem `AutoPlayFromDrawPile` collect loop
@@ -7026,6 +7031,7 @@ impl CombatState {
                             remaining,
                             from_hand_draw,
                             resume_turn_setup: false,
+                            regular_riders: None,
                         });
                         return moved;
                     }
@@ -7067,7 +7073,8 @@ impl CombatState {
             // already dispatch unconditionally; census v8 seeds
             // 1003/1006/1042/1049).
             crate::enchantment_hooks::dispatch_on_card_drawn(self, uid, from_hand_draw);
-            self.invoke_card_drawn_for_newly_drawn(hand_len_before, from_hand_draw);
+            let deferred_riders =
+                self.invoke_card_drawn_impl(hand_len_before, from_hand_draw, None, true);
             // Bead `sts2-rs-hellraiser-draw-suspend` (DRAW_ORDER|end_turn seeds
             // 1586/3453/4081 + PILE_COUNT seed 5754): an on-draw auto-play
             // (HellraiserPower auto-playing a drawn Strike) whose OnPlay opens a
@@ -7084,11 +7091,15 @@ impl CombatState {
             // cascading the whole turn's draw order + hand size. The resume in
             // `apply(Action::ResolveChoice)` finishes the parked auto-play (card
             // → discard) BEFORE continuing this draw via `pending_draw_resume`.
+            if let (Some(uid), Some(pdr)) = (deferred_riders, self.pending_draw_resume.as_mut()) {
+                pdr.regular_riders = Some(uid);
+            }
             if self.pending_choice.is_some() && self.pending_draw_resume.is_none() {
                 self.pending_draw_resume = Some(PendingDrawResume {
                     remaining,
                     from_hand_draw,
                     resume_turn_setup: false,
+                    regular_riders: deferred_riders,
                 });
                 return moved;
             }
@@ -7108,6 +7119,11 @@ impl CombatState {
     /// `pending_autoplay_resume` tail so both produce the identical draw
     /// continuation.
     pub(crate) fn resume_suspended_draw(&mut self, pdr: PendingDrawResume) -> Option<StepResult> {
+        if let Some(uid) = pdr.regular_riders {
+            // The early pass finished (its auto-play and selections); the card's
+            // regular riders run now, unless the combat is ending.
+            let _ = self.invoke_card_drawn_impl(0, pdr.from_hand_draw, Some(uid), false);
+        }
         let _ = self.draw_suspending(pdr.remaining, pdr.from_hand_draw);
         if let Some(again) = self.pending_draw_resume.as_mut() {
             again.resume_turn_setup |= pdr.resume_turn_setup;
@@ -7184,20 +7200,38 @@ impl CombatState {
         hand_len_before: usize,
         from_hand_draw: bool,
     ) {
-        let hand_len_after = self.player.hand.len();
-        if hand_len_after <= hand_len_before {
-            return;
-        }
-        let drawn: smallvec::SmallVec<[CardUid; 8]> = self.player.hand
-            [hand_len_before..hand_len_after]
-            .iter()
-            .copied()
-            .collect();
+        let _ = self.invoke_card_drawn_impl(hand_len_before, from_hand_draw, None, false);
+    }
+
+    /// The draw hooks. `resumed` (Some) runs only the regular pass for that
+    /// card (the early pass and the event log already ran). `defer_regular`
+    /// (the per-card suspending loop) returns the card instead of running its
+    /// regular riders when the early pass left a selection open: the caller
+    /// parks it on [`PendingDrawResume::regular_riders`].
+    pub(crate) fn invoke_card_drawn_impl(
+        &mut self,
+        hand_len_before: usize,
+        from_hand_draw: bool,
+        resumed: Option<CardUid>,
+        defer_regular: bool,
+    ) -> Option<CardUid> {
+        let drawn: smallvec::SmallVec<[CardUid; 8]> = if let Some(uid) = resumed {
+            smallvec::smallvec![uid]
+        } else {
+            let hand_len_after = self.player.hand.len();
+            if hand_len_after <= hand_len_before {
+                return None;
+            }
+            self.player.hand[hand_len_before..hand_len_after]
+                .iter()
+                .copied()
+                .collect()
+        };
 
         // Event log (C# `CardDrawnEntry`), one row per card in draw order.
         // This is the single funnel for cards landing in hand, and it already
         // carries C#'s `FromHandDraw` discriminator.
-        if crate::event_log::armed(self) {
+        if resumed.is_none() && crate::event_log::armed(self) {
             for &uid in &drawn {
                 let Some(card) = self.cards.get(uid.0.get() as usize - 1) else {
                     continue;
@@ -7390,7 +7424,10 @@ impl CombatState {
         // enemy skips the card's regular riders: no Confused `combat_energy_costs`
         // read (step39 `snecko-first-draw-costs`, 5LLRSWZ9EP). The auto-play used
         // to run after the riders.
-        if has_alive_enemy {
+        if resumed.is_some() && crate::combat_loop::combat_is_ending(self) {
+            return None;
+        }
+        if has_alive_enemy && resumed.is_none() {
             for &uid in &drawn {
                 let is_strike = self
                     .cards
@@ -7412,8 +7449,11 @@ impl CombatState {
                     );
                 }
             }
+            if defer_regular && self.pending_choice.is_some() && drawn.len() == 1 {
+                return Some(drawn[0]);
+            }
             if crate::combat_loop::combat_is_ending(self) {
-                return;
+                return None;
             }
         }
 
@@ -7716,6 +7756,7 @@ impl CombatState {
         // hand draw runs in `PlayerTurnStart`, before the step-11 phase flip
         // — the HELLRAISER+1 quick-sweep divergence, seed 40), and (b)
         // spends energy, while C# AutoPlay is free.
+        None
     }
 
     /// Shuffle the player's draw pile in place and fire the

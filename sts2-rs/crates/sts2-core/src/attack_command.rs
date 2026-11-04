@@ -120,6 +120,11 @@ pub fn fanout_begin(state: &mut CombatState) -> FanOutMark {
 /// The fan-out hit is over.
 pub fn fanout_end(state: &mut CombatState, mark: FanOutMark) {
     state.attack_commands.fanout = mark.0;
+    // The deaths the hit's targets caused kill the Minion teammates now, after every
+    // target was damaged (C# `CreatureCmd.Damage`: all targets, then `Kill`).
+    if mark.0.is_none() {
+        crate::combat_loop::collapse_minion_only_survivors(state);
+    }
 }
 
 /// What one hit on an enemy is to the running card's attack command

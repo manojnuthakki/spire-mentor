@@ -19808,6 +19808,7 @@ mod tests {
                 remaining: 1,
                 from_hand_draw: true,
                 resume_turn_setup: false,
+                regular_riders: None,
             }),
             "the undrawn remainder is stashed for the post-choice resume"
         );
