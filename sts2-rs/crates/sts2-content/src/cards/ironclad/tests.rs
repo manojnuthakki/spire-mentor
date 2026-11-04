@@ -4303,18 +4303,17 @@ fn pillage_hellraiser_no_autoplay_without_alive_enemy() {
     // Must TERMINATE (a hang = the bug).
     let _ = dispatch(&mut state, CardId::Pillage, Some(enemy));
 
-    // With no alive enemy the Strikes were drawn but NOT auto-played, so they
-    // pile up in hand and the draw pile drains, ending the loop.
+    // Step39: with no alive enemy the combat is ending, and C# `CardPileCmd.Draw`
+    // returns an empty draw first when `IsOverOrEnding` (`CardPileCmd.cs:726`):
+    // nothing is drawn (so nothing is auto-played either) and the loop ends at
+    // once. (Before, the draw ran and the Strikes piled up in hand.)
     for uid in &s {
         assert!(
-            state.player.hand.contains(uid),
-            "drawn Strike stays in hand (not auto-played into an empty board)"
+            !state.player.hand.contains(uid),
+            "no draw once the last enemy is dead: the Strike stays in the draw pile"
         );
     }
-    assert!(
-        state.player.draw.is_empty(),
-        "draw pile drained — the loop terminated instead of looping forever"
-    );
+    assert_eq!(state.player.draw.len(), 4, "draw pile untouched");
 }
 
 /// Bead `sts2-rs-ench-onplay-order` (mirror corpus records 269/270, 29 live

@@ -6090,8 +6090,16 @@ pub fn combat_is_ending(state: &CombatState) -> bool {
     if state.player.current_hp <= 0 {
         return true;
     }
-    // C# IsEnding: ending once no alive PRIMARY (non-minion) enemy remains,
-    // unless an Adaptable corpse keeps it open (ShouldStopCombatFromEnding).
+    enemies_ended_combat(state)
+}
+
+/// The roster half of C# `CombatManager.IsEnding`: no alive PRIMARY (non-minion)
+/// enemy remains, unless an Adaptable corpse keeps the combat open
+/// (`ShouldStopCombatFromEnding`). [`combat_is_ending`] without the pending-loss
+/// and `is_over` reads; the draw gate uses it (a fixture's default hp-0 player
+/// reads as a pending loss, which no real combat draws under).
+#[must_use]
+pub fn enemies_ended_combat(state: &CombatState) -> bool {
     let mut any_primary_present = false;
     let mut alive_primary = 0usize;
     let mut adaptable_corpse = false;

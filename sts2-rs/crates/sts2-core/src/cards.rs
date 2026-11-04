@@ -2720,7 +2720,7 @@ pub fn draw_via_state(state: &mut crate::CombatState, n: i32) -> usize {
     // `combat_energy_costs` read) and reshuffles nothing. The batch used to be
     // capped to the cards in the draw pile instead, which still drew them and
     // read the riders (step39 `snecko-first-draw-costs`).
-    if crate::combat_loop::combat_is_ending(state) {
+    if state.is_over || crate::combat_loop::enemies_ended_combat(state) {
         return 0;
     }
     if card_effect_draw_blocked(state) {

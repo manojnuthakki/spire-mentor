@@ -6780,7 +6780,7 @@ impl CombatState {
         // the last enemy draws nothing, runs no `AfterCardDrawn` rider and
         // performs no `ShuffleIfNecessary`. (This used to cap the batch to the
         // cards in the draw pile: no reshuffle, but the cards were still drawn.)
-        if crate::combat_loop::combat_is_ending(self) {
+        if self.is_over || crate::combat_loop::enemies_ended_combat(self) {
             return 0;
         }
         // Bead `sts2-rs-63mew`: when a power-side `after_shuffle` choice
@@ -6888,7 +6888,7 @@ impl CombatState {
     /// `draw_into_hand`'s full rider/shuffle-signaling behavior.
     pub fn draw_into_hand_card_effect(&mut self, n: i32) -> usize {
         // C# checks `IsOverOrEnding` before `ShouldDraw` (`CardPileCmd.cs:726`).
-        if crate::combat_loop::combat_is_ending(self) {
+        if self.is_over || crate::combat_loop::enemies_ended_combat(self) {
             return 0;
         }
         if crate::cards::card_effect_draw_blocked(self) {
@@ -6976,7 +6976,7 @@ impl CombatState {
             // C# `CardPileCmd.Draw` loop (`CardPileCmd.cs:756`): `IsOverOrEnding`
             // ends the draw before the next card (a Hellraiser auto-play that
             // downs the last enemy mid-draw stops the rest of the draw).
-            if crate::combat_loop::combat_is_ending(self) {
+            if self.is_over || crate::combat_loop::enemies_ended_combat(self) {
                 break;
             }
             // C# `CardPileCmd.Shuffle` (`CardPileCmd.cs:806`) early-returns on
