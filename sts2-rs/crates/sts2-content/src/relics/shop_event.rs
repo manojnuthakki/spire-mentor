@@ -328,6 +328,12 @@ pub fn install_pool() {
         RelicId::DingyRug,
         listener_dingy_rug as ModifyCardRewardCreationOptionsRunFn,
     );
+    // F6 step37: Prismatic Gem widens card rewards to every unlocked
+    // character's pool (`PrismaticGem.ModifyCardRewardCreationOptions`).
+    register_modify_card_reward_creation_options(
+        RelicId::PrismaticGem,
+        listener_prismatic_gem as ModifyCardRewardCreationOptionsRunFn,
+    );
     // Bead `sts2-rs-psf9`: real `after_obtained` listener for Orrery.
     // Python `shop_event.py::Orrery.after_obtained` loops `CARDS = 5`
     // calls to `owner.offer_card_reward()`. Rust's `RelicReward` /
@@ -2475,6 +2481,81 @@ fn listener_dingy_rug(rs: &mut RunState, opts: &mut CardRewardGenerationOptions)
     EffectResult::Resolved
 }
 
+/// `PrismaticGem::modify_card_reward_creation_options` (F6 step37) — C#
+/// `PrismaticGem.ModifyCardRewardCreationOptions`: unless the options carry
+/// `NoCardPoolModifications`, a custom pool, or only colorless pools, the
+/// reward pools become `player.UnlockState.CharacterCardPools.Union(
+/// options.CardPools)`: every unlocked character's pool in `ModelDb.
+/// AllCharacters` order (Ironclad, Silent, Regent, Necrobinder, Defect;
+/// Headless runs `UnlockState.all`), then any shared pool the options
+/// already had (Dingy Rug's colorless). The rarity roll and the
+/// `NextItem` pick then read that concatenated, ordered pool.
+///
+/// Dingy Rug (registered first: alphabetical relic order) may already have
+/// turned the pool into its explicit character + colorless slate; that
+/// slate is rebuilt here with the wider character part in front of the
+/// colorless cards it holds, which is the game's union whichever relic
+/// ran first. Any other custom slate (`has_custom_card_pool` without Dingy
+/// Rug) is left alone, as the game leaves a `CustomCardPool`.
+fn listener_prismatic_gem(
+    rs: &mut RunState,
+    opts: &mut CardRewardGenerationOptions,
+) -> EffectResult {
+    if !rs.owns_active_relic(RelicId::PrismaticGem) {
+        return EffectResult::NotImplemented;
+    }
+    if !opts.allow_card_pool_modifications {
+        return EffectResult::NotImplemented;
+    }
+    use sts2_core::potions::CharacterId;
+    let all = [
+        CharacterId::Ironclad,
+        CharacterId::Silent,
+        CharacterId::Regent,
+        CharacterId::Necrobinder,
+        CharacterId::Defect,
+    ];
+    if opts.has_custom_card_pool {
+        if !rs.owns_active_relic(RelicId::DingyRug) {
+            return EffectResult::NotImplemented;
+        }
+        use std::collections::HashSet;
+
+        use crate::cards::spec_index::{specs_for_character, COLORLESS_SPECS};
+        let colorless: HashSet<sts2_core::cards::CardId> =
+            COLORLESS_SPECS.iter().map(|f| f().id).collect();
+        let mut seen: HashSet<sts2_core::cards::CardId> = HashSet::new();
+        let mut combined: Vec<sts2_core::cards::CardId> = Vec::new();
+        for ch in all {
+            for &factory in specs_for_character(ch) {
+                let id = factory().id;
+                if seen.insert(id) {
+                    combined.push(id);
+                }
+            }
+        }
+        // C# bails when every pool is colorless: a slate with no character
+        // card in it is a colorless-only reward, not Dingy Rug's union.
+        if opts.custom_card_ids.iter().all(|id| colorless.contains(id)) {
+            return EffectResult::NotImplemented;
+        }
+        for id in opts.custom_card_ids.clone() {
+            if colorless.contains(&id) && seen.insert(id) {
+                combined.push(id);
+            }
+        }
+        opts.custom_card_ids = combined;
+        return EffectResult::Resolved;
+    }
+    // A pool with no character part (colorless only) is left alone.
+    if opts.character_ids.is_empty() && !opts.use_default_character_pool {
+        return EffectResult::NotImplemented;
+    }
+    opts.character_ids = all.to_vec();
+    opts.use_default_character_pool = false;
+    EffectResult::Resolved
+}
+
 /// `MassiveScroll::after_obtained` — push `MASSIVE_SCROLL_CARDS = 3`
 /// `Reward::Card(CardReward::empty())` sentinels (Python
 /// `shop_event.py::MassiveScroll`: `owner.offer_multiplayer_cards(3)`).
@@ -4558,15 +4639,11 @@ fn listener_fur_coat_modify_generated_map_late(
 /// [`sts2_core::runstate::RunState::transform_specific_cards`] (bead
 /// `sts2-rs-ab8uo`).
 ///
-/// **Parity approximation:** Python's `create_transform_card` samples
-/// from an "original-card-specific" eligibility pool that varies per
-/// transform source. The Rust port doesn't have that depth yet; we
-/// approximate by sampling Common-rarity cards from the character
-/// pool via [`crate::cards::spec_index::random_card_from_rarity`].
-/// This matches the established sibling-relic convention (Astrolabe
-/// at line 2498 uses the same `random_card_from_rarity(rs, _, Rare)`
-/// shape). A full rarity-rolled / original-keyed sampler is a
-/// follow-up beyond this body-fill bead.
+/// **Replacement draw (F6 step37):** each match is replaced through
+/// [`crate::cards::spec_index::roll_transform_replacement_basic_niche`]:
+/// the game's `CreateRandomCardForTransform` over the character pool's
+/// Common/Uncommon/Rare cards, read off `RunState.Rng.Niche`, one read per
+/// card in deck order (only removable cards, as `IsRemovable`).
 ///
 /// The listener no-ops for any character returning `None` from
 /// `basic_strike_defend_cards`; every character now has a pair, so that
@@ -4585,22 +4662,33 @@ fn listener_pandoras_box(rs: &mut RunState) -> EffectResult {
     else {
         return EffectResult::NotImplemented;
     };
+    // C# `PandorasBox.AfterObtained`: every deck card that
+    // `IsBasicStrikeOrDefend && IsRemovable`, in deck order, each becomes
+    // `CardFactory.CreateRandomCardForTransform(card, false, Rng.Niche)`
+    // (Common/Uncommon/Rare of the character pool, never the original's id;
+    // `CardCmd.Transform` reads the stream once per transformation, in the
+    // input order). F6 step37: the listener drew a Common off the rewards
+    // stream per card.
+    let removable = crate::cards::spec_index::card_is_removable_instance;
     let indices: Vec<usize> = rs
         .master_deck
         .iter()
         .enumerate()
-        .filter(|(_, card)| card.card_id == strike_id || card.card_id == defend_id)
+        .filter(|(_, card)| {
+            (card.card_id == strike_id || card.card_id == defend_id) && removable(card)
+        })
         .map(|(idx, _)| idx)
         .collect();
     if indices.is_empty() {
         return EffectResult::Resolved;
     }
     let mut replacements: Vec<sts2_core::Card> = Vec::with_capacity(indices.len());
-    for _ in 0..indices.len() {
-        let Some(new_id) = crate::cards::spec_index::random_card_from_rarity(
+    for &deck_idx in &indices {
+        let original_id = rs.master_deck[deck_idx].card_id;
+        let Some(new_id) = crate::cards::spec_index::roll_transform_replacement_basic_niche(
             rs,
-            Some(character_id),
-            crate::cards::CardRarity::Common,
+            character_id,
+            original_id,
         ) else {
             return EffectResult::NotImplemented;
         };
