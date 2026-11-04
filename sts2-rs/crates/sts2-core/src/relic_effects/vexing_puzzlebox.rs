@@ -8,11 +8,15 @@ use super::prelude::*;
 ///
 /// [decompiled C# omitted — see the cited path]
 ///
-/// "Free this turn" is modeled as a permanent `cost = 0` on the
-/// freshly generated instance: the instance is created for this combat
-/// only and the round-1 trigger fires once. Slight semantic drift vs.
-/// the C# per-turn cost override (a held card would re-pay on turn 2),
-/// but acceptable for parity given expected play patterns. Python pin
+/// "Free this turn" is C# `CardModel.SetToFreeThisTurn()` (called before
+/// `AddGeneratedCardToCombat`): `EnergyCost.SetThisTurnOrUntilPlayed(0)`
+/// plus a this-turn star cost of 0, an `EndOfTurn | WhenPlayed` modifier
+/// over the card's unchanged base. The engine's path for it is the
+/// `FreeThisTurn` combat var (cleared when the card is played and at the
+/// turn-end cleanup), NOT a permanent `cost = 0`: a held or replayed card
+/// pays its base cost after the turn or the play (F6
+/// `vexing-puzzlebox-free-this-turn`, EK9RFEKVWV@361: a played Headbutt
+/// sat in the discard at 0 on the Sim, 1 in the game). Python pin
 /// `relics/rare.py::VexingPuzzlebox` references a
 /// `combat.generate_free_card_in_hand(owner)` stub that doesn't exist
 /// in the pin — C# decompilation is the source of truth.
@@ -40,9 +44,7 @@ pub(crate) fn on_after_side_turn_start_vexing_puzzlebox(
         return EffectResult::NotImplemented;
     }
     for &uid in &uids {
-        if let Some(card) = crate::card_by_uid_mut(&mut state.cards, uid) {
-            card.cost = 0;
-        }
+        crate::card_effects::set_card_var(state, uid, crate::cards::VarKey::FreeThisTurn, 1);
     }
     crate::card_effects::route_generated_into_hand(state, &uids);
     EffectResult::Resolved
