@@ -1864,6 +1864,7 @@ impl PyCombatState {
             side_turn_start_fired: false,
             mayhem_phase: false,
             relic_start: Some(next),
+            imbued: smallvec::SmallVec::new(),
         });
         Ok(true)
     }
@@ -1930,6 +1931,7 @@ impl PyCombatState {
             side_turn_start_fired: false,
             mayhem_phase: false,
             relic_start: None,
+            imbued: smallvec::SmallVec::new(),
         });
         Ok(true)
     }

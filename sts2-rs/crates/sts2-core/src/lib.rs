@@ -2824,6 +2824,14 @@ pub struct PendingClusterResume {
     /// resume that bus from the relic at `equip_idx`, then run the rest of the
     /// turn-start tail. `None` for cases 1 and 2.
     pub relic_start: Option<u8>,
+    /// The Normal AutoPrePlay pass's captured card listeners (F6 step34): the
+    /// Imbued cards, in the pass's snapshot order (Hand, Draw, Discard, Exhaust,
+    /// Play), taken when the pass began and played, by reference, AFTER the
+    /// pass's powers (Mayhem). Carried across a suspended Mayhem so the pass
+    /// resumes into exactly its remaining listeners; empty once the list is
+    /// being played (an Imbued card's surfaced select parks the rest on
+    /// [`PendingAutoplayResume::remaining`]) and on every earlier suspend.
+    pub imbued: smallvec::SmallVec<[CardUid; 4]>,
 }
 
 /// Pending mid-play state for a card that resumes after a choice.
@@ -9490,7 +9498,7 @@ fn resolve_choice_atomic(
                 if state.is_over {
                     break;
                 }
-                crate::combat_loop::resolve_auto_played_card(state, uid, force_exhaust);
+                crate::combat_loop::play_captured_card(state, uid, force_exhaust);
             }
             // Nested auto-play chain (seed 2752 DISTILLED_CHAOS → HAVOC →
             // BURNING_PACT): now that the INNER surfacing card's tail has run,
@@ -9523,7 +9531,7 @@ fn resolve_choice_atomic(
                     if state.is_over {
                         break;
                     }
-                    crate::combat_loop::resolve_auto_played_card(state, uid, frame.force_exhaust);
+                    crate::combat_loop::play_captured_card(state, uid, frame.force_exhaust);
                 }
             }
             // Re-selection auto-play-loop continuation (Catastrophe / BeatDown):

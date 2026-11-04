@@ -1068,8 +1068,7 @@ pub(crate) fn resume_after_relic_hand_draw_select(
     // draw-pile card to the TOP of the pile (so it is drawn first), then
     // raise the draw count to at least the number of Innate cards, capped at
     // `MAX_HAND_SIZE`. The Enchantment `ShouldStartAtBottomOfDrawPile`
-    // bottom-move is not modeled at this pin (no enchantment-draw support
-    // yet). This MUST run after the relic/card `before_hand_draw` dispatch
+    // bottom-move (Imbued) is applied first, just below (F6 step34). This MUST run after the relic/card `before_hand_draw` dispatch
     // above so a `CardPilePosition.Random` soul insert (FuneraryMask) lands
     // in the same pile slot C# uses before the Innate cards float to the top
     // (DRAW_ORDER FuneraryMask+DramaticEntrance residual).
@@ -1079,11 +1078,37 @@ pub(crate) fn resume_after_relic_hand_draw_select(
     // is the reverse of pile order. We reproduce that by removing each Innate
     // uid (in pile order) and re-inserting it at the front.
     if state.round == 1 {
+        // F6 step34 (`imbued-bottom`, authority.json): FIRST every draw-pile card
+        // whose enchantment `ShouldStartAtBottomOfDrawPile` (Imbued) goes to the
+        // bottom, each `MoveToBottomInternal` in pile order (so their relative
+        // order is kept and the rest of the pile closes up in its own order); no
+        // RNG. THEN the Innate list is taken EXCLUDING those cards.
+        let bottom_uids: smallvec::SmallVec<[crate::CardUid; 4]> = state
+            .player
+            .draw
+            .iter()
+            .copied()
+            .filter(|uid| {
+                let idx = uid.0.get() as usize - 1;
+                state
+                    .cards
+                    .get(idx)
+                    .is_some_and(crate::enchantment_hooks::card_starts_at_bottom_of_draw_pile)
+            })
+            .collect();
+        for uid in &bottom_uids {
+            if let Some(pos) = state.player.draw.iter().position(|u| u == uid) {
+                state.player.draw.remove(pos);
+                state.player.draw.push(*uid);
+                cards::unpin(&mut state.player, *uid);
+            }
+        }
         let innate_uids: smallvec::SmallVec<[crate::CardUid; 8]> = state
             .player
             .draw
             .iter()
             .copied()
+            .filter(|uid| !bottom_uids.contains(uid))
             .filter(|uid| {
                 let idx = uid.0.get() as usize - 1;
                 state
@@ -1193,12 +1218,10 @@ pub(crate) fn finish_player_turn_setup(state: &mut CombatState) -> StepResult {
     let pre_autoplay_power_uids: smallvec::SmallVec<[crate::PowerUid; 8]> =
         state.player_power_uids();
 
-    // Bead `sts2-rs-6ynt.11`: enchantment `after_player_turn_start`
-    // channel. Python's `apply_enchantment_after_player_turn_start`
-    // fires here (combat.py round-1 Imbued auto-play site). The
-    // dispatcher early-outs when the draw pile carries no
-    // enchantments; the per-card stub is a no-op at this surface bead.
-    crate::enchantment_hooks::dispatch_after_player_turn_start(state);
+    // F6 step34: Imbued is NOT dispatched here any more. In the game it is
+    // `AfterAutoPrePlayPhaseEntered` (Normal pass), after Gambling Chip's awaited
+    // mulligan, the side-turn start and Bombardment's Early pass; see
+    // `finish_normal_pass`.
 
     // ── `AfterPlayerTurnStart` auto-play cluster (single ordered walk) ──────
     //
@@ -1242,7 +1265,15 @@ pub(crate) fn finish_player_turn_setup(state: &mut CombatState) -> StepResult {
     // `sts2-rs-181`): a `StratagemPower.AfterShuffle` grid-select during Mayhem's
     // auto-play suspends and resumes via `apply(Action::ResolveChoice)` (with
     // `after_side_turn_start` already fired, so it is not re-fired).
-    run_after_player_turn_start_cluster(state, pre_autoplay_power_uids, 0, None, false, None)
+    run_after_player_turn_start_cluster(
+        state,
+        pre_autoplay_power_uids,
+        0,
+        None,
+        false,
+        None,
+        smallvec::SmallVec::new(),
+    )
 }
 
 /// Phase-1 collect of a turn-start Mayhem `AutoPlayFromDrawPile`, firing the
@@ -1333,6 +1364,66 @@ fn auto_play_collect_suspending(
     None
 }
 
+/// Play a card captured earlier (an AutoPrePlay listener's `Card` reference) by
+/// reference: C# `OnPlayWrapper` stably moves the source to Play from whatever
+/// pile it sits in now (no draw-pile restriction, no swap with the draw top),
+/// then awaits its effects. A card already in Play is resolved in place.
+pub(crate) fn play_captured_card(
+    state: &mut CombatState,
+    uid: crate::CardUid,
+    force_exhaust: bool,
+) {
+    if !state.player.play.contains(&uid) {
+        let from = [
+            cards::PileKind::Hand,
+            cards::PileKind::Draw,
+            cards::PileKind::Discard,
+            cards::PileKind::Exhaust,
+        ]
+        .into_iter()
+        .find(|&p| cards::pile_iter(&state.player, p).any(|u| u == uid));
+        let Some(from) = from else {
+            return;
+        };
+        if from == cards::PileKind::Draw {
+            cards::unpin(&mut state.player, uid);
+        }
+        let _ = cards::move_card(&mut state.player, uid, from, cards::PileKind::Play);
+    }
+    resolve_auto_played_card(state, uid, force_exhaust);
+}
+
+/// Await each captured card listener in order (the Normal AutoPrePlay pass's
+/// Imbued cards). `CardCmd.AutoPlay` returns at once once combat is over or
+/// ending, so later listeners then do nothing. A card whose `OnPlay` surfaces a
+/// select suspends the pass: its tail and the not-yet-played captured cards ride
+/// `pending_autoplay_resume` (as for Mayhem's collected batch) and the returned
+/// no-op `PendingAutoplay` tells the caller to park the cluster record.
+pub(crate) fn auto_play_captured_cards(
+    state: &mut CombatState,
+    cards_in_order: &[crate::CardUid],
+) -> Option<crate::PendingAutoplay> {
+    for (n, uid) in cards_in_order.iter().copied().enumerate() {
+        if combat_is_ending(state) {
+            break;
+        }
+        play_captured_card(state, uid, false);
+        if let Some(resume) = state.pending_autoplay_resume.as_mut() {
+            let rest: smallvec::SmallVec<[crate::CardUid; 8]> =
+                cards_in_order[n + 1..].iter().copied().collect();
+            if let Some(parent) = resume.parent_chain.last_mut() {
+                parent.remaining = rest;
+                parent.force_exhaust = false;
+            } else {
+                resume.remaining = rest;
+                resume.force_exhaust = false;
+            }
+            return Some(crate::PendingAutoplay::default());
+        }
+    }
+    None
+}
+
 /// Fire the player-side `after_side_turn_start` walk (power + relic buses).
 /// C# outer-loop `Hook.AfterSideTurnStart` (`CombatManager.cs:437` — Rampart /
 /// DemonForm / PrepTime / CreativeAi). Skips the folded `AfterPlayerTurnStart`
@@ -1376,6 +1467,7 @@ fn run_after_player_turn_start_cluster(
     resume_autoplay: Option<crate::PendingAutoplay>,
     side_turn_start_fired: bool,
     mayhem_resume: Option<crate::PendingAutoplay>,
+    normal_cards: smallvec::SmallVec<[crate::CardUid; 4]>,
 ) -> StepResult {
     let ctx = hooks::TurnSideCtx::default();
     // Mayhem (AutoPrePlay) resume: in v0.107.1 Mayhem's auto-play fires AFTER
@@ -1385,20 +1477,7 @@ fn run_after_player_turn_start_cluster(
     // Finish the suspended Mayhem auto-play and run the turn-start tail — no
     // snapshot re-walk and no `after_side_turn_start` re-fire (bead `sts2-rs-181`).
     if let Some(ap) = mayhem_resume {
-        if !state.is_over {
-            if let Some(susp) = auto_play_collect_suspending(state, ap) {
-                state.pending_cluster_resume = Some(crate::PendingClusterResume {
-                    snapshot,
-                    idx: 0,
-                    autoplay: susp,
-                    side_turn_start_fired: true,
-                    mayhem_phase: true,
-                    relic_start: None,
-                });
-                return StepResult::PendingChoice;
-            }
-        }
-        return finish_turn_start_tail(state);
+        return finish_normal_pass(state, snapshot, Some(ap), normal_cards);
     }
     let mut resume_autoplay = resume_autoplay;
     let mut i = start_idx;
@@ -1418,6 +1497,7 @@ fn run_after_player_turn_start_cluster(
                     side_turn_start_fired,
                     mayhem_phase: false,
                     relic_start: None,
+                    imbued: smallvec::SmallVec::new(),
                 });
                 return StepResult::PendingChoice;
             }
@@ -1544,6 +1624,7 @@ fn run_after_player_turn_start_cluster(
                             side_turn_start_fired,
                             mayhem_phase: false,
                             relic_start: None,
+                            imbued: smallvec::SmallVec::new(),
                         });
                         return StepResult::PendingChoice;
                     }
@@ -1635,6 +1716,7 @@ fn run_after_player_turn_start_cluster(
                                 side_turn_start_fired,
                                 mayhem_phase: false,
                                 relic_start: None,
+                                imbued: smallvec::SmallVec::new(),
                             });
                             return StepResult::PendingChoice;
                         }
@@ -1698,6 +1780,7 @@ pub(crate) fn run_turn_start_relic_tail(
                 side_turn_start_fired,
                 mayhem_phase: false,
                 relic_start: Some(next),
+                imbued: smallvec::SmallVec::new(),
             });
             return StepResult::PendingChoice;
         }
@@ -1822,53 +1905,86 @@ pub(crate) fn run_turn_start_relic_tail(
         }
     }
 
-    // ── Mayhem AutoPrePlay auto-play (bead `sts2-rs-181`) ──────────────────
+    // ── The Normal AutoPrePlay pass (F6 step34) ─────────────────────────────
     //
+    // `Hook.AfterAutoPrePlayPhaseEntered` runs the Early pass (Bombardment,
+    // above), then the Normal pass over a listener snapshot taken when it
+    // BEGINS: powers (Mayhem), relics, then each card/affliction/enchantment in
+    // Hand, Draw, Discard, Exhaust, Play order (Imbued). Capture the card
+    // listeners now, before Mayhem's auto-play can move anything, and let
+    // `finish_normal_pass` run Mayhem, then the captured cards, each awaited.
+    if state.is_over {
+        return finish_turn_start_tail(state);
+    }
+    let normal_cards = crate::enchantment_hooks::normal_pass_card_snapshot(state);
     // C# `MayhemPower.AfterAutoPrePlayPhaseEntered` (`MayhemPower.cs:16`):
-    // `CardPileCmd.AutoPlayFromDrawPile(Amount, Top)`. v0.107.1 runs this in the
-    // AutoPrePlay phase, which `CombatManager` enters at `:570` — AFTER
-    // `Hook.AfterSideTurnStart` (`:524`). So the Vigor a turn-start
-    // `PrepTimePower` granted in Step 9 is LIVE when Mayhem's auto-played powered
-    // attack resolves and is consumed by it; and a `PrepTimePower` Mayhem
-    // auto-plays this turn does NOT grant Vigor (its `AfterSideTurnStart` already
-    // passed). v0.103.2 classed Mayhem as `AfterPlayerTurnStart` (before
-    // `AfterSideTurnStart`), so the prior code fired it in the cluster walk —
-    // which left the freshly-granted Vigor dangling (CEREMONIAL_BEAST_BOSS seed
-    // 3515, PREP_TIME + MAYHEM_CARD). Mayhem is a `Counter` power (a single
-    // instance), so dispatch the lone instance from the snapshot here. A
-    // `StratagemPower.AfterShuffle` grid-select during the auto-play suspends via
-    // `mayhem_phase` (after_side_turn_start has already fired, so it is not
-    // re-fired on resume).
-    if !state.is_over {
-        let mayhem_uid = snapshot.iter().copied().find(|u| {
-            state
-                .powers
-                .get_by_id(u.0)
-                .is_some_and(|p| p.kind == crate::PowerKind::Mayhem)
-        });
-        if let Some(mayhem_uid) = mayhem_uid {
-            let amount = state.powers.get_by_id(mayhem_uid.0).map_or(0, |p| p.amount);
-            if amount > 0 && !combat_is_ending(state) {
-                let ap = crate::PendingAutoplay {
-                    remaining: amount,
-                    collected: smallvec::SmallVec::new(),
-                    force_exhaust: false,
-                };
-                if let Some(susp) = auto_play_collect_suspending(state, ap) {
-                    state.pending_cluster_resume = Some(crate::PendingClusterResume {
-                        snapshot,
-                        idx: 0,
-                        autoplay: susp,
-                        side_turn_start_fired: true,
-                        mayhem_phase: true,
-                        relic_start: None,
-                    });
-                    return StepResult::PendingChoice;
-                }
+    // `CardPileCmd.AutoPlayFromDrawPile(Amount, Top)`, run after
+    // `Hook.AfterSideTurnStart` (bead `sts2-rs-181`: the Vigor a turn-start
+    // `PrepTimePower` granted is live for Mayhem's powered attack). Mayhem is a
+    // `Counter` power (a single instance), so dispatch the lone instance from the
+    // snapshot. A `StratagemPower.AfterShuffle` grid-select during the auto-play
+    // suspends via `mayhem_phase` (after_side_turn_start has already fired, so it
+    // is not re-fired on resume).
+    let mayhem_uid = snapshot.iter().copied().find(|u| {
+        state
+            .powers
+            .get_by_id(u.0)
+            .is_some_and(|p| p.kind == crate::PowerKind::Mayhem)
+    });
+    let mayhem_ap = mayhem_uid.and_then(|mayhem_uid| {
+        let amount = state.powers.get_by_id(mayhem_uid.0).map_or(0, |p| p.amount);
+        (amount > 0 && !combat_is_ending(state)).then(|| crate::PendingAutoplay {
+            remaining: amount,
+            collected: smallvec::SmallVec::new(),
+            force_exhaust: false,
+        })
+    });
+    finish_normal_pass(state, snapshot, mayhem_ap, normal_cards)
+}
+
+/// The rest of the Normal AutoPrePlay pass: Mayhem's `AutoPlayFromDrawPile`
+/// (`mayhem`, `None` when absent or already finished), then each captured card
+/// listener (`normal_cards`, the Imbued cards) played by reference and awaited,
+/// then the turn-start tail. Either step can suspend on a player choice; the
+/// resume record keeps exactly what is left (the carried card list while Mayhem
+/// is suspended; empty once a card's surfaced select parks the remaining
+/// captured cards as `PendingAutoplayResume::remaining`).
+fn finish_normal_pass(
+    state: &mut CombatState,
+    snapshot: smallvec::SmallVec<[crate::PowerUid; 8]>,
+    mayhem: Option<crate::PendingAutoplay>,
+    normal_cards: smallvec::SmallVec<[crate::CardUid; 4]>,
+) -> StepResult {
+    if let Some(ap) = mayhem {
+        if !state.is_over {
+            if let Some(susp) = auto_play_collect_suspending(state, ap) {
+                state.pending_cluster_resume = Some(crate::PendingClusterResume {
+                    snapshot,
+                    idx: 0,
+                    autoplay: susp,
+                    side_turn_start_fired: true,
+                    mayhem_phase: true,
+                    relic_start: None,
+                    imbued: normal_cards,
+                });
+                return StepResult::PendingChoice;
             }
         }
     }
-
+    if !state.is_over {
+        if let Some(susp) = auto_play_captured_cards(state, &normal_cards) {
+            state.pending_cluster_resume = Some(crate::PendingClusterResume {
+                snapshot,
+                idx: 0,
+                autoplay: susp,
+                side_turn_start_fired: true,
+                mayhem_phase: true,
+                relic_start: None,
+                imbued: smallvec::SmallVec::new(),
+            });
+            return StepResult::PendingChoice;
+        }
+    }
     finish_turn_start_tail(state)
 }
 
@@ -1980,6 +2096,7 @@ pub(crate) fn resume_player_turn_start_cluster(
             None,
             r.side_turn_start_fired,
             Some(r.autoplay),
+            r.imbued,
         )
     } else {
         run_after_player_turn_start_cluster(
@@ -1989,6 +2106,7 @@ pub(crate) fn resume_player_turn_start_cluster(
             Some(r.autoplay),
             r.side_turn_start_fired,
             None,
+            smallvec::SmallVec::new(),
         )
     }
 }

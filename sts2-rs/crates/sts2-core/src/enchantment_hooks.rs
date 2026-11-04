@@ -275,90 +275,62 @@ fn on_card_drawn_stub(state: &mut CombatState, card_uid: CardUid, _from_hand_dra
 // 2. after_player_turn_start
 // ---------------------------------------------------------------------------
 
-/// Fire enchantment `after_player_turn_start` once per player turn
-/// start. Walks the draw pile to surface Imbued cards (auto-play on
-/// turn 1).
-///
-/// Python entry: `enchantments.py:126` —
-/// `after_player_turn_start(owner, combat)`.
-///
-/// Empty-bus early-out: if no card in the draw pile has any
-/// enchantments, skip the walk entirely.
-pub fn dispatch_after_player_turn_start(state: &mut CombatState) {
-    if !pile_has_any_enchantments(state, &state.player.draw) {
-        return;
-    }
-    after_player_turn_start_stub(state);
+/// Whether the card's enchantment `ShouldStartAtBottomOfDrawPile` (C#
+/// `EnchantmentModel`, false by default; Imbued is the only override). The
+/// opening setup moves such cards to the bottom of the draw pile at turn 1,
+/// before the Innate cards float to the top (F6 step34).
+#[inline]
+#[must_use]
+pub fn card_starts_at_bottom_of_draw_pile(card: &crate::cards::Card) -> bool {
+    card.has_enchantment(EnchantmentId::Imbued)
 }
 
-/// Listener body.
-///
-/// **Wave 3 (`sts2-rs-g7rni`):** Imbued auto-play. On the first player turn
-/// only, scan the draw pile for cards carrying the Imbued enchantment and
-/// auto-play each.
-///
-/// **v0.107.1 retime/rewindow (§8):** C# `Imbued.cs` moved its body from
-/// `BeforePlayPhaseStart` to `AfterAutoPrePlayPhaseEntered` and changed the
-/// window from `CombatState.RoundNumber == 1` to
-/// `PlayerCombatState.TurnNumber <= 1`. Both C# hook points fire after the
-/// turn-setup task completes (after `AfterPlayerTurnStart`), so the relative
-/// dispatch point is unchanged — this remains the engine's per-turn-start
-/// enchant pass. `TurnNumber` starts at `1` and increments once per player
-/// turn; with no extra-turn mechanic in the solo engine `TurnNumber <= 1`
-/// ≡ `round_no() == 1` (see the MrStruggles `RoundNumber→TurnNumber` note),
-/// so the existing round-1 gate below is the faithful window.
-///
-/// **Implementation:** snapshot the Imbued uids first (so subsequent
-/// shuffles / draws don't change what we're iterating), then for each
-/// uid swap it to position 0 of the draw pile and call
-/// [`crate::combat_loop::auto_play_card_from_draw_top`] with
-/// `force_exhaust = false`. This reuses the canonical auto-play pipeline
-/// (target resolution, after_card_played dispatch, natural pile routing)
-/// so Imbued-played cards land in discard (or self-exhaust) — matching
-/// C# `Imbued.cs`'s `CardCmd.AutoPlay`, which does NOT force exhaust.
-///
-/// **EchoForm divergence inherited:** `auto_play_card_from_draw_top`
-/// does not run the EchoForm replay path; per the existing divergence
-/// note on that function (parity follow-up `sts2-rs-tlyk`).
-#[inline]
-fn after_player_turn_start_stub(state: &mut CombatState) {
-    // v0.107.1 window: `PlayerCombatState.TurnNumber <= 1` (was
-    // `RoundNumber == 1`). `round_no()` mirrors `TurnNumber` in the solo
-    // engine (no extra-turn mechanic), and it starts at 1, so `> 1` is the
-    // faithful "after the first player turn" exclusion.
+/// The Normal AutoPrePlay pass's captured card listeners (F6 step34): C#
+/// `Hook.AfterAutoPrePlayPhaseEntered` builds `IterateCombatHookListeners`
+/// when the pass begins, listing each card (then its affliction, then its
+/// enchantment) of Hand, Draw, Discard, Exhaust and Play in that order.
+/// Imbued is `AfterAutoPrePlayPhaseEntered` (Normal) and acts only while
+/// `PlayerCombatState.TurnNumber <= 1`, so the Imbued cards of those piles, in
+/// that order, are the pass's card listeners. The list is fixed here and each
+/// card is later played by reference wherever it then sits.
+#[must_use]
+pub fn normal_pass_card_snapshot(state: &CombatState) -> smallvec::SmallVec<[CardUid; 4]> {
+    // `round_no()` mirrors `TurnNumber` in the solo engine (no extra turn).
     if state.round_no() > 1 {
-        return;
+        return smallvec::SmallVec::new();
     }
-    // Snapshot Imbued uids in current draw order.
-    let imbued: Vec<CardUid> = state
-        .player
-        .draw
-        .iter()
-        .copied()
-        .filter(|uid| {
-            let idx = (uid.get() as usize).saturating_sub(1);
-            state
-                .cards
-                .get(idx)
-                .is_some_and(|c| c.has_enchantment(EnchantmentId::Imbued))
-        })
-        .collect();
-    for uid in imbued {
-        // The card may have been auto-played + exhausted already if a
-        // prior auto-play reshuffled — check it's still in draw.
-        let Some(pos) = state.player.draw.iter().position(|u| *u == uid) else {
-            continue;
-        };
-        if pos != 0 {
-            state.player.draw.swap(0, pos);
-        }
-        // Imbued does NOT force-exhaust — C# `Imbued.cs` calls
-        // `CardCmd.AutoPlay(card, null)` which leaves `ExhaustOnNextPlay`
-        // at its default (false), so the played card routes to its natural
-        // pile (discard unless it self-exhausts). Bead q6bix F-F.
-        let _ =
-            crate::combat_loop::auto_play_card_from_draw_top(state, /*force_exhaust=*/ false);
-    }
+    [
+        crate::cards::PileKind::Hand,
+        crate::cards::PileKind::Draw,
+        crate::cards::PileKind::Discard,
+        crate::cards::PileKind::Exhaust,
+        crate::cards::PileKind::Play,
+    ]
+    .into_iter()
+    .flat_map(|pile| crate::cards::pile_iter(&state.player, pile))
+    .filter(|uid| {
+        let idx = (uid.get() as usize).saturating_sub(1);
+        state
+            .cards
+            .get(idx)
+            .is_some_and(|c| c.has_enchantment(EnchantmentId::Imbued))
+    })
+    .collect()
+}
+
+/// The Normal pass's enchantment listeners run to completion (the whole
+/// snapshot, nothing suspended). Production runs them from
+/// `combat_loop::finish_normal_pass`, after Gambling Chip, the side-turn start,
+/// Bombardment (Early) and Mayhem, which can suspend and resume; this entry is
+/// the plain unit-test and parity surface.
+///
+/// Python entry: `enchantments.py:126` — `after_player_turn_start(owner, combat)`.
+pub fn dispatch_after_player_turn_start(state: &mut CombatState) {
+    let captured = normal_pass_card_snapshot(state);
+    // Each captured card is played by reference (C# `Imbued.cs`'s
+    // `CardCmd.AutoPlay(base.Card)`), not swapped to the draw top; Imbued does
+    // not force-exhaust (bead q6bix F-F).
+    let _ = crate::combat_loop::auto_play_captured_cards(state, &captured);
 }
 
 // ---------------------------------------------------------------------------
