@@ -1373,6 +1373,10 @@ pub(crate) fn play_captured_card(
     uid: crate::CardUid,
     force_exhaust: bool,
 ) {
+    // CardCmd.AutoPlay admits (combat ending, dead owner) BEFORE anything moves.
+    if combat_is_ending(state) {
+        return;
+    }
     if !state.player.play.contains(&uid) {
         let from = [
             cards::PileKind::Hand,
@@ -1396,29 +1400,19 @@ pub(crate) fn play_captured_card(
 /// Await each captured card listener in order (the Normal AutoPrePlay pass's
 /// Imbued cards). `CardCmd.AutoPlay` returns at once once combat is over or
 /// ending, so later listeners then do nothing. A card whose `OnPlay` surfaces a
-/// select suspends the pass: its tail and the not-yet-played captured cards ride
-/// `pending_autoplay_resume` (as for Mayhem's collected batch) and the returned
-/// no-op `PendingAutoplay` tells the caller to park the cluster record.
+/// select suspends the pass: its tail rides `pending_autoplay_resume` and the
+/// not-yet-played listeners are RETURNED, for the caller to park on the cluster
+/// record (`PendingClusterResume::imbued`). They are then played after the
+/// surfaced card's tail by a fresh `finish_normal_pass` with inline resolution
+/// off, so their own selects surface as decisions instead of being answered.
 pub(crate) fn auto_play_captured_cards(
     state: &mut CombatState,
     cards_in_order: &[crate::CardUid],
-) -> Option<crate::PendingAutoplay> {
+) -> Option<smallvec::SmallVec<[crate::CardUid; 4]>> {
     for (n, uid) in cards_in_order.iter().copied().enumerate() {
-        if combat_is_ending(state) {
-            break;
-        }
         play_captured_card(state, uid, false);
-        if let Some(resume) = state.pending_autoplay_resume.as_mut() {
-            let rest: smallvec::SmallVec<[crate::CardUid; 8]> =
-                cards_in_order[n + 1..].iter().copied().collect();
-            if let Some(parent) = resume.parent_chain.last_mut() {
-                parent.remaining = rest;
-                parent.force_exhaust = false;
-            } else {
-                resume.remaining = rest;
-                resume.force_exhaust = false;
-            }
-            return Some(crate::PendingAutoplay::default());
+        if state.pending_autoplay_resume.is_some() {
+            return Some(cards_in_order[n + 1..].iter().copied().collect());
         }
     }
     None
@@ -1972,15 +1966,15 @@ fn finish_normal_pass(
         }
     }
     if !state.is_over {
-        if let Some(susp) = auto_play_captured_cards(state, &normal_cards) {
+        if let Some(rest) = auto_play_captured_cards(state, &normal_cards) {
             state.pending_cluster_resume = Some(crate::PendingClusterResume {
                 snapshot,
                 idx: 0,
-                autoplay: susp,
+                autoplay: crate::PendingAutoplay::default(),
                 side_turn_start_fired: true,
                 mayhem_phase: true,
                 relic_start: None,
-                imbued: smallvec::SmallVec::new(),
+                imbued: rest,
             });
             return StepResult::PendingChoice;
         }

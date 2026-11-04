@@ -222,19 +222,26 @@ fn imbued_awaits_a_nested_select_before_its_sibling() {
     );
     assert_eq!(
         state
-            .pending_autoplay_resume
+            .pending_cluster_resume
             .as_ref()
-            .map(|r| r.remaining.as_slice()),
-        Some([u[8]].as_slice())
+            .map(|r| r.imbued.as_slice()),
+        Some([u[8]].as_slice()),
+        "the unplayed listener rides the turn-start record"
     );
-    assert!(
-        state.pending_cluster_resume.is_some(),
-        "the turn start stays suspended"
+    // Answering the first select must NOT answer the sibling's: its own upgrade
+    // select surfaces as the next decision (Armaments awaits its selection).
+    let res = answer_choice(&mut state);
+    assert_eq!(
+        res,
+        StepResult::PendingChoice,
+        "the sibling's select surfaces"
     );
+    assert!(state.pending_choice.is_some());
+    let upgraded = |s: &CombatState| s.cards.iter().filter(|c| c.upgraded).count();
+    assert_eq!(upgraded(&state), 1, "only the first pick has landed");
     let _ = answer_choice(&mut state);
-    while state.pending_choice.is_some() {
-        let _ = answer_choice(&mut state);
-    }
+    assert!(state.pending_choice.is_none());
+    assert_eq!(upgraded(&state), 2);
     assert!(state.player.play.is_empty(), "{:?}", state.player.play);
     assert!(state.player.discard.contains(&u[7]) && state.player.discard.contains(&u[8]));
     assert!(state.pending_autoplay_resume.is_none() && state.pending_cluster_resume.is_none());
@@ -275,4 +282,37 @@ fn imbued_plays_after_mayhems_batch() {
         "Imbued played after Mayhem"
     );
     assert!(state.pending_cluster_resume.is_none());
+}
+
+#[test]
+fn imbued_sibling_is_not_moved_after_combat_ends() {
+    // Imbued Armaments, Defend, Defend with Juggernaut: the second card's block
+    // kills the enemy, so `CardCmd.AutoPlay` refuses the third before anything
+    // moves; it stays in the draw pile instead of being stranded in Play.
+    let mut deck = vec![(D, false); 5];
+    deck.push((CardId::Armaments, true));
+    deck.push((D, true));
+    deck.push((D, true));
+    let (mut state, u) = board(&deck, &[]);
+    for c in state.creatures.iter_mut().filter(|c| c.species.is_some()) {
+        c.current_hp = 10;
+        c.max_hp = 10;
+    }
+    let puid = state.player.creature_uid.expect("player creature mirror");
+    sts2_core::card_effects::apply_power_to_creature(&mut state, puid, PowerKind::Juggernaut, 5);
+    assert_eq!(start_player_turn(&mut state), StepResult::PendingChoice);
+    let _ = answer_choice(&mut state);
+    while state.pending_choice.is_some() {
+        let _ = answer_choice(&mut state);
+    }
+    assert!(state.is_over, "the second Imbued card killed the enemy");
+    assert!(
+        state.player.play.is_empty(),
+        "nothing stranded: {:?}",
+        state.player.play
+    );
+    assert!(
+        state.player.draw.contains(&u[7]),
+        "the refused card never left the draw pile"
+    );
 }

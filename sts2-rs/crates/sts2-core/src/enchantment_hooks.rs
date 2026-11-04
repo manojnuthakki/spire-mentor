@@ -330,6 +330,7 @@ pub fn dispatch_after_player_turn_start(state: &mut CombatState) {
     // Each captured card is played by reference (C# `Imbued.cs`'s
     // `CardCmd.AutoPlay(base.Card)`), not swapped to the draw top; Imbued does
     // not force-exhaust (bead q6bix F-F).
+    // A surfaced select leaves the rest to the production caller's resume.
     let _ = crate::combat_loop::auto_play_captured_cards(state, &captured);
 }
 
