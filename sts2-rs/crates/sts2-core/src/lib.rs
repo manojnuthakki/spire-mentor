@@ -2745,7 +2745,7 @@ pub struct PendingPotionHookResume {
 /// resolves after the pick. Stored on
 /// [`CombatState::pending_draw_resume`]; consumed by
 /// `apply(Action::ResolveChoice)`. Bead `sts2-rs-63mew`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PendingDrawResume {
     /// Cards still to draw once the pending choice resolves (the card
     /// whose reshuffle opened the choice has NOT been drawn yet).
@@ -2760,11 +2760,12 @@ pub struct PendingDrawResume {
     /// draw completes, the remaining turn-setup steps
     /// (`combat_loop::finish_player_turn_setup`) must run.
     pub resume_turn_setup: bool,
-    /// The card whose regular `AfterCardDrawn` riders wait on the early pass:
+    /// The cards (innermost draw first; nested draws append in the order their
+    /// calls return) whose regular `AfterCardDrawn` riders wait on the early pass:
     /// Hellraiser's auto-play (`AfterCardDrawnEarly`) suspended on a selection,
     /// and C# `Hook.AfterCardDrawn` awaits every early listener before the
     /// regular pass starts. Run first on resume (step39 review F2).
-    pub regular_riders: Option<CardUid>,
+    pub regular_riders: smallvec::SmallVec<[CardUid; 2]>,
 }
 
 /// In-flight state of a turn-start Mayhem `AutoPlayFromDrawPile` collect loop
@@ -7031,7 +7032,7 @@ impl CombatState {
                             remaining,
                             from_hand_draw,
                             resume_turn_setup: false,
-                            regular_riders: None,
+                            regular_riders: smallvec::SmallVec::new(),
                         });
                         return moved;
                     }
@@ -7092,14 +7093,16 @@ impl CombatState {
             // `apply(Action::ResolveChoice)` finishes the parked auto-play (card
             // → discard) BEFORE continuing this draw via `pending_draw_resume`.
             if let (Some(uid), Some(pdr)) = (deferred_riders, self.pending_draw_resume.as_mut()) {
-                pdr.regular_riders = Some(uid);
+                // A nested draw already parked its card; this enclosing draw's card
+                // runs after it (C#: inner call returns first).
+                pdr.regular_riders.push(uid);
             }
             if self.pending_choice.is_some() && self.pending_draw_resume.is_none() {
                 self.pending_draw_resume = Some(PendingDrawResume {
                     remaining,
                     from_hand_draw,
                     resume_turn_setup: false,
-                    regular_riders: deferred_riders,
+                    regular_riders: deferred_riders.into_iter().collect(),
                 });
                 return moved;
             }
@@ -7119,9 +7122,9 @@ impl CombatState {
     /// `pending_autoplay_resume` tail so both produce the identical draw
     /// continuation.
     pub(crate) fn resume_suspended_draw(&mut self, pdr: PendingDrawResume) -> Option<StepResult> {
-        if let Some(uid) = pdr.regular_riders {
-            // The early pass finished (its auto-play and selections); the card's
-            // regular riders run now, unless the combat is ending.
+        for &uid in &pdr.regular_riders {
+            // The early pass finished (its auto-play and selections); each card's
+            // regular riders run now, inner draw first, unless the combat is ending.
             let _ = self.invoke_card_drawn_impl(0, pdr.from_hand_draw, Some(uid), false);
         }
         let _ = self.draw_suspending(pdr.remaining, pdr.from_hand_draw);

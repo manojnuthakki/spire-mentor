@@ -293,6 +293,49 @@ mod tests {
         );
     }
 
+    /// Step39 review r2 F2: nested draws keep their own deferred riders. Pommel Strike
+    /// (auto-played, draws Seeker Strike, auto-played, selection) under Confused: no cost
+    /// read while the pick is open; one per card (Seeker, then Pommel) after it.
+    #[test]
+    fn nested_draws_each_keep_their_deferred_regular_riders() {
+        crate::cards::colorless::install_pool();
+        let (mut state, _enemy) = state_with_enemy_and_player_mirror(1000);
+        let player_cuid = state.player.creature_uid.expect("mirror set");
+        apply_power_to_creature(&mut state, player_cuid, PowerKind::Hellraiser, 1);
+        apply_power_to_creature(&mut state, player_cuid, PowerKind::Confused, 1);
+        let _a = push_strike_in_draw(&mut state);
+        let _b = push_strike_in_draw(&mut state);
+        let seeker = push_strike_in_draw(&mut state);
+        let pommel = push_strike_in_draw(&mut state);
+        for (uid, id, dmg) in [
+            (seeker, CardId::SeekerStrike, 9),
+            (pommel, CardId::PommelStrike, 9),
+        ] {
+            let c = &mut state.cards[uid.get() as usize - 1];
+            c.card_id = id;
+            c.base_damage = dmg;
+        }
+        let cost_before = state.run_rng.combat_energy_costs.counter();
+        state.draw_into_hand(1);
+        assert!(
+            state.pending_choice.is_some(),
+            "Seeker Strike's pick is open"
+        );
+        assert_eq!(state.run_rng.combat_energy_costs.counter() - cost_before, 0);
+        let mut sel: SmallVec<[u8; 4]> = SmallVec::new();
+        sel.push(0);
+        let _ = sts2_core::apply(
+            &mut state,
+            sts2_core::Action::ResolveChoice { selection: sel },
+        );
+        assert!(state.pending_choice.is_none());
+        assert_eq!(
+            state.run_rng.combat_energy_costs.counter() - cost_before,
+            2,
+            "both drawn cards' regular passes ran exactly once"
+        );
+    }
+
     /// Bead `sts2-rs-bsj93`, two-enemy targeting:
     /// With two alive enemies, the Hellraiser auto-play target is chosen by
     /// rolling `CombatTargets.NextItem` over the alive list (C#
