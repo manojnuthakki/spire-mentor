@@ -8425,10 +8425,9 @@ fn check_for_empty_hand(state: &mut CombatState, finished: crate::CardUid) {
     // starts: it is queued, not executing, so it does not hold the check off.
     let executing = state.player.play.iter().any(|&u| {
         u != finished
-            && state
-                .cards
-                .get(u.0.get() as usize - 1)
-                .is_none_or(|c| c.combat_var(crate::cards::VarKey::PendingBatchAutoPlay) == 0)
+            && state.cards.get(u.0.get() as usize - 1).map_or(true, |c| {
+                c.combat_var(crate::cards::VarKey::PendingBatchAutoPlay) == 0
+            })
     });
     if executing {
         return;
