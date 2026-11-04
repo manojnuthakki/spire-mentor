@@ -4493,12 +4493,26 @@ fn kusarigama_skill_and_power_do_not_increment() {
 
 #[test]
 #[serial_test::serial(global_registry)]
-fn kusarigama_before_side_turn_start_resets_counter() {
+fn kusarigama_after_turn_end_resets_counter() {
+    // F6 step35: C# `Kusarigama.AfterSideTurnEnd` zeroes the count at the player
+    // side's turn END (the old reset ran at the next turn's start).
     ensure_installed();
     let mut state = fresh_state_with_player(70, 70);
     give_player_relic(&mut state, RelicKind::Kusarigama);
     set_kusarigama_counter(&mut state, 2);
     let _ = dispatch_before_side_turn_start(&mut state, Side::Player);
+    assert_eq!(
+        kusarigama_counter(&state),
+        2,
+        "no reset at the turn's start"
+    );
+    let _ = dispatch_after_turn_end(&mut state, Side::Enemy);
+    assert_eq!(
+        kusarigama_counter(&state),
+        2,
+        "the enemy side's end is not the owner's"
+    );
+    let _ = dispatch_after_turn_end(&mut state, Side::Player);
     assert_eq!(kusarigama_counter(&state), 0);
 }
 
