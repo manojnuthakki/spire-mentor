@@ -2404,41 +2404,16 @@ fn listener_pumpkin_candle_rest_site_options(
     EffectResult::Resolved
 }
 
-/// `DingyRug::modify_card_reward_creation_options` — replace the
-/// implicit character pool with an explicit `custom_card_ids` slate
-/// that unions the character pool with the colorless pool, then
-/// flip `has_custom_card_pool = true` so the rarity-roll generator
-/// downstream consumes the explicit slate. Mirrors Python
-/// `shop_event.py::DingyRug.modify_card_reward_creation_options`
-/// (`sts2-rl-agent@01c094d:sts2_env/relics/shop_event.py:262-319`).
-///
-/// Python flow:
-/// 1. Bail when `options.allow_card_pool_modifications` is false
-///    (the per-relic skip handshake — Snecko-style `modify_card_pool`
-///    suppression flips this off for its own roll).
-/// 2. Collect character-pool ids via `card_reward_candidate_ids`
-///    (already obeys `card_type` / `generation_context` filters).
-/// 3. Collect colorless ids via `eligible_registered_cards(card_pool
-///    = COLORLESS)`. When `allow_rarity_modifications` is false,
-///    constrain the colorless ids to the rarities already present
-///    in the character-pool slate.
-/// 4. Return options with `has_custom_card_pool=True`,
-///    `character_ids=()`, `use_default_character_pool=False`, and
-///    `custom_card_ids = dedupe(character + colorless)`.
-///
-/// Rust port: same shape, but the filter args (`card_type`,
-/// `generation_context`, multiplayer) collapse at this pin —
-/// `card_type` defaults to `None` in `CardRewardGenerationOptions`
-/// at every documented call site, the spec-side per-card
-/// `generation_context` filter isn't ported yet, and multiplayer
-/// is out of scope per `CLAUDE.md`. So the walk is "every spec in
-/// the per-character + colorless slices". The
-/// `allow_rarity_modifications=false` branch IS honored: when the
-/// flag is clear, the colorless slate is filtered to the rarities
-/// seen in the character pool (matches Python's `allowed_rarities`
-/// guard for SilverCrucible-style chains).
-///
-/// Bead `sts2-rs-u5emw` (P9.3 / 70anj.4 body-fill).
+/// `DingyRug::modify_card_reward_creation_options` — append the colorless
+/// pool to a card reward's pools: sets `include_colorless` (candidates are
+/// the character pool(s) then colorless, per rolled rarity). No change when
+/// pool modifications are off, a custom pool is set, colorless is already in
+/// the pools, or the reward has no character part. F6 step37: this replaced
+/// an explicit character + colorless `custom_card_ids` slate, which hid the
+/// input's shape from later modifiers (Prismatic Gem) and ignored the
+/// MultiplayerOnly filter the structured path applies. The previous
+/// rarity-gate on colorless (`allow_rarity_modifications == false`) is not
+/// modelled: C# has no such gate in this hook.
 fn listener_dingy_rug(rs: &mut RunState, opts: &mut CardRewardGenerationOptions) -> EffectResult {
     if !rs.owns_active_relic(RelicId::DingyRug) {
         return EffectResult::NotImplemented;
@@ -2446,38 +2421,19 @@ fn listener_dingy_rug(rs: &mut RunState, opts: &mut CardRewardGenerationOptions)
     if !opts.allow_card_pool_modifications {
         return EffectResult::NotImplemented;
     }
-
-    use std::collections::HashSet;
-
-    use crate::cards::spec_index::{specs_for_character, COLORLESS_SPECS};
-
-    let mut seen: HashSet<sts2_core::cards::CardId> = HashSet::new();
-    let mut combined: Vec<sts2_core::cards::CardId> = Vec::new();
-    let mut character_rarities: HashSet<crate::cards::CardRarity> = HashSet::new();
-
-    for &factory in specs_for_character(rs.character_id) {
-        let spec = factory();
-        if seen.insert(spec.id) {
-            combined.push(spec.id);
-            character_rarities.insert(spec.rarity);
-        }
+    // C# `DingyRug.ModifyCardRewardCreationOptions`: no change when the pools
+    // already hold Colorless or a custom pool is set. A pool with no character
+    // part is a colorless-only reward. Otherwise Colorless is appended to the
+    // pools: the structured `include_colorless` flag (F6 step37; it was an
+    // explicit slate that hid the input's shape from later modifiers), so the
+    // rarity roll and the pick read the character pool(s) and then colorless.
+    if opts.has_custom_card_pool
+        || opts.include_colorless
+        || (opts.character_ids.is_empty() && !opts.use_default_character_pool)
+    {
+        return EffectResult::NotImplemented;
     }
-
-    let rarity_gated = !opts.allow_rarity_modifications;
-    for &factory in COLORLESS_SPECS {
-        let spec = factory();
-        if rarity_gated && !character_rarities.contains(&spec.rarity) {
-            continue;
-        }
-        if seen.insert(spec.id) {
-            combined.push(spec.id);
-        }
-    }
-
-    opts.has_custom_card_pool = true;
-    opts.custom_card_ids = combined;
-    opts.character_ids.clear();
-    opts.use_default_character_pool = false;
+    opts.include_colorless = true;
     EffectResult::Resolved
 }
 
@@ -2488,15 +2444,8 @@ fn listener_dingy_rug(rs: &mut RunState, opts: &mut CardRewardGenerationOptions)
 /// options.CardPools)`: every unlocked character's pool in `ModelDb.
 /// AllCharacters` order (Ironclad, Silent, Regent, Necrobinder, Defect;
 /// Headless runs `UnlockState.all`), then any shared pool the options
-/// already had (Dingy Rug's colorless). The rarity roll and the
-/// `NextItem` pick then read that concatenated, ordered pool.
-///
-/// Dingy Rug (registered first: alphabetical relic order) may already have
-/// turned the pool into its explicit character + colorless slate; that
-/// slate is rebuilt here with the wider character part in front of the
-/// colorless cards it holds, which is the game's union whichever relic
-/// ran first. Any other custom slate (`has_custom_card_pool` without Dingy
-/// Rug) is left alone, as the game leaves a `CustomCardPool`.
+/// already had (`include_colorless`, Dingy Rug's). Composes with Dingy Rug
+/// through the structured fields, in either relic order.
 fn listener_prismatic_gem(
     rs: &mut RunState,
     opts: &mut CardRewardGenerationOptions,
@@ -2504,54 +2453,20 @@ fn listener_prismatic_gem(
     if !rs.owns_active_relic(RelicId::PrismaticGem) {
         return EffectResult::NotImplemented;
     }
-    if !opts.allow_card_pool_modifications {
+    if !opts.allow_card_pool_modifications
+        || opts.has_custom_card_pool
+        || (opts.character_ids.is_empty() && !opts.use_default_character_pool)
+    {
         return EffectResult::NotImplemented;
     }
     use sts2_core::potions::CharacterId;
-    let all = [
+    opts.character_ids = vec![
         CharacterId::Ironclad,
         CharacterId::Silent,
         CharacterId::Regent,
         CharacterId::Necrobinder,
         CharacterId::Defect,
     ];
-    if opts.has_custom_card_pool {
-        if !rs.owns_active_relic(RelicId::DingyRug) {
-            return EffectResult::NotImplemented;
-        }
-        use std::collections::HashSet;
-
-        use crate::cards::spec_index::{specs_for_character, COLORLESS_SPECS};
-        let colorless: HashSet<sts2_core::cards::CardId> =
-            COLORLESS_SPECS.iter().map(|f| f().id).collect();
-        let mut seen: HashSet<sts2_core::cards::CardId> = HashSet::new();
-        let mut combined: Vec<sts2_core::cards::CardId> = Vec::new();
-        for ch in all {
-            for &factory in specs_for_character(ch) {
-                let id = factory().id;
-                if seen.insert(id) {
-                    combined.push(id);
-                }
-            }
-        }
-        // C# bails when every pool is colorless: a slate with no character
-        // card in it is a colorless-only reward, not Dingy Rug's union.
-        if opts.custom_card_ids.iter().all(|id| colorless.contains(id)) {
-            return EffectResult::NotImplemented;
-        }
-        for id in opts.custom_card_ids.clone() {
-            if colorless.contains(&id) && seen.insert(id) {
-                combined.push(id);
-            }
-        }
-        opts.custom_card_ids = combined;
-        return EffectResult::Resolved;
-    }
-    // A pool with no character part (colorless only) is left alone.
-    if opts.character_ids.is_empty() && !opts.use_default_character_pool {
-        return EffectResult::NotImplemented;
-    }
-    opts.character_ids = all.to_vec();
     opts.use_default_character_pool = false;
     EffectResult::Resolved
 }
@@ -4657,11 +4572,6 @@ fn listener_pandoras_box(rs: &mut RunState) -> EffectResult {
         return EffectResult::NotImplemented;
     }
     let character_id = rs.character_id;
-    let Some([strike_id, defend_id]) =
-        crate::cards::spec_index::basic_strike_defend_cards(character_id)
-    else {
-        return EffectResult::NotImplemented;
-    };
     // C# `PandorasBox.AfterObtained`: every deck card that
     // `IsBasicStrikeOrDefend && IsRemovable`, in deck order, each becomes
     // `CardFactory.CreateRandomCardForTransform(card, false, Rng.Niche)`
@@ -4669,14 +4579,28 @@ fn listener_pandoras_box(rs: &mut RunState) -> EffectResult {
     // `CardCmd.Transform` reads the stream once per transformation, in the
     // input order). F6 step37: the listener drew a Common off the rewards
     // stream per card.
+    // `IsBasicStrikeOrDefend` is the card's own identity, not the run
+    // character's: every character's basic pair counts (a Silent Strike
+    // in an Ironclad deck too), and the replacement pool follows the
+    // original card (`roll_transform_replacement_basic_niche`).
+    use sts2_core::potions::CharacterId as Ch;
+    let basics: Vec<sts2_core::cards::CardId> = [
+        Ch::Ironclad,
+        Ch::Silent,
+        Ch::Defect,
+        Ch::Regent,
+        Ch::Necrobinder,
+    ]
+    .into_iter()
+    .filter_map(crate::cards::spec_index::basic_strike_defend_cards)
+    .flatten()
+    .collect();
     let removable = crate::cards::spec_index::card_is_removable_instance;
     let indices: Vec<usize> = rs
         .master_deck
         .iter()
         .enumerate()
-        .filter(|(_, card)| {
-            (card.card_id == strike_id || card.card_id == defend_id) && removable(card)
-        })
+        .filter(|(_, card)| basics.contains(&card.card_id) && removable(card))
         .map(|(idx, _)| idx)
         .collect();
     if indices.is_empty() {
@@ -6738,55 +6662,62 @@ mod tests {
 
     // ── DingyRug — bead sts2-rs-u5emw ─────────────────────────────
 
-    /// DingyRug's `modify_card_reward_creation_options` listener
-    /// must flip `has_custom_card_pool = true`, clear
-    /// `character_ids`, clear `use_default_character_pool`, and
-    /// populate `custom_card_ids` with the union of the active
-    /// character's pool + the colorless pool. Mirrors Python
-    /// `DingyRug.modify_card_reward_creation_options`'s return
-    /// shape.
+    /// DingyRug appends colorless through the structured `include_colorless`
+    /// flag and leaves the character part and the custom-pool fields alone
+    /// (F6 step37).
     #[test]
-    fn listener_dingy_rug_populates_custom_pool_with_colorless_union() {
+    fn listener_dingy_rug_sets_include_colorless_without_a_custom_slate() {
         use sts2_core::runstate::{CardRewardGenerationOptions, RunState};
         crate::relics::dispatch::ensure_installed();
         let mut rs = RunState::new();
-        // Ironclad pool is the canonical non-empty per-character
-        // slice at the current pin.
         rs.character_id = sts2_core::potions::CharacterId::Ironclad;
         rs.relics.push(RelicId::DingyRug);
         let mut opts = CardRewardGenerationOptions::default();
-
         let res = sts2_core::run_effects::dispatch_modify_card_reward_creation_options(
             &mut rs, &mut opts,
         );
         assert_eq!(res, sts2_core::card_effects::EffectResult::Resolved);
+        assert!(opts.include_colorless);
+        assert!(opts.use_default_character_pool);
+        assert!(!opts.has_custom_card_pool);
+        assert!(opts.custom_card_ids.is_empty());
+    }
 
-        assert!(opts.has_custom_card_pool, "must flip has_custom_card_pool");
-        assert!(
-            !opts.use_default_character_pool,
-            "must clear use_default_character_pool",
+    /// Restricted inputs survive DingyRug: a custom slate and a colorless-only
+    /// reward (no character part) are unchanged.
+    #[test]
+    fn listener_dingy_rug_preserves_custom_and_colorless_only_inputs() {
+        use sts2_core::runstate::{CardRewardGenerationOptions, RunState};
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.character_id = sts2_core::potions::CharacterId::Ironclad;
+        rs.relics.push(RelicId::DingyRug);
+        let mut custom = CardRewardGenerationOptions {
+            has_custom_card_pool: true,
+            custom_card_ids: vec![sts2_core::cards::CardId::Anger],
+            ..CardRewardGenerationOptions::default()
+        };
+        let _ = sts2_core::run_effects::dispatch_modify_card_reward_creation_options(
+            &mut rs,
+            &mut custom,
         );
-        assert!(opts.character_ids.is_empty(), "must clear character_ids");
-        assert!(
-            !opts.custom_card_ids.is_empty(),
-            "must populate custom_card_ids",
-        );
-        // No duplicates in the final slate.
-        let unique: std::collections::HashSet<_> = opts.custom_card_ids.iter().copied().collect();
+        assert!(!custom.include_colorless);
         assert_eq!(
-            unique.len(),
-            opts.custom_card_ids.len(),
-            "custom_card_ids must be deduped",
+            custom.custom_card_ids,
+            vec![sts2_core::cards::CardId::Anger]
         );
-        // At least one colorless card is present (the colorless slice
-        // is non-empty at the pin — 25+ entries). Pick a stable
-        // canonical colorless card to assert on so the test doesn't
-        // brittle-pin on the full slice length.
-        assert!(
-            opts.custom_card_ids
-                .contains(&sts2_core::cards::CardId::Discovery),
-            "Discovery (colorless) must be unioned into the slate",
+        let mut colorless_only = CardRewardGenerationOptions {
+            include_colorless: true,
+            use_default_character_pool: false,
+            ..CardRewardGenerationOptions::default()
+        };
+        let _ = sts2_core::run_effects::dispatch_modify_card_reward_creation_options(
+            &mut rs,
+            &mut colorless_only,
         );
+        assert!(colorless_only.character_ids.is_empty());
+        assert!(!colorless_only.use_default_character_pool);
+        assert!(!colorless_only.has_custom_card_pool);
     }
 
     /// DingyRug's listener is a no-op when the relic isn't owned —
@@ -12790,57 +12721,6 @@ mod tests {
             state.player.energy,
             before + i8::try_from(SEAL_OF_GOLD_ENERGY).unwrap(),
             "gains energy at the exact boundary (gold == COST)"
-        );
-    }
-
-    /// `DingyRug` rarity-gating branch (`allow_rarity_modifications =
-    /// false`): a colorless card whose rarity is NOT among the active
-    /// character's rarities must be EXCLUDED. Pins the exact gated
-    /// slate, killing `&& → ||` and both `delete !` on the
-    /// `rarity_gated && !character_rarities.contains(..)` guard.
-    #[test]
-    fn dingy_rug_rarity_gating_keeps_in_rarity_colorless() {
-        use sts2_core::runstate::{CardRewardGenerationOptions, RunState};
-        crate::relics::dispatch::ensure_installed();
-
-        // With rarity modifications DISABLED the gate
-        // `rarity_gated && !character_rarities.contains(spec.rarity)`
-        // skips ONLY colorless cards whose rarity is off the character's
-        // rarity set. Every colorless rarity is covered by the Ironclad
-        // pool, so NO colorless card is dropped. This pins that the
-        // logical structure stays `&&` over the negated membership:
-        //  - `&& → ||` would skip ALL colorless (rarity_gated == true).
-        //  - dropping the `!` on `contains` would skip ALL colorless too.
-        let mut rs = RunState::new();
-        rs.character_id = sts2_core::potions::CharacterId::Ironclad;
-        rs.relics.push(RelicId::DingyRug);
-        let mut opts = CardRewardGenerationOptions {
-            allow_rarity_modifications: false,
-            ..CardRewardGenerationOptions::default()
-        };
-        let _ = sts2_core::run_effects::dispatch_modify_card_reward_creation_options(
-            &mut rs, &mut opts,
-        );
-        assert!(
-            opts.custom_card_ids
-                .contains(&sts2_core::cards::CardId::Discovery),
-            "rarity-gating must keep in-rarity colorless cards (Discovery)"
-        );
-        // The slate is strictly larger than the character-only pool:
-        // colorless cards survived the rarity gate (proves it did NOT
-        // skip the whole colorless tail).
-        let char_only = crate::cards::spec_index::specs_for_character(
-            sts2_core::potions::CharacterId::Ironclad,
-        )
-        .iter()
-        .map(|f| f().id)
-        .collect::<std::collections::HashSet<_>>()
-        .len();
-        assert!(
-            opts.custom_card_ids.len() > char_only,
-            "in-rarity colorless cards survive rarity-gating ({} > {})",
-            opts.custom_card_ids.len(),
-            char_only,
         );
     }
 

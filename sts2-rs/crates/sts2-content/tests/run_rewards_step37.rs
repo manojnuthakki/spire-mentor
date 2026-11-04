@@ -105,30 +105,61 @@ fn prismatic_gem_respects_the_no_modification_flag_and_foreign_custom_pools() {
 }
 
 #[test]
-fn prismatic_gem_with_dingy_rug_unions_characters_then_colorless() {
+fn prismatic_gem_with_dingy_rug_composes_through_the_structured_fields() {
+    // Either relic order (the dispatcher walks listeners in relic-id order,
+    // the fold is order-independent): characters, then colorless.
     let mut rs = run(&[RelicId::DingyRug, RelicId::PrismaticGem]);
     let mut opts = CardRewardGenerationOptions::default();
     let res = dispatch_modify_card_reward_creation_options(&mut rs, &mut opts);
     assert_eq!(res, EffectResult::Resolved);
-    assert!(opts.has_custom_card_pool);
-    let ids = &opts.custom_card_ids;
+    assert!(!opts.has_custom_card_pool);
+    assert!(opts.include_colorless);
+    assert_eq!(opts.character_ids.len(), 5);
     let silent = specs_for_character(CharacterId::Silent)[0]().id;
-    assert!(ids.contains(&silent), "another character's card is in");
-    assert!(ids.contains(&CardId::Discovery), "colorless is in");
-    let first_colorless = ids
-        .iter()
-        .position(|id| COLORLESS_SPECS.iter().any(|f| f().id == *id))
-        .unwrap();
-    let last_character = ids
-        .iter()
-        .rposition(|id| !COLORLESS_SPECS.iter().any(|f| f().id == *id))
-        .unwrap();
+    let colorless: Vec<CardId> = COLORLESS_SPECS.iter().map(|f| f().id).collect();
+    let mut ids = Vec::new();
+    for _ in 0..80 {
+        ids.extend(
+            roll_card_reward_cards(
+                &mut rs,
+                CardRewardGenerationOptions::default(),
+                CharacterId::Ironclad,
+            )
+            .into_iter()
+            .map(|c| c.card_id),
+        );
+    }
     assert!(
-        last_character < first_colorless,
-        "characters, then colorless"
+        ids.iter().any(|id| colorless.contains(id)),
+        "colorless offered"
     );
-    let unique: std::collections::HashSet<_> = ids.iter().copied().collect();
-    assert_eq!(unique.len(), ids.len());
+    assert!(
+        ids.iter().any(|id| specs_for_character(CharacterId::Silent)
+            .iter()
+            .any(|f| f().id == *id)),
+        "{silent:?}-pool card offered"
+    );
+}
+
+#[test]
+fn both_relics_keep_a_custom_slate_and_a_colorless_only_pool() {
+    let mut rs = run(&[RelicId::DingyRug, RelicId::PrismaticGem]);
+    let mut custom = CardRewardGenerationOptions {
+        has_custom_card_pool: true,
+        custom_card_ids: vec![CardId::Anger],
+        ..Default::default()
+    };
+    dispatch_modify_card_reward_creation_options(&mut rs, &mut custom);
+    assert_eq!(custom.custom_card_ids, vec![CardId::Anger]);
+    assert!(custom.character_ids.is_empty() && !custom.include_colorless);
+    let mut colorless = CardRewardGenerationOptions {
+        include_colorless: true,
+        use_default_character_pool: false,
+        ..Default::default()
+    };
+    dispatch_modify_card_reward_creation_options(&mut rs, &mut colorless);
+    assert!(colorless.character_ids.is_empty());
+    assert!(!colorless.use_default_character_pool && !colorless.has_custom_card_pool);
 }
 
 fn deck(rs: &mut RunState, strikes: usize, defends: usize) {
@@ -200,4 +231,71 @@ fn negative_control_pandoras_box_leaves_a_deck_without_basics_alone() {
     dispatch_after_obtained(&mut rs);
     assert_eq!(rs.rng.niche.counter(), niche);
     assert_eq!(rs.master_deck.len(), 1);
+}
+
+fn push(rs: &mut RunState, id: CardId) {
+    rs.master_deck.push(card_pod_from_id(id, false).unwrap());
+}
+
+#[test]
+fn pandoras_box_transforms_every_characters_basics_with_the_originals_pool() {
+    let mut rs = run(&[RelicId::PandorasBox]);
+    rs.master_deck.clear();
+    for id in [
+        CardId::StrikeIronclad,
+        CardId::DefendIronclad,
+        CardId::StrikeSilent,
+        CardId::DefendSilent,
+        CardId::Bash,
+    ] {
+        push(&mut rs, id);
+    }
+    let niche = rs.rng.niche.counter();
+    rs.last_obtained_relic = Some(RelicId::PandorasBox);
+    dispatch_after_obtained(&mut rs);
+    assert_eq!(
+        rs.rng.niche.counter(),
+        niche + 4,
+        "one read per basic, foreign too"
+    );
+    assert_eq!(rs.master_deck.len(), 5);
+    assert_eq!(rs.master_deck[0].card_id, CardId::Bash);
+    for c in &rs.master_deck[1..] {
+        assert!(![
+            CardId::StrikeIronclad,
+            CardId::DefendIronclad,
+            CardId::StrikeSilent,
+            CardId::DefendSilent
+        ]
+        .contains(&c.card_id));
+    }
+}
+
+#[test]
+fn pandoras_box_leaves_an_unremovable_strike_and_reads_only_for_the_rest() {
+    use sts2_content::enchantments::apply_static_enchantment;
+    let mut rs = run(&[RelicId::PandorasBox]);
+    rs.master_deck.clear();
+    push(&mut rs, CardId::StrikeIronclad);
+    push(&mut rs, CardId::DefendIronclad);
+    apply_static_enchantment(
+        &mut rs.master_deck[0],
+        sts2_core::cards::EnchantmentId::TezcatarasEmber,
+        1,
+    );
+    let niche = rs.rng.niche.counter();
+    rs.last_obtained_relic = Some(RelicId::PandorasBox);
+    dispatch_after_obtained(&mut rs);
+    assert_eq!(
+        rs.rng.niche.counter(),
+        niche + 1,
+        "only the Defend consumes a read"
+    );
+    assert_eq!(rs.master_deck.len(), 2);
+    assert_eq!(
+        rs.master_deck[0].card_id,
+        CardId::StrikeIronclad,
+        "Ember'd Strike kept"
+    );
+    assert_ne!(rs.master_deck[1].card_id, CardId::DefendIronclad);
 }
