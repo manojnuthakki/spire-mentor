@@ -105,6 +105,39 @@ fn banshees_cry_costs_two_less_per_ethereal_card_played() {
     assert_eq!(cost(&s, cry_discard), 7, "any combat pile, the discard too");
 }
 
+#[test]
+fn banshees_cry_counts_a_granted_ethereal_card() {
+    let mut s = board(3);
+    let cry = add(&mut s, CardId::BansheesCry);
+    s.player.hand.push(cry);
+    let strike = add(&mut s, CardId::StrikeIronclad);
+    s.cards[strike.get() as usize - 1].set_combat_var(VarKey::EtherealThisCombat, 1);
+    s.player.hand.push(strike);
+    let i = hand_index(&s, strike);
+    let _ = play_card(&mut s, i, Some(0));
+    assert_eq!(s.cards[cry.get() as usize - 1].cost, 7);
+}
+
+#[test]
+fn banshees_cry_discount_survives_a_temporary_cost_expiring() {
+    // Enlightenment-style cap: cost 1 until played / turn start (bank -8).
+    let mut s = board(3);
+    let cry = add(&mut s, CardId::BansheesCry);
+    s.player.hand.push(cry);
+    {
+        let c = &mut s.cards[cry.get() as usize - 1];
+        c.cost = 1;
+        c.set_combat_var(VarKey::SneckoCostDeltaThisTurn, -8);
+    }
+    let defy = add(&mut s, CardId::Defy);
+    s.player.hand.push(defy);
+    let i = hand_index(&s, defy);
+    let _ = play_card(&mut s, i, Some(0));
+    assert_eq!(s.cards[cry.get() as usize - 1].cost, 0, "clamped at 0 now");
+    s.restore_snecko_costs_for_turn_start();
+    assert_eq!(s.cards[cry.get() as usize - 1].cost, 7, "9 - 2 once it expires");
+}
+
 // ----------------------------------------------------------- dark embrace --
 
 fn dark_embrace_end_turn(no_draw_first: bool) -> bool {

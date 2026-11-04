@@ -1313,6 +1313,18 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
     }
     state.player.card_plays_started_this_turn =
         state.player.card_plays_started_this_turn.saturating_add(1);
+    // The dupe's play finishes like any other: the combat-long Ethereal tally
+    // and Banshee's Cry's discount (F6 step36), for an effectively Ethereal dupe.
+    let dupe_ethereal = |state: &sts2_core::CombatState| {
+        !skip_dispatch
+            && state
+                .cards
+                .get(new_uid.0.get() as usize - 1)
+                .is_some_and(|c| sts2_core::combat_loop::card_is_ethereal_at_play(state, c))
+    };
+    if dupe_ethereal(state) {
+        state.note_ethereal_card_played();
+    }
     // C# `Hook.AfterCardPlayed` ends with `AfterCardPlayedLate` (Hook.cs:431)
     // for the dupe's auto-play too; fired after the tallies so MakeItSo sees
     // this play counted, and once per replay below.
@@ -1380,6 +1392,9 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
             }
             state.player.card_plays_started_this_turn =
                 state.player.card_plays_started_this_turn.saturating_add(1);
+            if dupe_ethereal(state) {
+                state.note_ethereal_card_played();
+            }
             sts2_core::card_effects::fire_late_effects(state, &hook_played_ctx);
         }
     }
@@ -3586,6 +3601,26 @@ mod tests {
             before + 1,
             "HistoryCourse dupe counts as one finished card play"
         );
+    }
+
+    /// F6 step36: a HistoryCourse dupe of an Ethereal card finishes like any
+    /// play, so Banshee's Cry (9) drops by 2 once for the dupe.
+    #[test]
+    fn listener_history_course_ethereal_dupe_discounts_banshees_cry() {
+        use sts2_core::cards::CardId;
+        crate::relics::dispatch::ensure_installed();
+        crate::cards::dispatch::install_default_registry();
+        let mut state = CombatState::default();
+        let _enemy = history_course_setup(&mut state, 2);
+        let mut cry = crate::cards::spec_index::card_pod_from_id(CardId::BansheesCry, false)
+            .unwrap();
+        cry.uid = sts2_core::CardUid::new(state.cards.len() as u32 + 1).unwrap();
+        state.cards.push(cry);
+        state.player.hand.push(cry.uid);
+        state.combat_log.prev_round_last_attack_skill_played =
+            Some((CardId::Defy, false, None));
+        let _ = sts2_core::relic_effects::dispatch_before_play_phase_start(&mut state);
+        assert_eq!(state.cards[cry.uid.get() as usize - 1].cost, 7);
     }
 
     /// Bead `sts2-rs-uh2mt`: a HistoryCourse dupe of an X-cost card (Whirlwind)

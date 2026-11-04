@@ -2804,11 +2804,10 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
     // Ordering: matches Python — the ethereal sweep runs BEFORE the
     // turn-end-in-hand effect loop (Step 3 below). Python excludes cards
     // that ALSO have a turn-end-in-hand effect from this initial sweep
-    // (`id(card) not in turn_end_ids` at combat.py:994); at this pin
-    // none of the four canonical ETHEREAL cards (Dazed, Void,
-    // AscendersBane, Clumsy) carry a turn-end-in-hand effect, so the
-    // exclusion is structurally empty here. Add the cross-check at the
-    // same time as registering an ETHEREAL+turn-end-in-hand card.
+    // (`id(card) not in turn_end_ids` at combat.py:994): an effectively
+    // Ethereal turn-end card (Shame under Hex, or a granted Ethereal) is
+    // left to Step 3, which runs its effect and only then exhausts it
+    // (`OnTurnEndInHandWrapper`, F6 step36).
     //
     // Installed DLL HexPower.TryModifyKeywordsInCombat: only current Hexed
     // cards gain Ethereal. Native/independent Ethereal remains independent;
@@ -2969,10 +2968,11 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
         // a turn-end-in-hand curse (Infection/Burn/Decay/…) sat in hand:
         // fuzz seed 1121 (PhrogParasite INFECT → 2 Infection in hand +
         // TINGSHA) dealt 6 phantom damage (monsters[0].hp cs=27 rs=21,
-        // combat_targets cursor cs=0 rs=2). No turn-end-in-hand curse is
-        // ethereal at this pin, so the C# `if Ethereal { Exhaust }` branch
-        // is structurally dead — the raw discard add is the only reachable
-        // path. Bead `sts2-rs-p9sda` follow-up.
+        // combat_targets cursor cs=0 rs=2). A turn-end-in-hand
+        // card that is effectively Ethereal (Hexed Shame, a granted Ethereal)
+        // takes the C# `if Ethereal { Exhaust }` branch below, after its
+        // effect; the others take the raw discard add. Bead `sts2-rs-p9sda`
+        // follow-up; F6 step36.
         if state.player.play.contains(&uid) {
             // `OnTurnEndInHandWrapper`: after the effect an Ethereal card is
             // exhausted (`CardCmd.Exhaust(causedByEthereal: true)`), others go
@@ -7703,7 +7703,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // Combat-long ETHEREAL-played tally (feeds Necrobinder PullFromBelow's
     // CalculatedVar hit count). Bumped here, after the body resolves, so a
     // card never counts itself (C# records the `WasEthereal` entry post-OnPlay).
-    if crate::card_effects::card_ethereal_inst(&card) {
+    if card_is_ethereal_at_play(state, &card) {
         state.note_ethereal_card_played();
     }
 
@@ -7831,7 +7831,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
             state.player.cards_played_this_turn[idx] =
                 state.player.cards_played_this_turn[idx].saturating_add(1);
         }
-        if crate::card_effects::card_ethereal_inst(&card) {
+        if card_is_ethereal_at_play(state, &card) {
             state.note_ethereal_card_played();
         }
         if card.card_type == crate::cards::CardType::Skill {
@@ -7961,7 +7961,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
             stamp_last_attack_skill_played(state, &card, card_uid);
             // Combat-long ETHEREAL tally also counts each Echo replay (mirrors
             // the per-turn tally above).
-            if crate::card_effects::card_ethereal_inst(&card) {
+            if card_is_ethereal_at_play(state, &card) {
                 state.note_ethereal_card_played();
             }
             bump_brilliant_scarf(state);
@@ -9046,7 +9046,7 @@ fn auto_play_tally_finished(
     if state
         .cards
         .get(card_idx)
-        .is_some_and(crate::card_effects::card_ethereal_inst)
+        .is_some_and(|c| card_is_ethereal_at_play(state, c))
     {
         state.note_ethereal_card_played();
     }

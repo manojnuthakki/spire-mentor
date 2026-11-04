@@ -5462,7 +5462,7 @@ impl CombatState {
         for uid in in_piles {
             if let Some(c) = self.cards.iter_mut().find(|c| c.uid == uid) {
                 if c.card_id == crate::cards::CardId::BansheesCry {
-                    c.cost = c.cost.saturating_sub(2).max(0);
+                    add_this_combat_cost(c, -2);
                 }
             }
         }
@@ -5530,7 +5530,7 @@ impl CombatState {
             if let Some(c) = self.cards.iter_mut().find(|c| c.uid == uid) {
                 if c.card_id == crate::cards::CardId::Melancholy {
                     // C# `EnergyCost.AddThisCombat(-1)`, clamped at 0.
-                    c.cost = c.cost.saturating_sub(1).max(0);
+                    add_this_combat_cost(c, -1);
                 }
             }
         }
@@ -8794,6 +8794,25 @@ impl CombatState {
 /// sends part of the trio, precisely because this reads the var back through a
 /// default-0 accessor and could not otherwise tell an absent `stable_cost` from
 /// a real zero.
+/// C# `EnergyCost.AddThisCombat(delta)` on a card whose displayed cost may sit
+/// under a temporary modifier: the displayed cost is clamped at 0, but the
+/// permanent change is not lost when the temporary modifier expires. The part
+/// of a negative `delta` the clamp swallows is carried in the Snecko/absolute
+/// bank (Snecko Oil, Enlightenment: restore is `cost - bank`), so the restored
+/// cost is `before - |delta|`. (The foreign wire banks keep no such carry.)
+/// F6 step36 (Banshee's Cry, Melancholy).
+pub fn add_this_combat_cost(c: &mut crate::cards::Card, delta: i32) {
+    let want = i32::from(c.cost) + delta;
+    let lost = if want < 0 { -want } else { 0 };
+    c.cost = want.clamp(0, i32::from(i8::MAX)) as i8;
+    if lost > 0 {
+        let bank = c.combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn);
+        if bank != 0 {
+            c.set_combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn, bank + lost);
+        }
+    }
+}
+
 fn rebank_wire_cost_after_edge(c: &mut crate::cards::Card, other: crate::cards::VarKey) {
     if c.combat_var(other) == 0 {
         return;
