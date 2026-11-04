@@ -6774,6 +6774,15 @@ impl CombatState {
     /// `from_hand_draw` flag (C# `CardPileCmd.Draw(.., fromHandDraw)`). The
     /// turn-start hand draw passes `true`; card-effect draws pass `false`.
     fn draw_into_hand_with_flag(&mut self, n: i32, from_hand_draw: bool) -> usize {
+        // C# `CardPileCmd.Draw` (`CardPileCmd.cs:726`) returns an empty draw first
+        // when `CombatManager.IsOverOrEnding`: a turn-start hand draw issued
+        // AFTER a `BeforeHandDraw` auto-play (Bombardment / HowlFromBeyond) downs
+        // the last enemy draws nothing, runs no `AfterCardDrawn` rider and
+        // performs no `ShuffleIfNecessary`. (This used to cap the batch to the
+        // cards in the draw pile: no reshuffle, but the cards were still drawn.)
+        if crate::combat_loop::combat_is_ending(self) {
+            return 0;
+        }
         // Bead `sts2-rs-63mew`: when a power-side `after_shuffle` choice
         // listener (Stratagem) is active, route through the C#-faithful
         // per-card loop that fires the shuffle hooks BEFORE each card is
@@ -6783,26 +6792,6 @@ impl CombatState {
         if self.per_card_draw_loop_required() {
             return self.draw_suspending(n, from_hand_draw);
         }
-        // C# `CardPileCmd.Draw` / `CardPileCmd.Shuffle` (CardPileCmd.cs:749,806)
-        // early-return when `CombatManager.IsOverOrEnding`, so a turn-start hand
-        // draw issued AFTER a `BeforeHandDraw` auto-play (Bombardment /
-        // HowlFromBeyond) downs the last enemy performs NO `ShuffleIfNecessary`.
-        // Cap the batch draw to the cards physically present when combat is
-        // ending so the natural draw never reshuffles an exhausted pile — that
-        // phantom reshuffle over-reads the run-level `shuffle` stream by `n-1`
-        // and desyncs the NEXT combat's opening shuffle (whole-run parity: Regent
-        // RP5 A5 combat-1 Bombardment kill → +4 shuffle reads → combat-2
-        // opening-hand divergence → constant enemies_hp skew). The master deck is
-        // tracked separately from the combat piles, so the capped draw cannot
-        // change the next combat's pre-shuffle order. Mirrors the card-effect
-        // draw gate (`cards::draw_via_state`) + the `draw_suspending`
-        // skip-reshuffle-when-ending idiom (PARITY86); reads no RNG either way.
-        // While combat is LIVE `combat_is_ending` is false → normal reshuffle.
-        let n = if crate::combat_loop::combat_is_ending(self) {
-            n.min(i32::try_from(self.player.draw.len()).unwrap_or(i32::MAX))
-        } else {
-            n
-        };
         let hand_len_before = self.player.hand.len();
         let (moved, shuffles) = crate::cards::draw_signaling(
             &mut self.player,
@@ -6898,6 +6887,10 @@ impl CombatState {
     /// stream). Same gate as [`cards::draw_via_state`]; this variant keeps
     /// `draw_into_hand`'s full rider/shuffle-signaling behavior.
     pub fn draw_into_hand_card_effect(&mut self, n: i32) -> usize {
+        // C# checks `IsOverOrEnding` before `ShouldDraw` (`CardPileCmd.cs:726`).
+        if crate::combat_loop::combat_is_ending(self) {
+            return 0;
+        }
         if crate::cards::card_effect_draw_blocked(self) {
             // C# `NoDrawPower.cs:29` flashes inside `ShouldDraw` on the path
             // that returns false — `!fromHandDraw && player == Owner.Player`.
@@ -6978,6 +6971,12 @@ impl CombatState {
         let mut moved = 0usize;
         while remaining > 0 {
             if crate::cards::is_hand_full(&self.player) {
+                break;
+            }
+            // C# `CardPileCmd.Draw` loop (`CardPileCmd.cs:756`): `IsOverOrEnding`
+            // ends the draw before the next card (a Hellraiser auto-play that
+            // downs the last enemy mid-draw stops the rest of the draw).
+            if crate::combat_loop::combat_is_ending(self) {
                 break;
             }
             // C# `CardPileCmd.Shuffle` (`CardPileCmd.cs:806`) early-returns on
@@ -13775,6 +13774,119 @@ mod tests {
                 "drawn card {uid} cost re-rolled into [0,3], got {cost}",
             );
         }
+    }
+
+    /// Fixture for the combat-ending draw tests: a Confused player, one enemy
+    /// at `enemy_hp`, three Strikes in the draw pile.
+    fn confused_player_with_enemy(enemy_hp: i32) -> CombatState {
+        use std::num::NonZeroU32;
+
+        use smallvec::SmallVec;
+
+        let mut state = CombatState::default();
+        let player_id = NonZeroU32::new(99).expect("nz");
+        state.creatures.push(Creature {
+            id: player_id,
+            current_hp: 80,
+            max_hp: 80,
+            block: 0,
+            powers: SmallVec::<[PowerUid; 8]>::new(),
+            species: None,
+            intent: None,
+            intent_history: IntentHistory::default(),
+            monster_id: MonsterId("Player"),
+            ai: None,
+        });
+        state.player.creature_uid = Some(CreatureUid(player_id));
+        state.player.current_hp = 80; // a living player (hp 0 reads as a pending loss)
+        state.player.max_hp = 80;
+        let enemy_id = NonZeroU32::new(1).expect("nz");
+        state.creatures.push(Creature {
+            id: enemy_id,
+            current_hp: enemy_hp,
+            max_hp: 50,
+            block: 0,
+            powers: SmallVec::<[PowerUid; 8]>::new(),
+            species: Some(MonsterKind::ShrinkerBeetle),
+            intent: None,
+            intent_history: IntentHistory::default(),
+            monster_id: MonsterId("ShrinkerBeetle"),
+            ai: None,
+        });
+        state.enemy_uids.push(CreatureUid(enemy_id));
+        for i in 1u32..=3 {
+            state.cards.push(cards::Card {
+                uid: CardUid::new(i).expect("nz"),
+                card_id: cards::CardId::StrikeIronclad,
+                cost: 1,
+                card_type: cards::CardType::Attack,
+                target_type: cards::TargetType::Enemy,
+                base_damage: 6,
+                ..cards::Card::pod_defaults()
+            });
+            state.player.draw.push(CardUid::new(i).expect("nz"));
+        }
+        let pow_uid = PowerUid::new(1).expect("nz");
+        state.powers.push(Power {
+            id: pow_uid.0,
+            kind: powers::PowerKind::Confused,
+            amount: 1,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state.creatures[0].powers.push(pow_uid);
+        state
+    }
+
+    /// C# `CardPileCmd.Draw` returns an empty draw when `CombatManager.
+    /// IsOverOrEnding` (`CardPileCmd.cs:726`): Pommel Strike's draw after the
+    /// lethal hit draws no card and fires no `AfterCardDrawn` rider, so Snecko
+    /// Eye's Confused makes no `combat_energy_costs` read (step39
+    /// `snecko-first-draw-costs`: the engine capped the draw to the cards in the
+    /// pile instead, drew one and read a cost, so the stream ran one ahead into
+    /// the next fight). Every draw entry point, with the alive-enemy control.
+    #[test]
+    fn a_draw_after_the_last_enemy_dies_draws_nothing_and_reads_no_cost() {
+        for path in 0..3 {
+            for (hp, ending) in [(0, true), (7, false)] {
+                let mut state = confused_player_with_enemy(hp);
+                assert_eq!(crate::combat_loop::combat_is_ending(&state), ending);
+                let cost_before = state.run_rng.combat_energy_costs.counter();
+                let shuffle_before = state.run_rng.shuffle.counter();
+                let moved = match path {
+                    0 => crate::cards::draw_via_state(&mut state, 2),
+                    1 => state.draw_into_hand_card_effect(2),
+                    _ => state.draw_into_hand(2),
+                };
+                let cost_reads = state.run_rng.combat_energy_costs.counter() - cost_before;
+                if ending {
+                    assert_eq!(moved, 0, "path {path}: no card drawn once combat is ending");
+                    assert!(state.player.hand.is_empty(), "path {path}");
+                    assert_eq!(state.player.draw.len(), 3, "path {path}");
+                    assert_eq!(cost_reads, 0, "path {path}: no Confused read");
+                } else {
+                    assert_eq!(moved, 2, "path {path}: control draws");
+                    assert_eq!(cost_reads, 2, "path {path}: control reads a cost per card");
+                }
+                assert_eq!(
+                    state.run_rng.shuffle.counter(),
+                    shuffle_before,
+                    "path {path}"
+                );
+            }
+        }
+    }
+
+    /// The per-card loop (Hellraiser / Stratagem) also stops at the entry and at
+    /// each iteration (`CardPileCmd.cs:726,756`).
+    #[test]
+    fn the_per_card_draw_loop_stops_once_combat_is_ending() {
+        let mut state = confused_player_with_enemy(0);
+        let cost_before = state.run_rng.combat_energy_costs.counter();
+        assert_eq!(state.draw_suspending(3, false), 0);
+        assert_eq!(state.run_rng.combat_energy_costs.counter(), cost_before);
+        assert!(state.player.hand.is_empty());
     }
 
     /// Issue #175 (Silent combat parity, seed 1131): CorrosiveWave's

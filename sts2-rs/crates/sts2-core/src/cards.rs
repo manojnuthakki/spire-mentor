@@ -2713,6 +2713,16 @@ pub fn draw_via_state(state: &mut crate::CombatState, n: i32) -> usize {
     // piles, full hand) so a caller like Pillage can distinguish "no card
     // drawn" from "card drawn then auto-played out of hand by Hellraiser".
     state.last_drawn_card = None;
+    // C# `CardPileCmd.Draw` returns an empty draw FIRST when
+    // `CombatManager.IsOverOrEnding` (`CardPileCmd.cs:726`), before `ShouldDraw`:
+    // a card-effect draw issued AFTER a lethal hit (Pommel Strike's post-attack
+    // draw) draws no card, fires no `AfterCardDrawn` rider (so Confused makes no
+    // `combat_energy_costs` read) and reshuffles nothing. The batch used to be
+    // capped to the cards in the draw pile instead, which still drew them and
+    // read the riders (step39 `snecko-first-draw-costs`).
+    if crate::combat_loop::combat_is_ending(state) {
+        return 0;
+    }
     if card_effect_draw_blocked(state) {
         // C# `NoDrawPower.cs:29` flashes inside `ShouldDraw` on the path that
         // returns false — `!fromHandDraw && player == Owner.Player`.
@@ -2738,22 +2748,6 @@ pub fn draw_via_state(state: &mut crate::CombatState, n: i32) -> usize {
     if state.per_card_draw_loop_required() {
         return state.draw_suspending(n, false);
     }
-    // C# `CardPileCmd.Draw` / `CardPileCmd.Shuffle` (CardPileCmd.cs:749,806)
-    // early-return when `CombatManager.IsOverOrEnding`, so a card-effect draw
-    // issued AFTER a lethal hit (e.g. Pommel Strike's post-attack draw) performs
-    // no `ShuffleIfNecessary`. Cap the batch draw to the cards physically present
-    // in the draw pile when combat is ending so the loop never reshuffles an
-    // exhausted pile — that phantom reshuffle over-reads the run-level `shuffle`
-    // stream by `n-1` and desyncs the next combat's opening shuffle (RP114
-    // Silent). Mirrors the `draw_suspending` skip-reshuffle-when-ending idiom
-    // (lib.rs:4914, PARITY86); reads no RNG either way. The low-level
-    // `cards::draw()` primitive keeps no such guard — turn-start hand draws
-    // legitimately reshuffle while combat is live.
-    let n = if crate::combat_loop::combat_is_ending(state) {
-        n.min(i32::try_from(state.player.draw.len()).unwrap_or(i32::MAX))
-    } else {
-        n
-    };
     let hand_len_before = state.player.hand.len();
     let moved = draw(
         &mut state.player,
