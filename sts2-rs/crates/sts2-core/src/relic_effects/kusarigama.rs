@@ -10,9 +10,10 @@ pub(crate) fn on_after_turn_end_kusarigama(state: &mut CombatState, side: Side) 
     if side != Side::Player {
         return EffectResult::NotImplemented;
     }
-    if let Some(r) = kusarigama_relic_mut(state) {
-        r.counter = 0;
-    }
+    let Some(r) = kusarigama_relic_mut(state) else {
+        return EffectResult::NotImplemented;
+    };
+    r.counter = 0;
     EffectResult::Resolved
 }
 
