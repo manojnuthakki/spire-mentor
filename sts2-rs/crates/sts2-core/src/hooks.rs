@@ -10002,7 +10002,7 @@ fn after_damage_received_lanes(state: &mut CombatState, ctx: &DamageCtx, damage:
     // `before_side_turn_start` arm. Inline like Slumber/Flutter because
     // the per-listener fn can't see the post-block amount.
     // present_kinds lane gate (perf): no live HardenedShell ⇒ provably no-op.
-    if damage > 0 && power_kind_live(state, PowerKind::HardenedShell) {
+    if damage != 0 && power_kind_live(state, PowerKind::HardenedShell) {
         let target_uid = match ctx.target {
             CreatureRef::Player => state.player.creature_uid,
             CreatureRef::Enemy(uid) => Some(uid),
@@ -12219,7 +12219,18 @@ fn modify_hp_lost_inner(
     // Step 4: cap (HardenedShell, Intangible safety cap, ...).
     let after_cap = after_mul.min(cap);
     // Step 5: clamp to non-negative. Python writes `max(0, math.floor(...))`.
-    after_cap.max(0)
+    // The exception is a SATURATED HardenedShell: C# `Math.Min(amount, Amount -
+    // damageReceivedThisTurn)` goes NEGATIVE once an earlier hit overshot the
+    // budget (TheBoot raises a capped 3-damage hit to 5 AFTER the cap), and the
+    // game passes that negative amount on: `LoseHpInternal(-1)` HEALS one HP and
+    // the shell's accumulator takes the -1 (`skulking-colony-hp`, C66479N2WP@200:
+    // Sword Boomerang at a shell with 4 left under The Boot: 5, +1, 0 = 4 lost).
+    // Only the cap arm can produce a negative; every other path stays clamped.
+    if cap < 0 {
+        after_cap
+    } else {
+        after_cap.max(0)
+    }
 }
 
 /// Power kinds with a non-default arm in the hp-lost per-listener trio:

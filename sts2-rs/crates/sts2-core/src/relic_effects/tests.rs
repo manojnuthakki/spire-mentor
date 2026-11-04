@@ -8994,6 +8994,92 @@ fn the_boot_skips_self_damage() {
     );
 }
 
+/// A shell with `counter` already absorbed this turn, on a fresh enemy.
+fn shell_enemy(state: &mut CombatState, amount: i32, counter: i32) -> crate::CreatureUid {
+    let uid = push_enemy(state, 9, 50);
+    crate::card_effects::apply_power_to_creature(state, uid, crate::PowerKind::HardenedShell, amount);
+    for p in state.powers.iter_mut() {
+        if p.kind == crate::PowerKind::HardenedShell {
+            p.counter = counter;
+        }
+    }
+    uid
+}
+
+fn shell_counter(state: &CombatState) -> i32 {
+    state
+        .powers
+        .iter()
+        .find(|p| p.kind == crate::PowerKind::HardenedShell)
+        .map_or(-99, |p| p.counter)
+}
+
+fn hit3(state: &mut CombatState, uid: crate::CreatureUid) -> i32 {
+    crate::damage::apply_damage(
+        state,
+        crate::hooks::CreatureRef::Player,
+        uid,
+        3,
+        crate::hooks::ValueProps::MOVE,
+        None,
+    )
+}
+
+/// `skulking-colony-hp` (C66479N2WP@200): The Boot raises a shell-capped hit
+/// AFTER the cap (`ModifyHpLostAfterOstyLate`), so a 3-damage hit at a shell with
+/// 4 left loses 5; the next hit's cap `Amount - received` is then -1 and the game
+/// passes it on: `LoseHpInternal(-1)` heals one HP and the accumulator takes the
+/// -1. Sword Boomerang's three hits: -5, +1, 0 (net 4), not the clamped -5.
+/// Fail-first: the final `max(0)` clamp lost 5 in total.
+#[test]
+#[serial_test::serial(global_registry)]
+fn hardened_shell_overshot_by_the_boot_heals_the_next_hit() {
+    ensure_installed();
+    let mut state = fresh_state_with_player(70, 70);
+    give_player_relic(&mut state, RelicKind::TheBoot);
+    let uid = shell_enemy(&mut state, 20, 16);
+    assert_eq!(hit3(&mut state, uid), 5, "3 under the cap, raised to 5 by The Boot");
+    assert_eq!(shell_counter(&state), 21);
+    assert_eq!(hit3(&mut state, uid), -1, "cap 20-21 = -1: the hit heals one HP");
+    assert_eq!(shell_counter(&state), 20, "the accumulator takes the -1");
+    assert_eq!(hit3(&mut state, uid), 0, "cap 0: nothing");
+    let hp = state.creatures.iter().find(|c| c.id == uid.0).map(|c| c.current_hp);
+    assert_eq!(hp, Some(50 - 4), "5 lost, 1 healed");
+}
+
+/// Negative control: without The Boot the same three hits are 3, 1, 0.
+#[test]
+#[serial_test::serial(global_registry)]
+fn hardened_shell_without_the_boot_never_overshoots() {
+    ensure_installed();
+    let mut state = fresh_state_with_player(70, 70);
+    let uid = shell_enemy(&mut state, 20, 16);
+    assert_eq!(hit3(&mut state, uid), 3);
+    assert_eq!(hit3(&mut state, uid), 1);
+    assert_eq!(hit3(&mut state, uid), 0);
+    assert_eq!(shell_counter(&state), 20);
+}
+
+/// Negative control: an exhausted shell (cap exactly 0) loses nothing and heals
+/// nothing, Boot or not; a fresh shell under The Boot takes the raised hits.
+#[test]
+#[serial_test::serial(global_registry)]
+fn hardened_shell_exhausted_or_fresh_under_the_boot() {
+    ensure_installed();
+    let mut state = fresh_state_with_player(70, 70);
+    give_player_relic(&mut state, RelicKind::TheBoot);
+    let uid = shell_enemy(&mut state, 20, 20);
+    assert_eq!(hit3(&mut state, uid), 0, "exhausted: the cap 0 loses nothing");
+    assert_eq!(shell_counter(&state), 20);
+    let mut fresh = fresh_state_with_player(70, 70);
+    give_player_relic(&mut fresh, RelicKind::TheBoot);
+    let uid = shell_enemy(&mut fresh, 20, 0);
+    for _ in 0..3 {
+        assert_eq!(hit3(&mut fresh, uid), 5, "each hit raised to 5, within budget");
+    }
+    assert_eq!(shell_counter(&fresh), 15);
+}
+
 /// `BoomingConch` (v0.107.1) grants +1 energy at the start of the
 /// owner's first turn in an Elite combat.
 #[test]

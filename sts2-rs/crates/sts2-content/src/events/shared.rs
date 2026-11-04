@@ -589,8 +589,8 @@ fn battleworn_setting_3(state: &mut RunState) -> EventOutcome {
 /// ran out of time (`RanOutOfTime`) — then NO reward is granted, matching
 /// the C# `DEFEAT` branch. On a clean victory each setting grants the
 /// reward it previously modeled at instant-victory time:
-/// - Setting1: one potion rolled via `PlayerRng.Rewards.NextItem`
-///   (sentinel `PotionReward::empty()` rolled at drain time).
+/// - Setting1: one potion rolled via `PlayerRng.Rewards.NextItem` over the
+///   full character++shared pool (one int read, rolled here, pre-populated).
 /// - Setting2: `Where(IsUpgradable).StableShuffle(Rng.Niche).Take(2)` →
 ///   `CardCmd.Upgrade` (immediate, no pick).
 /// - Setting3: `RelicCmd.Obtain(RelicFactory.PullNextRelicFromFront)` —
@@ -612,12 +612,27 @@ pub fn battleworn_dummy_resume(
     }
     match setting {
         BattlewornDummySetting::Setting1 => {
-            if state.interactive_rewards {
-                state.offer_custom_rewards(vec![sts2_core::OfferedReward::Potion(None)], true);
-            } else {
-                state
-                    .pending_rewards
-                    .push(Reward::Potion(PotionReward::empty()));
+            // C# `BattlewornDummy.Resume` Setting1: ONE `PlayerRng.Rewards.NextItem`
+            // over the FULL character++shared potion pool, handed to
+            // `OfferCustom([new PotionReward(potion.ToMutable(), owner)])`. The
+            // reward arrives pre-populated, so `PotionReward.Populate` never rolls
+            // the rarity float: an empty sentinel (float + rarity item) left the
+            // Rewards cursor one read ahead and picked another potion
+            // (`potion-reward-model-differs`). Same shape as TheLegendsWereTrue.
+            if let Some(kind) = crate::potions::all::roll_event_potion_full_pool(
+                &mut state.rng.rewards,
+                state.character_id,
+            ) {
+                if state.interactive_rewards {
+                    state.offer_custom_rewards(
+                        vec![sts2_core::OfferedReward::Potion(Some(kind))],
+                        true,
+                    );
+                } else {
+                    state
+                        .pending_rewards
+                        .push(Reward::Potion(PotionReward::with_kind(kind)));
+                }
             }
         }
         BattlewornDummySetting::Setting2 => {
@@ -2131,6 +2146,46 @@ mod tests {
         battleworn_dummy_resume(&mut rs, BattlewornDummySetting::Setting1, true);
         assert_eq!(rs.pending_rewards.len(), 1);
         assert!(matches!(rs.pending_rewards[0], Reward::Potion(_)));
+    }
+
+    /// `potion-reward-model-differs` (TQTCLDYPU1@950): Setting1's potion is ONE
+    /// `Rewards.NextItem` over the full pool, rolled at Resume and already
+    /// populated (no rarity float, no sentinel left for the drain to re-roll).
+    /// Fail-first: the sentinel reward had `potion_kind == None` and the
+    /// Rewards cursor had not moved.
+    #[test]
+    fn battleworn_setting_1_rolls_one_full_pool_item_pre_populated() {
+        let mut rs = RunState::new();
+        let mut twin = rs.rng.rewards.clone();
+        let before = rs.rng.rewards.counter();
+        battleworn_dummy_resume(&mut rs, BattlewornDummySetting::Setting1, true);
+        assert_eq!(rs.rng.rewards.counter() - before, 1, "one int read, no rarity float");
+        let pool = crate::potions::all::roll_event_potion_full_pool(&mut twin, rs.character_id);
+        let Reward::Potion(p) = &rs.pending_rewards[0] else {
+            panic!("a potion reward");
+        };
+        assert_eq!(p.potion_kind, pool, "the item the full pool's one read picks");
+        assert!(p.potion_kind.is_some());
+    }
+
+    /// Negative control: a timed-out dummy (RanOutOfTime) rolls nothing.
+    #[test]
+    fn battleworn_setting_1_out_of_time_rolls_nothing() {
+        let mut rs = RunState::new();
+        let before = rs.rng.rewards.counter();
+        battleworn_dummy_resume(&mut rs, BattlewornDummySetting::Setting1, false);
+        assert_eq!(rs.rng.rewards.counter(), before);
+        assert!(rs.pending_rewards.is_empty());
+    }
+
+    /// Negative control: Setting2 (upgrades on the event's own stream) leaves
+    /// the Rewards stream alone.
+    #[test]
+    fn battleworn_setting_2_leaves_the_rewards_stream() {
+        let mut rs = RunState::new();
+        let before = rs.rng.rewards.counter();
+        battleworn_dummy_resume(&mut rs, BattlewornDummySetting::Setting2, true);
+        assert_eq!(rs.rng.rewards.counter(), before);
     }
 
     /// Each setting's option previews the HP of the dummy it will stage, so
