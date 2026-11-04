@@ -7259,7 +7259,7 @@ fn consume_rebound_stack(state: &mut CombatState) {
 pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> StepResult {
     let CardPlayFinish {
         card,
-        card_idx,
+        card_idx: _,
         card_uid,
         target_uid,
         resolved_cost,
@@ -7354,13 +7354,10 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // scan (seed 5192).
     stamp_last_attack_skill_played(state, &card, card_uid);
 
-    // C# `CardEnergyCost.AfterCardPlayedCleanup()`: a discount flagged
-    // `WhenPlayed` is retired the moment the card is played, not at the turn
-    // boundary — and the "costs N this turn" helpers carry BOTH flags, so this
-    // is the edge that fires first far more often than not. Only a
-    // reconstruction can carry such a bank (the engine's own effects bank
-    // per-effect), so this is a no-op for a natively-played card.
-    state.restore_wire_cost_expiring_on_play(card_uid);
+    // C# `CardEnergyCost.AfterCardPlayedCleanup()` (the `WhenPlayed` cost
+    // modifiers) runs at the END of `OnPlayWrapper`, after `AfterCardPlayed`
+    // and the result-pile move: see `CombatState::after_card_played_cost_cleanup`
+    // below the routing (F6 step32, `juggling-clone-cost`).
 
     // Bead `sts2-rs-j87`: fire `after_card_played` on the
     // relic-effects bus. This is a fresh runtime site — the legacy
@@ -7765,6 +7762,12 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
         && state.pending_choice.is_none()
         && (state.combat_log.zero_cost_attacks_played_this_turn as i32)
             < state.player_power_amount(crate::PowerKind::Feral);
+    // The routing below leaves the card on the Play pile, its flush (and its
+    // `AfterCardPlayedCleanup`) deferred to `flush_played_cards_after_choice`,
+    // exactly when its OnPlay opened a choice and it is neither a Power nor a
+    // dupe (those leave combat now): the discard and exhaust arms both wait.
+    let flush_deferred = state.pending_choice.is_some()
+        && !(card.card_type == cards::CardType::Power || played_card_is_dupe);
     if feral_returns_to_hand {
         // C# `FeralPower.cs:60` calls `Flash()` in
         // `AfterModifyingCardPlayResultPileOrPosition`, which `Hook` fires only
@@ -7907,47 +7910,22 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
                 PileKind::Discard,
             );
         }
-        // Bead `sts2-rs-rj1aj`: C# `CardModel.OnPlayWrapper` clears WhenPlayed
-        // temporary costs in `EnergyCost.AfterCardPlayedCleanup()`
-        // (`CardModel.cs:1555`) — fired AFTER `AfterCardPlayed` and AFTER the
-        // card moved to its result pile. `SetToFreeThisTurn` adds an
-        // `EndOfTurn | WhenPlayed` modifier (`CardEnergyCost.SetThisTurnOrUntilPlayed`),
-        // so a Discovery/InfernalBlade free card's 0-cost clears the moment it
-        // is played, not just at turn end. Mirror that late clear here so a
-        // free card that returns to hand and is replayed THIS turn pays its
-        // full cost on the second play (seed 1798: a Discovery'd UPPERCUT played
-        // twice — C# charges 0 then 2). Only on the resolved (non-deferred)
-        // path: when a choice is still pending the card sits in play limbo and
-        // C# defers `AfterCardPlayedCleanup` until the choice closes.
-        state.cards[card_idx].set_combat_var(crate::cards::VarKey::FreeThisTurn, 0);
-        // Bead `sts2-rs-rocketpunch-statusgen`: RocketPunch's
-        // `SetUntilPlayed(0)` is a `WhenPlayed`-only Absolute(0) modifier, so a
-        // RocketPunch made free by a prior status-generation clears the moment
-        // it is PLAYED (not at turn end — it survives `clear_per_turn_card_vars`,
-        // unlike `FreeThisTurn`). Clear it on this same late
-        // `AfterCardPlayedCleanup` path so a replayed RocketPunch pays full cost.
-        state.cards[card_idx].set_combat_var(crate::cards::VarKey::FreeUntilPlayed, 0);
-        // Bead `sts2-rs-mnjxg`: SneckoOil sets the randomized
-        // cost via C# `EnergyCost.SetThisTurnOrUntilPlayed` — the SAME
-        // `EndOfTurn | WhenPlayed` modifier as `SetToFreeThisTurn` above. So a
-        // Snecko-rolled card's cost reverts to base the moment it is PLAYED, not
-        // just at turn end. Unwind the banked `SneckoCostDeltaThisTurn` here
-        // (mirroring `restore_snecko_costs_for_turn_start`) so a card that is
-        // played and then returns to hand THIS turn (e.g. via BottledPotential's
-        // shuffle+redraw, or Pillage/Havoc) is at its BASE cost on the replay —
-        // not the stale roll (coverage seed 5880: a SneckoOil'd REND rolled to 1,
-        // played, then BottledPotential redrew it; C# shows base 2, RS kept 1 →
-        // LEGAL_ACTION divergence at energy 1).
-        let snecko_banked =
-            state.cards[card_idx].combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn);
-        if snecko_banked != 0 {
-            let c = &mut state.cards[card_idx];
-            c.cost = c.cost.saturating_sub(snecko_banked as i8);
-            c.set_combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn, 0);
-            // The expiring Snecko roll was the absolute modifier the
-            // upgrade-clamp flag tracks; the cost is base-owned again.
-            c.set_combat_var(crate::cards::VarKey::CostAbsolutelySet, 0);
-        }
+        // The WhenPlayed cost cleanup (beads `sts2-rs-rj1aj` FreeThisTurn,
+        // `sts2-rs-rocketpunch-statusgen` FreeUntilPlayed, `sts2-rs-mnjxg`
+        // Snecko's roll) used to run only here, on the discard arm; it now runs
+        // for every non-deferred result pile right after this routing.
+    }
+    // C# `CardEnergyCost.AfterCardPlayedCleanup()`, at the end of
+    // `OnPlayWrapper`: after `AfterCardPlayed` (Juggling's clone copies the
+    // WhenPlayed modifiers, F6 `juggling-clone-cost`), after every repeat and
+    // after the result-pile move, whatever that pile (discard, exhaust,
+    // draw-top, back to hand, out of combat). The FreeThisTurn rider used to
+    // clear before `AfterCardPlayed`, so Juggling's clone of a free card cost
+    // its base on the Sim and 0 in the game. A Discovery/InfernalBlade free
+    // card replayed this turn still pays its full cost (seed 1798); a
+    // Snecko-rolled card back in hand this turn is at its base (seed 5880).
+    if !flush_deferred {
+        state.after_card_played_cost_cleanup(card_uid);
     }
     // else: the card's OnPlay opened a `pending_choice` (Headbutt's
     // PutBack, Armaments' upgrade-in-hand select, …). C# holds the played
@@ -8090,16 +8068,7 @@ pub fn flush_played_cards_after_choice(state: &mut CombatState) {
         // card that returns to hand the same turn keeps its temporary cost
         // (sweep seed 3284: a SkillPotion-free ARMAMENTS redrawn through a
         // reshuffle stayed cost 0; C# charges base 1).
-        {
-            let c = &mut state.cards[idx];
-            c.set_combat_var(crate::cards::VarKey::FreeThisTurn, 0);
-            let snecko_banked = c.combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn);
-            if snecko_banked != 0 {
-                c.cost = c.cost.saturating_sub(snecko_banked as i8);
-                c.set_combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn, 0);
-                c.set_combat_var(crate::cards::VarKey::CostAbsolutelySet, 0);
-            }
-        }
+        state.after_card_played_cost_cleanup(uid);
         let corruption_exhausts_skill = card.card_type == cards::CardType::Skill
             && state.player_power_amount(crate::PowerKind::Corruption) > 0;
         // C# `GetResultPileType` precedence: Corruption's hook override
@@ -9592,11 +9561,8 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
     }
 
     // C# `CardEnergyCost.AfterCardPlayedCleanup()` fires for auto-plays too
-    // (same `OnPlayWrapper`), retiring `WhenPlayed`-flagged modifiers — the
-    // wire-cost bank AND the free riders (`SetToFreeThisTurn` is
-    // `SetThisTurnOrUntilPlayed(0)`). Mirrors the hand-play edge at
-    // `play_card`.
-    state.restore_wire_cost_expiring_on_play(top_uid);
+    // (same `OnPlayWrapper`), at its end: after `AfterCardPlayed` and the
+    // result-pile routing below (F6 step32).
 
     // An auto-play is a REAL card play (`!IsDupe`) — C#'s HistoryCourse
     // scan over `History.CardPlaysFinished` sees it, so a Stampede/Mayhem
@@ -9954,6 +9920,11 @@ pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFini
             }
         }
     }
+
+    // C# `CardEnergyCost.AfterCardPlayedCleanup()` at the end of the
+    // auto-play's `OnPlayWrapper`: after `AfterCardPlayed` and the result pile,
+    // the same edge as the hand-play path (`after_card_played_cost_cleanup`).
+    state.after_card_played_cost_cleanup(top_uid);
 
     // FeralPower budget tally: an auto-played 0-cost owner Attack consumes the
     // budget too (C# records a `CardPlayStartedEntry` for auto-plays). Bumped

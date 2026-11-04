@@ -8348,6 +8348,32 @@ impl CombatState {
         }
     }
 
+    /// C# `CardEnergyCost.AfterCardPlayedCleanup()` for one played card: drop
+    /// every `WhenPlayed` cost modifier. `CardModel.OnPlayWrapper` runs it at
+    /// the very end of the play, AFTER `Hook.AfterCardPlayed` and after the card
+    /// moved to its result pile (and after every repeat of the play), so an
+    /// `AfterCardPlayed` listener that copies the card (JugglingPower's
+    /// `CreateClone`, whose `CardEnergyCost.Clone` copies the local modifiers)
+    /// still sees them. The engine's `WhenPlayed` riders: `FreeThisTurn` /
+    /// `FreeUntilPlayed`, the `SneckoCostDeltaThisTurn` bank (an Absolute
+    /// `SetThisTurnOrUntilPlayed` modifier: Snecko Oil's roll, Enlightenment's
+    /// cap) and the foreign wire bank. Every play path (hand play, its deferred
+    /// flush after a choice, auto-play) calls this once at that point
+    /// (F6 step32, `juggling-clone-cost` / `enlightenment-until-played`).
+    pub fn after_card_played_cost_cleanup(&mut self, card_uid: crate::CardUid) {
+        if let Some(c) = card_by_uid_mut(&mut self.cards, card_uid) {
+            let snecko_banked = c.combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn);
+            if snecko_banked != 0 {
+                c.cost = c.cost.saturating_sub(snecko_banked as i8);
+                c.set_combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn, 0);
+                // The expiring absolute modifier was what the upgrade-clamp
+                // flag tracked; the cost is base-owned again.
+                c.set_combat_var(crate::cards::VarKey::CostAbsolutelySet, 0);
+            }
+        }
+        self.restore_wire_cost_expiring_on_play(card_uid);
+    }
+
     /// The WHEN-PLAYED half of the same story: undo the part of a foreign
     /// producer's discount that the game retires the moment the card is
     /// played, banked in [`crate::cards::VarKey::WireCostExpiringOnPlay`].
