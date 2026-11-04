@@ -1323,7 +1323,7 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
                 .is_some_and(|c| sts2_core::combat_loop::card_is_ethereal_at_play(state, c))
     };
     if dupe_ethereal(state) {
-        state.note_ethereal_card_played();
+        state.note_ethereal_card_played(true, true);
     }
     // C# `Hook.AfterCardPlayed` ends with `AfterCardPlayedLate` (Hook.cs:431)
     // for the dupe's auto-play too; fired after the tallies so MakeItSo sees
@@ -1393,7 +1393,7 @@ fn listener_history_course(state: &mut CombatState) -> EffectResult {
             state.player.card_plays_started_this_turn =
                 state.player.card_plays_started_this_turn.saturating_add(1);
             if dupe_ethereal(state) {
-                state.note_ethereal_card_played();
+                state.note_ethereal_card_played(true, true);
             }
             sts2_core::card_effects::fire_late_effects(state, &hook_played_ctx);
         }

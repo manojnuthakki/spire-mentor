@@ -5438,17 +5438,25 @@ impl CombatState {
         Some(pet_uid)
     }
 
-    /// One finished play of an ETHEREAL card by the player: the combat-long
-    /// tally (C# `CardPlayFinishedEntry.WasEthereal`, read by PullFromBelow)
-    /// and `BansheesCry.AfterCardPlayed` (`BansheesCry.cs`: for the owner's
-    /// card with the Ethereal keyword, `EnergyCost.AddThisCombat(-Energy)`,
-    /// Energy 2) on every Banshee's Cry in a combat pile, clamped at 0 like
-    /// Melancholy's rider. F6 step36 (`banshees-cry-ethereal-discount`).
-    pub fn note_ethereal_card_played(&mut self) {
-        self.combat_log.ethereal_cards_played_this_combat = self
-            .combat_log
-            .ethereal_cards_played_this_combat
-            .saturating_add(1);
+    /// One finished play of an ETHEREAL card by the player. `was_ethereal`
+    /// feeds the combat-long tally (C# `CardPlayFinishedEntry.WasEthereal`,
+    /// recorded before the AfterCardPlayed listeners, read by PullFromBelow);
+    /// `ethereal_now` is the card's keyword read when Banshee's Cry's own
+    /// `AfterCardPlayed` runs (`BansheesCry.cs`: for the owner's card with the
+    /// Ethereal keyword, `EnergyCost.AddThisCombat(-Energy)`, Energy 2), i.e.
+    /// after earlier listeners such as Razor Tooth have changed the card. The
+    /// discount lands on every Banshee's Cry in a combat pile, clamped at 0
+    /// like Melancholy's rider. F6 step36 (`banshees-cry-ethereal-discount`).
+    pub fn note_ethereal_card_played(&mut self, was_ethereal: bool, ethereal_now: bool) {
+        if was_ethereal {
+            self.combat_log.ethereal_cards_played_this_combat = self
+                .combat_log
+                .ethereal_cards_played_this_combat
+                .saturating_add(1);
+        }
+        if !ethereal_now {
+            return;
+        }
         let in_piles: smallvec::SmallVec<[CardUid; 64]> = self
             .player
             .hand
@@ -8777,6 +8785,32 @@ impl CombatState {
     }
 }
 
+/// C# `EnergyCost.AddThisCombat(delta)` on a card whose displayed cost may sit
+/// under a temporary modifier. The displayed cost is clamped at 0, but the
+/// permanent change is kept under the Snecko/absolute bank (Snecko Oil,
+/// Enlightenment: expiry restores `cost - bank`): the bank is re-based so the
+/// restored cost is the underlying cost plus `delta`, itself floored at 0.
+/// Once the underlying cost is exhausted the bank clears, so expiry can never
+/// write the negative sentinel reserved for intrinsic X-cost cards (which this
+/// leaves alone). (The foreign wire banks keep no such carry.)
+/// F6 step36 (Banshee's Cry, Melancholy).
+pub fn add_this_combat_cost(c: &mut crate::cards::Card, delta: i32) {
+    if c.cost < 0 {
+        return;
+    }
+    let cost = i32::from(c.cost);
+    let new_cost = (cost + delta).clamp(0, i32::from(i8::MAX));
+    let bank = c.combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn);
+    if bank != 0 {
+        let new_under = (cost - bank + delta).max(0);
+        c.set_combat_var(
+            crate::cards::VarKey::SneckoCostDeltaThisTurn,
+            new_cost - new_under,
+        );
+    }
+    c.cost = new_cost as i8;
+}
+
 /// After one transient edge has restored its shave, recompute the OTHER
 /// bank against [`crate::cards::VarKey::WireCostStable`] instead of leaving it
 /// as the producer sent it.
@@ -8794,25 +8828,6 @@ impl CombatState {
 /// sends part of the trio, precisely because this reads the var back through a
 /// default-0 accessor and could not otherwise tell an absent `stable_cost` from
 /// a real zero.
-/// C# `EnergyCost.AddThisCombat(delta)` on a card whose displayed cost may sit
-/// under a temporary modifier: the displayed cost is clamped at 0, but the
-/// permanent change is not lost when the temporary modifier expires. The part
-/// of a negative `delta` the clamp swallows is carried in the Snecko/absolute
-/// bank (Snecko Oil, Enlightenment: restore is `cost - bank`), so the restored
-/// cost is `before - |delta|`. (The foreign wire banks keep no such carry.)
-/// F6 step36 (Banshee's Cry, Melancholy).
-pub fn add_this_combat_cost(c: &mut crate::cards::Card, delta: i32) {
-    let want = i32::from(c.cost) + delta;
-    let lost = if want < 0 { -want } else { 0 };
-    c.cost = want.clamp(0, i32::from(i8::MAX)) as i8;
-    if lost > 0 {
-        let bank = c.combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn);
-        if bank != 0 {
-            c.set_combat_var(crate::cards::VarKey::SneckoCostDeltaThisTurn, bank + lost);
-        }
-    }
-}
-
 fn rebank_wire_cost_after_edge(c: &mut crate::cards::Card, other: crate::cards::VarKey) {
     if c.combat_var(other) == 0 {
         return;

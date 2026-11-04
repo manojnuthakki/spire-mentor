@@ -142,6 +142,60 @@ fn banshees_cry_discount_survives_a_temporary_cost_expiring() {
     );
 }
 
+#[test]
+fn banshees_cry_reads_the_card_after_razor_tooth_upgraded_it() {
+    // Razor Tooth's AfterCardPlayed runs before Cry's: the upgraded Apparition
+    // has lost Ethereal by then, so no discount (the history entry still counts).
+    let mut s = board(3);
+    let mut r = sts2_core::Relic::new(
+        std::num::NonZeroU32::new(900).unwrap(),
+        sts2_core::RelicKind::RazorTooth,
+    );
+    r.counter = 0;
+    s.relics.push(r);
+    let cry = add(&mut s, CardId::BansheesCry);
+    s.player.hand.push(cry);
+    let app = add(&mut s, CardId::Apparition);
+    s.player.hand.push(app);
+    let i = hand_index(&s, app);
+    let _ = play_card(&mut s, i, None);
+    assert_eq!(s.cards[cry.get() as usize - 1].cost, 9);
+    assert_eq!(s.combat_log.ethereal_cards_played_this_combat, 1);
+}
+
+#[test]
+fn repeated_discounts_never_leave_a_negative_cost_after_expiry() {
+    let mut s = board(3);
+    let cry = add(&mut s, CardId::BansheesCry);
+    {
+        let c = &mut s.cards[cry.get() as usize - 1];
+        c.cost = 1;
+        c.set_combat_var(VarKey::SneckoCostDeltaThisTurn, -8);
+    }
+    for _ in 0..5 {
+        sts2_core::add_this_combat_cost(&mut s.cards[cry.get() as usize - 1], -2);
+    }
+    s.restore_snecko_costs_for_turn_start();
+    assert_eq!(
+        s.cards[cry.get() as usize - 1].cost,
+        0,
+        "9 - 10 floors at 0"
+    );
+    // Melancholy's caller: 3 under a cap of 1, four deaths.
+    let mel = add(&mut s, CardId::Melancholy);
+    s.player.hand.push(mel);
+    {
+        let c = &mut s.cards[mel.get() as usize - 1];
+        c.cost = 1;
+        c.set_combat_var(VarKey::SneckoCostDeltaThisTurn, -2);
+    }
+    for _ in 0..5 {
+        s.reduce_melancholy_cost_on_death();
+    }
+    s.restore_snecko_costs_for_turn_start();
+    assert_eq!(s.cards[mel.get() as usize - 1].cost, 0);
+}
+
 // ----------------------------------------------------------- dark embrace --
 
 fn dark_embrace_end_turn(no_draw_first: bool) -> bool {

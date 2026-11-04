@@ -7396,6 +7396,25 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
 /// Shared by the manual (`play_card`) and auto-play
 /// (`finish_auto_played_card`) SpiritOfAsh gate so both agree with the
 /// end-of-turn ethereal expel. Reads the Hex stack off the mirror+legacy union.
+/// A finished play of `card_uid` (`before`: the card as it was when the play
+/// began): the Ethereal history entry reads that snapshot, Banshee's Cry reads
+/// the live arena card when its own `AfterCardPlayed` runs, after earlier
+/// listeners (Razor Tooth upgrading an Apparition) may have changed it.
+pub fn note_finished_card_play(
+    state: &mut CombatState,
+    before: &crate::cards::Card,
+    card_uid: crate::CardUid,
+) {
+    let was = card_is_ethereal_at_play(state, before);
+    let now = state
+        .cards
+        .get(card_uid.0.get() as usize - 1)
+        .is_some_and(|c| card_is_ethereal_at_play(state, c));
+    if was || now {
+        state.note_ethereal_card_played(was, now);
+    }
+}
+
 pub fn card_is_ethereal_at_play(state: &CombatState, card: &crate::cards::Card) -> bool {
     crate::card_effects::card_ethereal_inst(card)
         || card.combat_var(crate::cards::VarKey::EtherealThisCombat) != 0
@@ -7703,9 +7722,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // Combat-long ETHEREAL-played tally (feeds Necrobinder PullFromBelow's
     // CalculatedVar hit count). Bumped here, after the body resolves, so a
     // card never counts itself (C# records the `WasEthereal` entry post-OnPlay).
-    if card_is_ethereal_at_play(state, &card) {
-        state.note_ethereal_card_played();
-    }
+    note_finished_card_play(state, &card, card_uid);
 
     // Pinpoint costs 1 less per Skill played this turn (C#
     // `Pinpoint.AfterCardPlayed` → `EnergyCost.AddThisTurn(-1)`). Post-body
@@ -7831,9 +7848,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
             state.player.cards_played_this_turn[idx] =
                 state.player.cards_played_this_turn[idx].saturating_add(1);
         }
-        if card_is_ethereal_at_play(state, &card) {
-            state.note_ethereal_card_played();
-        }
+        note_finished_card_play(state, &card, card_uid);
         if card.card_type == crate::cards::CardType::Skill {
             state.discount_pinpoint_on_skill_played();
         }
@@ -7961,9 +7976,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
             stamp_last_attack_skill_played(state, &card, card_uid);
             // Combat-long ETHEREAL tally also counts each Echo replay (mirrors
             // the per-turn tally above).
-            if card_is_ethereal_at_play(state, &card) {
-                state.note_ethereal_card_played();
-            }
+            note_finished_card_play(state, &card, card_uid);
             bump_brilliant_scarf(state);
             // (EchoForm now grants a single extra play, so there is no replay
             // loop to break out of on a combat-ending replay — the cleanup
@@ -9043,12 +9056,8 @@ fn auto_play_tally_finished(
     let idx = card_type.index();
     state.player.cards_played_this_turn[idx] =
         state.player.cards_played_this_turn[idx].saturating_add(1);
-    if state
-        .cards
-        .get(card_idx)
-        .is_some_and(|c| card_is_ethereal_at_play(state, c))
-    {
-        state.note_ethereal_card_played();
+    if let Some(c) = state.cards.get(card_idx).copied() {
+        note_finished_card_play(state, &c, c.uid);
     }
     if card_type == crate::cards::CardType::Skill {
         state.discount_pinpoint_on_skill_played();
