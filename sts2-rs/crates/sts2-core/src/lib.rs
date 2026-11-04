@@ -5438,6 +5438,36 @@ impl CombatState {
         Some(pet_uid)
     }
 
+    /// One finished play of an ETHEREAL card by the player: the combat-long
+    /// tally (C# `CardPlayFinishedEntry.WasEthereal`, read by PullFromBelow)
+    /// and `BansheesCry.AfterCardPlayed` (`BansheesCry.cs`: for the owner's
+    /// card with the Ethereal keyword, `EnergyCost.AddThisCombat(-Energy)`,
+    /// Energy 2) on every Banshee's Cry in a combat pile, clamped at 0 like
+    /// Melancholy's rider. F6 step36 (`banshees-cry-ethereal-discount`).
+    pub fn note_ethereal_card_played(&mut self) {
+        self.combat_log.ethereal_cards_played_this_combat = self
+            .combat_log
+            .ethereal_cards_played_this_combat
+            .saturating_add(1);
+        let in_piles: smallvec::SmallVec<[CardUid; 64]> = self
+            .player
+            .hand
+            .iter()
+            .chain(self.player.draw.iter())
+            .chain(self.player.discard.iter())
+            .chain(self.player.exhaust.iter())
+            .chain(self.player.play.iter())
+            .copied()
+            .collect();
+        for uid in in_piles {
+            if let Some(c) = self.cards.iter_mut().find(|c| c.uid == uid) {
+                if c.card_id == crate::cards::CardId::BansheesCry {
+                    c.cost = c.cost.saturating_sub(2).max(0);
+                }
+            }
+        }
+    }
+
     /// Necrobinder `Melancholy.AfterDeath` cost-reduction rider — C#
     /// `Melancholy.cs::AfterDeath` (`MegaCrit.Sts2.Core.Models.Cards/
     /// Melancholy.cs:35-48`). C# fires `CardModel.AfterDeath` on EVERY card

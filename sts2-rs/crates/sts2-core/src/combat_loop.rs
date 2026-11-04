@@ -2651,6 +2651,74 @@ fn run_rest_of_end_turn_chain(state: &mut CombatState) -> StepResult {
     StepResult::Advanced
 }
 
+/// Cards whose `OnTurnEndInHand` the turn-end step runs (`HasTurnEndInHandEffect`).
+fn has_turn_end_in_hand_effect(card_id: cards::CardId) -> bool {
+    matches!(
+        card_id,
+        cards::CardId::Beckon
+            | cards::CardId::Burn
+            | cards::CardId::BadLuck
+            | cards::CardId::Debt
+            | cards::CardId::Decay
+            | cards::CardId::Doubt
+            | cards::CardId::Regret
+            | cards::CardId::Shame
+            | cards::CardId::Toxic
+            | cards::CardId::Infection
+            | cards::CardId::Wither
+    )
+}
+
+/// Whether the card carries Ethereal at the turn's end (the instance's keyword,
+/// the per-combat slot, or Hex's grant on a Hexed card).
+fn ethereal_at_turn_end(c: &crate::cards::Card, player_has_hex: bool) -> bool {
+    crate::card_effects::card_ethereal_inst(c)
+        || c.combat_var(crate::cards::VarKey::EtherealThisCombat) != 0
+        || (player_has_hex
+            && c.affliction
+                .is_some_and(|a| a.kind == crate::card_afflictions::CardAfflictionKind::Hexed))
+}
+
+/// The exhaust buses of one end-of-turn ETHEREAL exhaust (`caused_by_ethereal
+/// = true`), the card already in the Exhaust pile: the hooks bus, then the
+/// relic-effects bus with the sweep marker JossPaper reads.
+fn ethereal_exhaust_dispatches(state: &mut CombatState, uid: crate::CardUid) {
+    // Bead `sts2-rs-zlx.1`: construct the typed `CardCtx` payload up
+    // front so the hooks bus and the relic-effects bus see the same
+    // exhausted card identity. Both buses are drained from here.
+    let exhaust_idx = uid.0.get() as usize - 1;
+    let exhausted_card = &state.cards[exhaust_idx];
+    let card_id = exhausted_card.card_id;
+    let card_tags = exhausted_card.tags;
+    let card_type = exhausted_card.card_type;
+    let hook_ctx = CardCtx {
+        card_id: Some(card_id),
+        card_uid: Some(uid),
+        card_tags,
+        card_type: Some(card_type),
+    };
+    // Bead `sts2-rs-umouk`: this is the end-of-turn ethereal sweep, so
+    // `caused_by_ethereal = true` — DarkEmbrace defers its draw to
+    // AfterTurnEnd instead of drawing per-card here.
+    hooks::dispatch_after_card_exhausted(state, &hook_ctx, true);
+    // Bead `sts2-rs-j87`: parallel relic-effects bus drain.
+    // Bead `sts2-rs-6ynt.3.3` activated the predicate above so this
+    // path now fires for real ETHEREAL hand cards (Dazed, Void,
+    // AscendersBane, Clumsy).
+    let exhaust_ctx = crate::relic_effects::CardEventCtx {
+        card_id,
+        card_uid: Some(uid),
+        target: None,
+        card_tags,
+        energy_spent: 0,
+    };
+    // Relic-side `caused_by_ethereal` marker (JossPaper defers its
+    // exhaust credit to AfterTurnEnd; see the field's doc-comment).
+    state.combat_log.exhaust_sweep_ethereal = true;
+    let _ = crate::relic_effects::dispatch_after_card_exhausted(state, &exhaust_ctx);
+    state.combat_log.exhaust_sweep_ethereal = false;
+}
+
 /// Run the player end-turn phase 2: resolve end-of-turn hand
 /// (ethereal expel + retain + flush) + per-pile `end_of_turn_cleanup`
 /// + fire `after_turn_end(PLAYER)` + final combat-end check.
@@ -2756,22 +2824,11 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
         .copied()
         .filter(|uid| {
             let idx = uid.0.get() as usize - 1;
+            // `CombatManager.DoTurnEnd` sorts a card with a turn-end-in-hand effect
+            // into that list only: its `OnTurnEndInHandWrapper` runs the effect and
+            // THEN exhausts it if Ethereal (F6 step36, `ethereal-turn-end-effect-order`).
             state.cards.get(idx).is_some_and(|c| {
-                // Bead `sts2-rs-ad53n`: per-instance `EtherealThisCombat`
-                // slot (set by MusicBox-style clone spawners) takes
-                // priority over the static CardId-keyed registry so a
-                // single Strike clone can be Ethereal without flipping
-                // the global registry for every Strike.
-                //
-                // Bead `sts2-rs-59atd`: `card_ethereal_inst` also honors an
-                // upgrade-aware `keyword_override` on the instance before
-                // falling back to the CardId registry.
-                crate::card_effects::card_ethereal_inst(c)
-                    || c.combat_var(crate::cards::VarKey::EtherealThisCombat) != 0
-                    || (player_has_hex
-                        && c.affliction.is_some_and(|a| {
-                            a.kind == crate::card_afflictions::CardAfflictionKind::Hexed
-                        }))
+                ethereal_at_turn_end(c, player_has_hex) && !has_turn_end_in_hand_effect(c.card_id)
             })
         })
         .collect();
@@ -2789,40 +2846,7 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
             crate::cards::PileKind::Exhaust,
         )
         .expect("uid was just observed in hand pile");
-        // Bead `sts2-rs-zlx.1`: construct the typed `CardCtx` payload up
-        // front so the hooks bus and the relic-effects bus see the same
-        // exhausted card identity. Both buses are drained from here.
-        let exhaust_idx = uid.0.get() as usize - 1;
-        let exhausted_card = &state.cards[exhaust_idx];
-        let card_id = exhausted_card.card_id;
-        let card_tags = exhausted_card.tags;
-        let card_type = exhausted_card.card_type;
-        let hook_ctx = CardCtx {
-            card_id: Some(card_id),
-            card_uid: Some(uid),
-            card_tags,
-            card_type: Some(card_type),
-        };
-        // Bead `sts2-rs-umouk`: this is the end-of-turn ethereal sweep, so
-        // `caused_by_ethereal = true` — DarkEmbrace defers its draw to
-        // AfterTurnEnd instead of drawing per-card here.
-        hooks::dispatch_after_card_exhausted(state, &hook_ctx, true);
-        // Bead `sts2-rs-j87`: parallel relic-effects bus drain.
-        // Bead `sts2-rs-6ynt.3.3` activated the predicate above so this
-        // path now fires for real ETHEREAL hand cards (Dazed, Void,
-        // AscendersBane, Clumsy).
-        let exhaust_ctx = crate::relic_effects::CardEventCtx {
-            card_id,
-            card_uid: Some(uid),
-            target: None,
-            card_tags,
-            energy_spent: 0,
-        };
-        // Relic-side `caused_by_ethereal` marker (JossPaper defers its
-        // exhaust credit to AfterTurnEnd; see the field's doc-comment).
-        state.combat_log.exhaust_sweep_ethereal = true;
-        let _ = crate::relic_effects::dispatch_after_card_exhausted(state, &exhaust_ctx);
-        state.combat_log.exhaust_sweep_ethereal = false;
+        ethereal_exhaust_dispatches(state, uid);
     }
 
     // Step 3: turn-end-in-hand effects (BURN / BECKON / BAD_LUCK / DEBT
@@ -2876,22 +2900,10 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
             // legacy unit-test fixtures push hand UIDs without a parallel
             // `state.cards` entry; `.get()` keeps those callers panic-free.
             let idx = uid.0.get() as usize - 1;
-            state.cards.get(idx).is_some_and(|card| {
-                matches!(
-                    card.card_id,
-                    cards::CardId::Beckon
-                        | cards::CardId::Burn
-                        | cards::CardId::BadLuck
-                        | cards::CardId::Debt
-                        | cards::CardId::Decay
-                        | cards::CardId::Doubt
-                        | cards::CardId::Regret
-                        | cards::CardId::Shame
-                        | cards::CardId::Toxic
-                        | cards::CardId::Infection
-                        | cards::CardId::Wither
-                )
-            })
+            state
+                .cards
+                .get(idx)
+                .is_some_and(|card| has_turn_end_in_hand_effect(card.card_id))
         })
         .collect();
     let cards_in_hand_at_turn_end: i32 = i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX);
@@ -2962,13 +2974,31 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
         // is structurally dead — the raw discard add is the only reachable
         // path. Bead `sts2-rs-p9sda` follow-up.
         if state.player.play.contains(&uid) {
-            cards::move_card(
-                &mut state.player,
-                uid,
-                cards::PileKind::Play,
-                cards::PileKind::Discard,
-            )
-            .expect("uid was just placed in play pile");
+            // `OnTurnEndInHandWrapper`: after the effect an Ethereal card is
+            // exhausted (`CardCmd.Exhaust(causedByEthereal: true)`), others go
+            // to the discard pile.
+            let ethereal = state
+                .cards
+                .get(uid.0.get() as usize - 1)
+                .is_some_and(|c| ethereal_at_turn_end(c, player_has_hex));
+            if ethereal && exhaust_may_begin(state) {
+                cards::move_card(
+                    &mut state.player,
+                    uid,
+                    cards::PileKind::Play,
+                    cards::PileKind::Exhaust,
+                )
+                .expect("uid was just placed in play pile");
+                ethereal_exhaust_dispatches(state, uid);
+            } else {
+                cards::move_card(
+                    &mut state.player,
+                    uid,
+                    cards::PileKind::Play,
+                    cards::PileKind::Discard,
+                )
+                .expect("uid was just placed in play pile");
+            }
         }
     }
 
@@ -7674,10 +7704,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
     // CalculatedVar hit count). Bumped here, after the body resolves, so a
     // card never counts itself (C# records the `WasEthereal` entry post-OnPlay).
     if crate::card_effects::card_ethereal_inst(&card) {
-        state.combat_log.ethereal_cards_played_this_combat = state
-            .combat_log
-            .ethereal_cards_played_this_combat
-            .saturating_add(1);
+        state.note_ethereal_card_played();
     }
 
     // Pinpoint costs 1 less per Skill played this turn (C#
@@ -7805,10 +7832,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
                 state.player.cards_played_this_turn[idx].saturating_add(1);
         }
         if crate::card_effects::card_ethereal_inst(&card) {
-            state.combat_log.ethereal_cards_played_this_combat = state
-                .combat_log
-                .ethereal_cards_played_this_combat
-                .saturating_add(1);
+            state.note_ethereal_card_played();
         }
         if card.card_type == crate::cards::CardType::Skill {
             state.discount_pinpoint_on_skill_played();
@@ -7938,10 +7962,7 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
             // Combat-long ETHEREAL tally also counts each Echo replay (mirrors
             // the per-turn tally above).
             if crate::card_effects::card_ethereal_inst(&card) {
-                state.combat_log.ethereal_cards_played_this_combat = state
-                    .combat_log
-                    .ethereal_cards_played_this_combat
-                    .saturating_add(1);
+                state.note_ethereal_card_played();
             }
             bump_brilliant_scarf(state);
             // (EchoForm now grants a single extra play, so there is no replay
@@ -8874,6 +8895,23 @@ pub fn player_should_play_blocked(state: &CombatState, card: &crate::cards::Card
             return true;
         }
     }
+    // C# `Normality.ShouldPlay` (the installed DLL): for the owner's own card
+    // and while Normality sits in the Hand pile, the play is refused once
+    // three card plays have STARTED this turn (`CardPlaysStarted`, so an
+    // in-flight Cascade/Havoc parent counts). The manual legality check counts
+    // finished plays; this is the shared autoplay gate. F6 step36
+    // (`normality-autoplay-gate`).
+    if state.player.card_plays_started_this_turn >= 3
+        && state.player.hand.iter().any(|&u| {
+            state
+                .cards
+                .iter()
+                .find(|c| c.uid == u)
+                .is_some_and(|c| c.card_id == crate::cards::CardId::Normality)
+        })
+    {
+        return true;
+    }
     if state.player.card_plays_started_this_turn >= 1
         && card
             .affliction
@@ -9010,10 +9048,7 @@ fn auto_play_tally_finished(
         .get(card_idx)
         .is_some_and(crate::card_effects::card_ethereal_inst)
     {
-        state.combat_log.ethereal_cards_played_this_combat = state
-            .combat_log
-            .ethereal_cards_played_this_combat
-            .saturating_add(1);
+        state.note_ethereal_card_played();
     }
     if card_type == crate::cards::CardType::Skill {
         state.discount_pinpoint_on_skill_played();

@@ -487,6 +487,29 @@ impl PyRunManager {
         crate::value_to_py(py, &emit_rm::card_value(&card)).map(Bound::unbind)
     }
 
+    /// A card's target shape (sts2-agent fork, F6 step36): `"Enemy"`,
+    /// `"AllEnemies"`, `"Self"`, `"None"` or `"Random"` (the registry's
+    /// `TargetType`), as a fresh card of `card_id` carries it. A host's
+    /// `CanPlay` is true for an `Enemy` card with no living enemy (the play
+    /// then has no target), which the combat's legal actions can't say.
+    /// Raises `ValueError` for an unknown card id.
+    #[staticmethod]
+    #[pyo3(signature = (card_id, upgraded = false))]
+    fn card_target_type(card_id: &str, upgraded: bool) -> PyResult<&'static str> {
+        use sts2_core::cards::TargetType as T;
+        let cid = card_id_from_str(card_id)?;
+        let card = sts2_core::lookup_card_factory()
+            .and_then(|f| f(cid, upgraded))
+            .ok_or_else(|| PyValueError::new_err(format!("no card factory for {card_id:?}")))?;
+        Ok(match card.target_type {
+            T::Enemy => "Enemy",
+            T::AllEnemies => "AllEnemies",
+            T::Self_ => "Self",
+            T::None => "None",
+            T::Random => "Random",
+        })
+    }
+
     /// A potion's target shape (sts2-agent fork): `"Self"`, `"AnyEnemy"`,
     /// `"AllEnemies"` or `"AnyPlayer"` (the engine's `PotionTargetType`, from the
     /// content registry), or `None` for an unregistered kind. A host offers an

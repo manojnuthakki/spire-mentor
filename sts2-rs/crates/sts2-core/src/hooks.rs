@@ -15943,6 +15943,32 @@ fn dispatch_after_turn_end_body(state: &mut CombatState, ctx: &TurnSideCtx) {
     debug_assert_skipped_relic_walk(state, "after_turn_end", |listener| {
         after_turn_end(state, listener, ctx).is_none()
     });
+    // F6 step36 (`dark-embrace-nodraw`): the game walks the owner's powers in
+    // order, each one's `AfterSideTurnEnd` awaited in turn. NoDraw removes
+    // itself there, so a Dark Embrace listed BEFORE it draws (its
+    // `CardPileCmd.Draw` reads `ShouldDraw`) while NoDraw is still on; one
+    // listed AFTER it draws once NoDraw has gone. The collected removal is
+    // applied below, ahead of the Dark Embrace draw: remember which draws the
+    // game's order still vetoes.
+    let mut de_draw_vetoed: SmallVec<[std::num::NonZeroU32; 2]> = SmallVec::new();
+    if ctx.side == Side::Player && power_kind_live(state, PowerKind::DarkEmbrace) {
+        let order = state.player_power_uids();
+        let no_draw_at = order.iter().position(|uid| {
+            state
+                .powers
+                .get_by_id(uid.0)
+                .is_some_and(|p| p.kind == PowerKind::NoDraw)
+        });
+        if let Some(no_draw_at) = no_draw_at {
+            for (at, uid) in order.iter().enumerate() {
+                if let Some(power) = state.powers.get_by_id(uid.0) {
+                    if power.kind == PowerKind::DarkEmbrace && at < no_draw_at {
+                        de_draw_vetoed.push(power.id);
+                    }
+                }
+            }
+        }
+    }
     apply_effects(state, &effects);
 
     // ── React: DarkEmbracePower.AfterTurnEnd(Player) ───────────────────
@@ -15969,6 +15995,9 @@ fn dispatch_after_turn_end_body(state: &mut CombatState, ctx: &TurnSideCtx) {
         for (power_id, draw_amount) in pending_de_draws {
             if let Some(power) = state.powers.iter_mut().find(|p| p.id == power_id) {
                 power.counter = 0;
+            }
+            if de_draw_vetoed.contains(&power_id) {
+                continue;
             }
             // Through the C# `ShouldDraw` gate (`CardPileCmd.cs:753`).
             let _ = state.draw_into_hand_card_effect(draw_amount);

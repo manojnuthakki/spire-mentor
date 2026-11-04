@@ -81,6 +81,17 @@ fn thievery_steal(state: &mut CombatState, owner: sts2_core::CreatureUid) {
     if state.is_over || state.player.current_hp <= 0 || state.gold <= 0 {
         return;
     }
+    // `CreatureCmd.Kill` strips the dead creature's powers (after SurprisePower's
+    // AfterDeath), so a Merc killed mid-move (Thorns on its attack) has no
+    // Thievery left to steal with. F6 step36 (`thievery-after-death`).
+    if state
+        .creatures
+        .iter()
+        .find(|c| c.id == owner.0)
+        .is_some_and(|c| c.current_hp <= 0)
+    {
+        return;
+    }
     let uids: smallvec::SmallVec<[sts2_core::PowerUid; 8]> = state
         .creatures
         .iter()
@@ -2499,6 +2510,31 @@ mod tests {
         thievery_steal(&mut state, owner);
         assert_eq!(state.gold, 0);
         assert_eq!(counter(&state), 55, "a broke player grants nothing");
+    }
+
+    /// F6 step36 (`thievery-after-death`): a Merc that died during its own move
+    /// (Thorns on its attack) has had its powers removed (`CreatureCmd.Kill`), so
+    /// the move's tail steals nothing.
+    #[test]
+    fn a_merc_killed_mid_move_steals_nothing() {
+        let (mut state, owner) = combat_with_one_enemy();
+        state.gold = 90;
+        sts2_core::card_effects::apply_power_to_creature(
+            &mut state,
+            owner,
+            PowerKind::Thievery,
+            20,
+        );
+        thievery_steal(&mut state, owner);
+        assert_eq!(state.gold, 70, "alive: steals");
+        state
+            .creatures
+            .iter_mut()
+            .find(|c| c.id == owner.0)
+            .unwrap()
+            .current_hp = 0;
+        thievery_steal(&mut state, owner);
+        assert_eq!(state.gold, 70, "dead: nothing more");
     }
 
     /// The merc's three move bodies all end in the steal
