@@ -7345,7 +7345,6 @@ impl CombatState {
         // over the whole power arena below could never match — skip it.
         let automation_present = self.powers.present_kinds().contains(PowerKind::Automation);
 
-        let mut auto_play_uids: smallvec::SmallVec<[CardUid; 4]> = smallvec::SmallVec::new();
         // Bead `sts2-rs-q6bix` (F-S): accumulated AutomationPower energy
         // gain, applied once after the per-card loop (deferred past the
         // `self.powers` borrow).
@@ -7383,6 +7382,41 @@ impl CombatState {
         // does not re-fire — the per-turn counter is already past 1).
         let mut iteration_draws: i32 = 0;
 
+        // C# `Hook.AfterCardDrawn` runs EVERY listener's `AfterCardDrawnEarly`
+        // (Hellraiser's auto-play of a drawn Strike) before any regular
+        // `AfterCardDrawn` (Confused's cost reroll, ...), and the second pass
+        // iterates nothing once the combat is over or ending
+        // (`IterateCombatHookListeners`). So an auto-play that downs the last
+        // enemy skips the card's regular riders: no Confused `combat_energy_costs`
+        // read (step39 `snecko-first-draw-costs`, 5LLRSWZ9EP). The auto-play used
+        // to run after the riders.
+        if has_alive_enemy {
+            for &uid in &drawn {
+                let is_strike = self
+                    .cards
+                    .get((uid.get() as usize).saturating_sub(1))
+                    .is_some_and(|c| c.has_tag(crate::cards::CardTag::Strike));
+                if !is_strike {
+                    continue;
+                }
+                // CardCmd.AutoPlay's entry guard precedes its Hand-to-Play move,
+                // targeting and callbacks.
+                if crate::combat_loop::combat_is_ending(self) {
+                    continue;
+                }
+                if let Some(pos) = self.player.hand.iter().position(|u| *u == uid) {
+                    self.player.hand.remove(pos);
+                    self.player.play.push(uid);
+                    crate::combat_loop::resolve_auto_played_card(
+                        self, uid, /*force_exhaust=*/ false,
+                    );
+                }
+            }
+            if crate::combat_loop::combat_is_ending(self) {
+                return;
+            }
+        }
+
         for uid in drawn {
             let idx = (uid.get() as usize).saturating_sub(1);
             let Some(card) = self.cards.get(idx) else {
@@ -7392,10 +7426,6 @@ impl CombatState {
             // Captured under the same immutable `card` borrow; consumed by the
             // Iteration first-status-of-turn gate below.
             let card_type = card.card_type;
-            // Short-circuit order (perf 2026-07-04): the gate flag is checked
-            // BEFORE the per-card predicate so the predicate (a pure read) is
-            // only evaluated when its consumer below could act on it.
-            let is_strike = has_alive_enemy && card.has_tag(crate::cards::CardTag::Strike);
             // Captured under the same immutable `card` borrow as `card_id`;
             // consumed by the Pagestorm accumulation below (bead `sts2-rs-4wppb`).
             let is_ethereal = pagestorm_amount > 0 && crate::card_effects::card_ethereal_inst(card);
@@ -7586,9 +7616,6 @@ impl CombatState {
                     iteration_draws = iteration_draws.saturating_add(iteration_amount);
                 }
             }
-            if has_alive_enemy && is_strike {
-                auto_play_uids.push(uid);
-            }
         }
         for _ in 0..automation_flashes {
             crate::event_log::flash_player_power(self, PowerKind::Automation);
@@ -7689,20 +7716,6 @@ impl CombatState {
         // hand draw runs in `PlayerTurnStart`, before the step-11 phase flip
         // — the HELLRAISER+1 quick-sweep divergence, seed 40), and (b)
         // spends energy, while C# AutoPlay is free.
-        for uid in auto_play_uids {
-            // The draw has finished; CardCmd.AutoPlay's entry guard precedes
-            // its Hand-to-Play move, targeting and callbacks.
-            if crate::combat_loop::combat_is_ending(self) {
-                continue;
-            }
-            if let Some(pos) = self.player.hand.iter().position(|u| *u == uid) {
-                self.player.hand.remove(pos);
-                self.player.play.push(uid);
-                crate::combat_loop::resolve_auto_played_card(
-                    self, uid, /*force_exhaust=*/ false,
-                );
-            }
-        }
     }
 
     /// Shuffle the player's draw pile in place and fire the

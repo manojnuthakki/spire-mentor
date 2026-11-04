@@ -216,6 +216,40 @@ mod tests {
         );
     }
 
+    /// C# `Hook.AfterCardDrawn` runs every listener's `AfterCardDrawnEarly`
+    /// (Hellraiser's auto-play) before any regular `AfterCardDrawn` (Confused's
+    /// cost reroll), and iterates no listener once the combat is ending. A drawn
+    /// Strike whose auto-play downs the last enemy therefore makes NO
+    /// `combat_energy_costs` read; with the enemy alive the card is rerolled
+    /// (step39 `snecko-first-draw-costs`, 5LLRSWZ9EP: the engine read the cost
+    /// first, one read ahead of C# into the next fight).
+    #[test]
+    fn a_strike_drawn_under_hellraiser_and_confused_rerolls_only_if_the_combat_lives() {
+        for (enemy_hp, kills) in [(1, true), (100, false)] {
+            let (mut state, _enemy) = state_with_enemy_and_player_mirror(enemy_hp);
+            let player_cuid = state.player.creature_uid.expect("mirror set");
+            apply_power_to_creature(&mut state, player_cuid, PowerKind::Hellraiser, 1);
+            apply_power_to_creature(&mut state, player_cuid, PowerKind::Confused, 1);
+            let strike_uid = push_strike_in_draw(&mut state);
+            let cost_before = state.run_rng.combat_energy_costs.counter();
+            state.draw_into_hand(1);
+            assert!(
+                state.player.discard.contains(&strike_uid),
+                "hp {enemy_hp}: the Strike was auto-played"
+            );
+            assert_eq!(
+                sts2_core::combat_loop::combat_is_ending(&state),
+                kills,
+                "hp {enemy_hp}"
+            );
+            assert_eq!(
+                state.run_rng.combat_energy_costs.counter() - cost_before,
+                u32::from(!kills),
+                "hp {enemy_hp}: Confused reads a cost only while the combat is live"
+            );
+        }
+    }
+
     /// Bead `sts2-rs-bsj93`, two-enemy targeting:
     /// With two alive enemies, the Hellraiser auto-play target is chosen by
     /// rolling `CombatTargets.NextItem` over the alive list (C#
