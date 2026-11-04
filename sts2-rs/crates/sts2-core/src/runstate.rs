@@ -5127,42 +5127,67 @@ impl RunState {
         upgraded
     }
 
-    /// Downgrade up to `count` random upgraded cards in the run's master
-    /// deck. Returns the number actually downgraded (`<= count`; fewer
-    /// when the deck holds fewer than `count` upgraded cards). The
-    /// mirror of [`Self::upgrade_random_cards`]: same rewards RNG
-    /// stream + partial Fisher-Yates, but the candidate set is the
-    /// *upgraded* deck indices and each pick is reverted via
-    /// [`crate::cards::Card::downgrade`].
-    ///
-    /// Used by the `Reflections` event (`downgrade 2, upgrade 4`).
-    pub fn downgrade_random_cards(&mut self, count: usize) -> usize {
-        if count == 0 {
-            return 0;
-        }
+    /// Downgrade up to `count` upgraded cards of the run's master deck, each
+    /// picked by `event_rng.NextItem(list)` with the pick removed from the list
+    /// (C# `Reflections.TouchAMirror`, first loop: `upgradedCards` is the deck's
+    /// upgraded cards in deck order; `base.Rng.NextItem` reads one
+    /// `NextInt(0, Count)`; the card leaves the list, then `CardCmd.Downgrade`).
+    /// Draws the event's own stream, never `rng.rewards`. Returns the number
+    /// downgraded (`<= count`).
+    pub fn downgrade_random_cards_next_item(
+        &mut self,
+        count: usize,
+        event_rng: &mut crate::dotnet_rng::Rng,
+    ) -> usize {
         let mut candidates: Vec<usize> = self
             .master_deck
             .iter()
             .enumerate()
             .filter_map(|(i, c)| c.upgraded.then_some(i))
             .collect();
-        if candidates.is_empty() {
-            return 0;
-        }
-        let rng = &mut self.rng.rewards;
-        let take = count.min(candidates.len());
-        for i in 0..take {
-            let len_remaining = (candidates.len() - i) as i32;
-            let j = i + rng.next_int_exclusive(0, len_remaining) as usize;
-            candidates.swap(i, j);
-        }
         let mut downgraded = 0_usize;
-        for &deck_idx in candidates.iter().take(take) {
+        for _ in 0..count {
+            if candidates.is_empty() {
+                break;
+            }
+            let at = event_rng.next_int_exclusive(0, candidates.len() as i32) as usize;
+            let deck_idx = candidates.remove(at);
             if self.master_deck[deck_idx].downgrade() {
                 downgraded += 1;
             }
         }
         downgraded
+    }
+
+    /// Upgrade up to `count` upgradable cards of the master deck, each picked by
+    /// `event_rng.NextItem(list)` with the pick removed (C# `Reflections.
+    /// TouchAMirror`, second loop). The list is built AFTER the downgrades, so a
+    /// card just downgraded is a candidate; deck order, no `StableShuffle` and no
+    /// `Rng.Niche`. Always immediate (never interactive). Returns the number
+    /// upgraded (`<= count`).
+    pub fn upgrade_random_cards_next_item(
+        &mut self,
+        count: usize,
+        event_rng: &mut crate::dotnet_rng::Rng,
+    ) -> usize {
+        let mut candidates: Vec<usize> = self
+            .master_deck
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| c.is_upgradable().then_some(i))
+            .collect();
+        let mut upgraded = 0_usize;
+        for _ in 0..count {
+            if candidates.is_empty() {
+                break;
+            }
+            let at = event_rng.next_int_exclusive(0, candidates.len() as i32) as usize;
+            let deck_idx = candidates.remove(at);
+            if self.master_deck[deck_idx].upgrade() {
+                upgraded += 1;
+            }
+        }
+        upgraded
     }
 
     /// Upgrade up to `count` random non-upgraded cards of the given

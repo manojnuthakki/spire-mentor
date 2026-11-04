@@ -56,8 +56,13 @@ fn reflections_touch(state: &mut RunState) -> EventOutcome {
     // the always-immediate primitive, NOT the interactive-aware
     // `upgrade_random_cards` (which would queue a card_select under the
     // workbench/lockstep `interactive_card_upgrade` flag).
-    let downgraded = state.downgrade_random_cards(2);
-    let upgraded = state.upgrade_random_cards_stable(4);
+    // Both loops draw the event's own `base.Rng` (`EventModel.cs:238`, seed +
+    // hash("REFLECTIONS")), one `NextItem` per card; this is the event's first
+    // and only stream read (no `GenerateInitialOptions` draw), so a fresh
+    // stream at cursor 0 matches. Neither `Rng.Rewards` nor `Rng.Niche` is read.
+    let mut rng = Rng::with_name(state.rng.seed, "REFLECTIONS");
+    let downgraded = state.downgrade_random_cards_next_item(2, &mut rng);
+    let upgraded = state.upgrade_random_cards_next_item(4, &mut rng);
     EventOutcome::finished(format!(
         "Touched a mirror — downgraded {downgraded}, upgraded {upgraded} card(s)."
     ))
@@ -3001,6 +3006,91 @@ mod tests {
         // Fresh deck has nothing to downgrade; exactly 4 get upgraded.
         let upgraded = rs.master_deck.iter().filter(|c| c.upgraded).count();
         assert_eq!(upgraded, 4);
+    }
+
+    /// Independent model of C# `Reflections.TouchAMirror`: `base.Rng.NextItem`
+    /// (one `NextInt(0, Count)` per pick, the pick removed from the list), the
+    /// downgrade pass over the upgraded cards, then the upgrade pass over the
+    /// cards upgradable AFTER the downgrades. Returns the final upgraded flags.
+    fn reflections_model(seed: i32, flags: &[bool]) -> Vec<bool> {
+        let mut rng = Rng::with_name(seed, "REFLECTIONS");
+        let mut f = flags.to_vec();
+        let mut up: Vec<usize> = (0..f.len()).filter(|&i| f[i]).collect();
+        for _ in 0..2 {
+            if up.is_empty() {
+                break;
+            }
+            let at = rng.next_int_exclusive(0, up.len() as i32) as usize;
+            f[up.remove(at)] = false;
+        }
+        let mut able: Vec<usize> = (0..f.len()).filter(|&i| !f[i]).collect();
+        for _ in 0..4 {
+            if able.is_empty() {
+                break;
+            }
+            let at = rng.next_int_exclusive(0, able.len() as i32) as usize;
+            f[able.remove(at)] = true;
+        }
+        f
+    }
+
+    /// Reflections' Touch a Mirror draws the EVENT's own stream (`base.Rng`,
+    /// one `NextItem` per card, picks removed), never `Rng.Rewards` or
+    /// `Rng.Niche` (step39 `reflections-rng-targets`: the engine used a rewards
+    /// partial Fisher-Yates for the downgrades and a niche `StableShuffle` for
+    /// the upgrades, so the cards and both shared cursors differed).
+    #[test]
+    fn reflections_touch_draws_the_event_stream_one_next_item_per_card() {
+        let flags = [
+            false, true, false, false, true, false, true, false, false, false,
+        ];
+        for seed in [1_i32, 7, 123_456, 98_765_432] {
+            let mut rs = fresh_state();
+            rs.rng.seed = seed;
+            seed_deck(&mut rs, flags.len());
+            for (card, &up) in rs.master_deck.iter_mut().zip(flags.iter()) {
+                if up {
+                    assert!(card.upgrade());
+                }
+            }
+            let (rewards, niche) = (rs.rng.rewards.counter(), rs.rng.niche.counter());
+            let outcome = (REFLECTIONS.options[0].handler)(&mut rs);
+            assert!(outcome.finished);
+            let got: Vec<bool> = rs.master_deck.iter().map(|c| c.upgraded).collect();
+            assert_eq!(got, reflections_model(seed, &flags), "seed {seed}");
+            assert_eq!(
+                rs.rng.rewards.counter(),
+                rewards,
+                "seed {seed}: rewards stream"
+            );
+            assert_eq!(rs.rng.niche.counter(), niche, "seed {seed}: niche stream");
+        }
+    }
+
+    /// Negative controls: no upgraded card (the downgrade pass draws nothing and
+    /// changes nothing) and fewer than four upgradable cards (all of them upgrade
+    /// and the pass stops, as C#'s `Count <= 0` break does).
+    #[test]
+    fn reflections_touch_short_lists_stop_without_extra_draws() {
+        for (n, flags) in [
+            (0_usize, vec![false; 8]),
+            (1, vec![true, true, true]),
+            (2, vec![true, false]),
+        ] {
+            let mut rs = fresh_state();
+            rs.rng.seed = 42 + n as i32;
+            seed_deck(&mut rs, flags.len());
+            for (card, &up) in rs.master_deck.iter_mut().zip(flags.iter()) {
+                if up {
+                    assert!(card.upgrade());
+                }
+            }
+            let _ = (REFLECTIONS.options[0].handler)(&mut rs);
+            let got: Vec<bool> = rs.master_deck.iter().map(|c| c.upgraded).collect();
+            assert_eq!(got, reflections_model(42 + n as i32, &flags), "case {n}");
+            assert_eq!(rs.rng.rewards.counter(), 0, "case {n}");
+            assert_eq!(rs.rng.niche.counter(), 0, "case {n}");
+        }
     }
 
     #[test]
