@@ -8997,7 +8997,12 @@ fn the_boot_skips_self_damage() {
 /// A shell with `counter` already absorbed this turn, on a fresh enemy.
 fn shell_enemy(state: &mut CombatState, amount: i32, counter: i32) -> crate::CreatureUid {
     let uid = push_enemy(state, 9, 50);
-    crate::card_effects::apply_power_to_creature(state, uid, crate::PowerKind::HardenedShell, amount);
+    crate::card_effects::apply_power_to_creature(
+        state,
+        uid,
+        crate::PowerKind::HardenedShell,
+        amount,
+    );
     for p in state.powers.iter_mut() {
         if p.kind == crate::PowerKind::HardenedShell {
             p.counter = counter;
@@ -9038,12 +9043,24 @@ fn hardened_shell_overshot_by_the_boot_heals_the_next_hit() {
     let mut state = fresh_state_with_player(70, 70);
     give_player_relic(&mut state, RelicKind::TheBoot);
     let uid = shell_enemy(&mut state, 20, 16);
-    assert_eq!(hit3(&mut state, uid), 5, "3 under the cap, raised to 5 by The Boot");
+    assert_eq!(
+        hit3(&mut state, uid),
+        5,
+        "3 under the cap, raised to 5 by The Boot"
+    );
     assert_eq!(shell_counter(&state), 21);
-    assert_eq!(hit3(&mut state, uid), -1, "cap 20-21 = -1: the hit heals one HP");
+    assert_eq!(
+        hit3(&mut state, uid),
+        -1,
+        "cap 20-21 = -1: the hit heals one HP"
+    );
     assert_eq!(shell_counter(&state), 20, "the accumulator takes the -1");
     assert_eq!(hit3(&mut state, uid), 0, "cap 0: nothing");
-    let hp = state.creatures.iter().find(|c| c.id == uid.0).map(|c| c.current_hp);
+    let hp = state
+        .creatures
+        .iter()
+        .find(|c| c.id == uid.0)
+        .map(|c| c.current_hp);
     assert_eq!(hp, Some(50 - 4), "5 lost, 1 healed");
 }
 
@@ -9069,13 +9086,21 @@ fn hardened_shell_exhausted_or_fresh_under_the_boot() {
     let mut state = fresh_state_with_player(70, 70);
     give_player_relic(&mut state, RelicKind::TheBoot);
     let uid = shell_enemy(&mut state, 20, 20);
-    assert_eq!(hit3(&mut state, uid), 0, "exhausted: the cap 0 loses nothing");
+    assert_eq!(
+        hit3(&mut state, uid),
+        0,
+        "exhausted: the cap 0 loses nothing"
+    );
     assert_eq!(shell_counter(&state), 20);
     let mut fresh = fresh_state_with_player(70, 70);
     give_player_relic(&mut fresh, RelicKind::TheBoot);
     let uid = shell_enemy(&mut fresh, 20, 0);
     for _ in 0..3 {
-        assert_eq!(hit3(&mut fresh, uid), 5, "each hit raised to 5, within budget");
+        assert_eq!(
+            hit3(&mut fresh, uid),
+            5,
+            "each hit raised to 5, within budget"
+        );
     }
     assert_eq!(shell_counter(&fresh), 15);
 }

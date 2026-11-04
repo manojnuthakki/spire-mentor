@@ -2159,12 +2159,19 @@ mod tests {
         let mut twin = rs.rng.rewards.clone();
         let before = rs.rng.rewards.counter();
         battleworn_dummy_resume(&mut rs, BattlewornDummySetting::Setting1, true);
-        assert_eq!(rs.rng.rewards.counter() - before, 1, "one int read, no rarity float");
+        assert_eq!(
+            rs.rng.rewards.counter() - before,
+            1,
+            "one int read, no rarity float"
+        );
         let pool = crate::potions::all::roll_event_potion_full_pool(&mut twin, rs.character_id);
         let Reward::Potion(p) = &rs.pending_rewards[0] else {
             panic!("a potion reward");
         };
-        assert_eq!(p.potion_kind, pool, "the item the full pool's one read picks");
+        assert_eq!(
+            p.potion_kind, pool,
+            "the item the full pool's one read picks"
+        );
         assert!(p.potion_kind.is_some());
     }
 
