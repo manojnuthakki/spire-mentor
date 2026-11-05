@@ -2570,8 +2570,11 @@ fn test_subject_skull_bash_effect(state: &mut CombatState, _owner: CreatureUid) 
 /// BURNING_GROWL applies `StrengthPower(BurningGrowlStrengthGain)` to self
 /// (C# `BurningGrowlMove` `PowerCmd.Apply<StrengthPower>(base.Creature,
 /// BurningGrowlStrengthGain, …)`) and adds `BurningGrowlBurnCount` Burn
-/// cards to the player's hand (C# `CardPileCmd.AddToCombatAndPreview<Burn>(
-/// player.PlayerCombatState, PileType.Hand, BurningGrowlBurnCount)`).
+/// cards to the player's DISCARD pile (C# `TestSubject.BurningGrowlMove`:
+/// `CardPileCmd.AddToCombatAndPreview<Burn>(targets, PileType.Discard,
+/// BurningGrowlBurnCount)`, then the Strength; the DLL at sha256
+/// `08faee0c…7238` shows `PileType.Discard`, unlike `MechaKnight`'s
+/// FLAMETHROWER which names `PileType.Hand`). Step41 `burning-growl-pile`.
 /// Non-ascension: Strength = 2, Burn = 3 (ascension is identity at pin
 /// `01c094d`). Bead `sts2-rs-jnf4a` slice — the BURNING_GROWL_MOVE state
 /// itself is unreachable until the AdaptablePower.AfterDeath → DeadState
@@ -2597,7 +2600,7 @@ fn test_subject_burning_growl_effect(state: &mut CombatState, owner: CreatureUid
         test_subject::BURNING_GROWL_BURN_COUNT,
     );
     for _ in 0..burns {
-        let _ = crate::cards::status::spawn_burn(state, PileKind::Hand);
+        let _ = crate::cards::status::spawn_burn(state, PileKind::Discard);
     }
 }
 
@@ -3110,7 +3113,7 @@ mod tests {
     /// * MULTI_CLAW self-loop.
     /// * LACERATE → POUNCE → GROWL → LACERATE chain.
     /// Also verifies BURNING_GROWL's intent payload and effect_fn
-    /// (Strength 2 + 3 Burn cards into hand).
+    /// (Strength 2 + 3 Burn cards into the discard pile).
     #[test]
     fn test_subject_phase3_state_machine_scaffold_shape() {
         use sts2_core::cards::CardId;
@@ -3174,14 +3177,19 @@ mod tests {
             );
         }
 
-        // BURNING_GROWL effect: +2 Strength to self, 3 Burn into hand.
+        // BURNING_GROWL effect: +2 Strength to self, 3 Burn into the DISCARD
+        // pile (`TestSubject.BurningGrowlMove`:
+        // `AddToCombatAndPreview<Burn>(targets, PileType.Discard, ...)`; the
+        // hand is untouched). Step41 `burning-growl-pile`.
         let mut combat = combat_with_monster(sts2_core::MonsterKind::TestSubject, "TestSubject");
         let owner = sts2_core::CreatureUid::new(1).expect("nz");
         let pre_hand = combat.player.hand.len();
+        let pre_discard = combat.player.discard.len();
         test_subject_burning_growl_effect(&mut combat, owner);
         assert_eq!(self_power(&combat, PowerKind::Strength), 2);
-        assert_eq!(combat.player.hand.len(), pre_hand + 3);
-        for &uid in combat.player.hand.iter().skip(pre_hand) {
+        assert_eq!(combat.player.hand.len(), pre_hand, "no Burn in the hand");
+        assert_eq!(combat.player.discard.len(), pre_discard + 3);
+        for &uid in combat.player.discard.iter().skip(pre_discard) {
             assert_eq!(
                 combat.cards[uid.0.get() as usize - 1].card_id,
                 CardId::Burn,
