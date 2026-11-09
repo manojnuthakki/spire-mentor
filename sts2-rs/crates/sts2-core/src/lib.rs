@@ -3824,6 +3824,12 @@ pub struct CombatState {
     /// surfacing again (C# `DoSelectCards`, `RunSimulator.cs:2165`). Raised by
     /// the resume path, lowered when it returns. `false` at rest (not hashed).
     pub autoplay_inline_resolve: bool,
+    /// C# `CardSelectCmd.PushSelector(new VakuuCardSelector())` is in scope
+    /// (Whispering Earring's Late AutoPrePlay pass, F6 step42): every card
+    /// select a play inside it opens resolves inline to the FIRST `maxSelect`
+    /// options (`options.Take(maxSelect)`), not the ordinary headless minimum.
+    /// Raised and lowered inside one pass; `false` at rest (not hashed).
+    pub vakuu_selector_active: bool,
     pub combat_log: TurnEvents,
 
     /// Cards stolen from the run deck this combat by `SwipePower` thieves
@@ -4106,6 +4112,7 @@ impl Default for CombatState {
             pending_end_turn_resume: None,
             pending_autoplay_resume: None,
             autoplay_inline_resolve: false,
+            vakuu_selector_active: false,
             combat_log: TurnEvents::default(),
             swipe_stolen: Vec::new(),
             escaped_creatures: 0,

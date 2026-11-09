@@ -2118,7 +2118,104 @@ fn finish_normal_pass(
             return StepResult::PendingChoice;
         }
     }
+    if !state.is_over {
+        run_whispering_earring_late_pass(state);
+    }
     finish_turn_start_tail(state)
+}
+
+/// Max cards Whispering Earring plays (`WhisperingEarring.maxCardsToPlay`).
+const WHISPERING_EARRING_MAX_CARDS: u32 = 13;
+
+/// `WhisperingEarring.AfterAutoPrePlayPhaseEnteredLate` (F6 step42, DLL sha256
+/// `08faee0c…7238`): on the owner's first turn (`TurnNumber <= 1`), with
+/// `VakuuCardSelector` pushed, repeat up to 13 times, while the combat is not
+/// over or ending and the turn has not changed: take the FIRST card in Hand
+/// that `CanPlay()`, pick its target (`AnyEnemy`: the first hittable enemy, no
+/// RNG read; `AnyPlayer`: the owner; `AnyAlly`: a random other player, absent
+/// here), `SpendResources()` (energy, stars; X takes all energy) and
+/// `CardCmd.AutoPlay(..., skipXCapture: true)`. The pass runs after the Early
+/// (Bombardment) and Normal (Mayhem, Imbued) passes, once per player turn start.
+/// Every select the plays open resolves inline to the first `maxSelect` options.
+fn run_whispering_earring_late_pass(state: &mut CombatState) {
+    if state.round > 1
+        || !state
+            .relics
+            .iter()
+            .any(|r| !r.is_melted && r.kind == crate::RelicKind::WhisperingEarring)
+    {
+        return;
+    }
+    let prev_inline = state.autoplay_inline_resolve;
+    let prev_vakuu = state.vakuu_selector_active;
+    state.autoplay_inline_resolve = true;
+    state.vakuu_selector_active = true;
+    let start_round = state.round;
+    let mut played = 0u32;
+    while played < WHISPERING_EARRING_MAX_CARDS
+        && !combat_is_ending(state)
+        && state.round == start_round
+        && state.pending_choice.is_none()
+    {
+        let Some((uid, target)) = whispering_earring_next_card(state) else {
+            break;
+        };
+        let idx = uid.0.get() as usize - 1;
+        let (energy_spent, star_cost) = {
+            let card = &state.cards[idx];
+            let stars = crate::effective_star_cost_in_combat(state, card);
+            let energy = if card.is_x_cost() {
+                i32::from(state.player.energy.max(0))
+            } else {
+                crate::hooks::effective_card_cost(state, uid)
+            };
+            (energy, stars)
+        };
+        state.player.energy = state
+            .player
+            .energy
+            .saturating_sub(i8::try_from(energy_spent.clamp(0, 127)).unwrap_or(127))
+            .max(0);
+        if star_cost > 0 {
+            state.player.stars = state
+                .player
+                .stars
+                .saturating_sub(i8::try_from(star_cost.clamp(0, 127)).unwrap_or(127))
+                .max(0);
+        }
+        let _ = crate::cards::move_card(&mut state.player, uid, PileKind::Hand, PileKind::Play);
+        resolve_auto_played_card_paid(state, uid, target, false, Some(energy_spent));
+        resolve_inline_auto_play_choices(state);
+        played += 1;
+    }
+    state.autoplay_inline_resolve = prev_inline;
+    state.vakuu_selector_active = prev_vakuu;
+}
+
+/// The Late pass's next card and target: the first Hand card, in hand order,
+/// that the legal-action gates accept (energy, stars, unplayable, ally, hook
+/// blocks: the engine's `CanPlay()`), with the first live enemy as its target.
+fn whispering_earring_next_card(
+    state: &CombatState,
+) -> Option<(crate::CardUid, Option<CreatureUid>)> {
+    // `legal_actions` only lists plays in the play phase; this pass runs in the
+    // turn-start phase, so ask it as if the play phase had begun.
+    let mut probe = state.clone();
+    probe.phase = CombatPhase::PlayerPlayPhase;
+    let mut best: Option<(u8, Option<u8>)> = None;
+    for a in crate::legal_actions(&probe) {
+        if let crate::Action::PlayCard { hand_index, target } = a {
+            if best.is_none_or(|(h, t)| {
+                hand_index < h || (hand_index == h && target.zip(t).is_some_and(|(x, y)| x < y))
+            }) {
+                best = Some((hand_index, target));
+            }
+        }
+    }
+    let (hi, target) = best?;
+    let uid = *state.player.hand.get(usize::from(hi))?;
+    let target_uid = target.and_then(|t| state.enemy_uids.get(usize::from(t)).copied());
+    Some((uid, target_uid))
 }
 
 /// Turn-start tail (steps 10-11) shared by the normal cluster path and the
@@ -7826,6 +7923,8 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
         if state.pending_choice.is_some() {
             resolve_inline_auto_play_choices(state);
         }
+        // F6 step42: the replay's own `Enchantment.OnPlay` (per iteration).
+        dispatch_enchantment_on_play_iteration(state, card_uid);
         if relic_channel_live(state, PlannedChannel::AfterCardPlayed) {
             let _ = crate::relic_effects::dispatch_after_card_played(state, &played_ctx);
         }
@@ -8999,7 +9098,13 @@ fn resolve_inline_auto_play_choices(state: &mut CombatState) {
                 .as_ref()
                 .expect("checked is_some above");
             if pc.max_select > 1 {
-                let target = usize::from(pc.min_select).max(1);
+                // `VakuuCardSelector.GetSelectedCards` is `options.Take(maxSelect)`
+                // (F6 step42); the ordinary headless drive takes `max(min, 1)`.
+                let target = if state.vakuu_selector_active {
+                    usize::from(pc.max_select).min(pc.options.len())
+                } else {
+                    usize::from(pc.min_select).max(1)
+                };
                 if pc.picked.len() >= target {
                     // Target satisfied: FINALIZE (runs the kind-resolver over
                     // the accumulated set, clearing the choice).
@@ -9109,6 +9214,22 @@ pub(crate) fn resolve_auto_played_card_at_target(
     top_uid: crate::CardUid,
     target_override: Option<CreatureUid>,
     force_exhaust: bool,
+) {
+    resolve_auto_played_card_paid(state, top_uid, target_override, force_exhaust, None);
+}
+
+/// [`resolve_auto_played_card_at_target`] for a card whose resources the caller
+/// already spent (C# `CardModel.SpendResources()` then
+/// `CardCmd.AutoPlay(..., skipXCapture: true)`, Whispering Earring's Late pass,
+/// F6 step42): `paid` is the energy spent, which is the play's energy value and
+/// the X the card reads, in place of "the energy left now" (X cost) or the
+/// effective cost. `None` is the ordinary free auto-play.
+pub(crate) fn resolve_auto_played_card_paid(
+    state: &mut CombatState,
+    top_uid: crate::CardUid,
+    target_override: Option<CreatureUid>,
+    force_exhaust: bool,
+    paid: Option<i32>,
 ) {
     // CardCmd.AutoPlay refuses at ENTRY, including a dead owner. This is a
     // new command (possibly a precollected/resumed sibling), never a finish
@@ -9337,7 +9458,9 @@ pub(crate) fn resolve_auto_played_card_at_target(
     // `combat_targets` reads, desyncing the stream for the rest of combat
     // (seed 1376: a DistilledChaos-auto-played Volley → combat_targets cs=2
     // rs=1). Stamp it here (no energy drain, mirroring C#).
-    if state.cards[top_idx].is_x_cost() {
+    if let Some(spent) = paid {
+        state.cards[top_idx].energy_spent = spent;
+    } else if state.cards[top_idx].is_x_cost() {
         state.cards[top_idx].energy_spent = i32::from(state.player.energy.max(0));
     } else {
         // GH #741: a non-X auto-play is free (C# `EnergySpent = 0`) but its
@@ -9486,7 +9609,7 @@ pub(crate) fn resolve_auto_played_card_at_target(
     // `resolved_cost` mirrors the hand-play path (X-cost → just-stamped
     // `energy_spent`, else the modifier-resolved `effective_card_cost`); C#
     // `EnergyCost.GetResolved()`.
-    let auto_resolved_cost = if state.cards[top_idx].is_x_cost() {
+    let auto_resolved_cost = if paid.is_some() || state.cards[top_idx].is_x_cost() {
         state.cards[top_idx].energy_spent
     } else {
         crate::hooks::effective_card_cost(state, top_uid)
@@ -9890,6 +10013,17 @@ fn park_auto_play_finish(state: &mut CombatState, fin: AutoPlayFinish, force_exh
 /// select is answered). Statement order is unchanged from the former inline
 /// body, so driving a surfaced choice first-legal reproduces the prior
 /// behavior byte-for-byte.
+/// One play iteration's `Enchantment.OnPlay` leg (F6 step42). C# runs it inside
+/// `OnPlayWrapper`'s per-iteration loop only while the owner is alive
+/// (`CardModel.cs` state machine: `if (!Owner.Creature.IsDead) { ...
+/// Enchantment.OnPlay ... }`).
+fn dispatch_enchantment_on_play_iteration(state: &mut CombatState, card_uid: crate::CardUid) {
+    if state.player.current_hp <= 0 {
+        return;
+    }
+    crate::enchantment_hooks::dispatch_on_card_played(state, card_uid);
+}
+
 pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFinish) {
     finish_auto_played_card_impl(state, fin, false);
 }
@@ -9947,6 +10081,12 @@ pub(crate) fn finish_auto_played_card_impl(
         card_type: Some(top_card_type),
     };
     if !replay_resume {
+        // F6 step42 (`autoplay-enchantment-on-play`): C# `CardModel.OnPlayWrapper`
+        // runs `Enchantment.OnPlay` after the body for auto-plays too (same
+        // wrapper, `IsAutoPlay` only a flag): Corrupted's owner damage, Swift's
+        // draw, Sown's energy, Momentum. Before the play counters and both
+        // `AfterCardPlayed` buses, like the manual `finish_card_play`.
+        dispatch_enchantment_on_play_iteration(state, top_uid);
         // Bead `sts2-rs-rnyme` follow-up: record this auto-play in the
         // combat-wide counter NOW — after the on-play dispatch + inline choice
         // resolution, before `AfterCardPlayed` — mirroring C#
@@ -10135,6 +10275,9 @@ pub(crate) fn finish_auto_played_card_impl(
                 resolve_inline_auto_play_choices(state);
             }
             post_only = false;
+            // Each replay iteration runs its own `Enchantment.OnPlay`
+            // (`OnPlayWrapper`'s loop body), after its body and selection.
+            dispatch_enchantment_on_play_iteration(state, top_uid);
             state.combat_log.player_card_plays_this_combat = state
                 .combat_log
                 .player_card_plays_this_combat
@@ -13050,6 +13193,74 @@ mod tests {
             0,
             "the owner's turn start restores every free card"
         );
+    }
+
+    /// F6 step42 (`autoplay-enchantment-on-play`): an auto-played Corrupted
+    /// card runs `Enchantment.OnPlay` (2 unblockable owner damage) like a
+    /// hand play; an uncorrupted control loses nothing.
+    #[test]
+    fn auto_play_runs_the_enchantment_on_play_callback() {
+        for corrupted in [false, true] {
+            let mut state = state_with_pinned_top_card(crate::cards::CardId::DefendIronclad);
+            let _ = state.init_player_creature();
+            if corrupted {
+                state.cards[0].set_enchantment(crate::cards::EnchantmentId::Corrupted, 1);
+            }
+            let hp = state.player.current_hp;
+            assert!(auto_play_card_from_draw_top(&mut state, false));
+            assert_eq!(
+                state.player.current_hp,
+                hp - if corrupted { 2 } else { 0 },
+                "corrupted={corrupted}"
+            );
+        }
+    }
+
+    fn earring_state(round: u16, relic: bool, energy: i8) -> CombatState {
+        let mut state = state_with_pinned_top_card(crate::cards::CardId::DefendIronclad);
+        let _ = state.init_player_creature();
+        state.round = round;
+        state.phase = CombatPhase::PlayerTurnStart;
+        state.player.energy = energy;
+        state.player.pinned_top.clear();
+        for _ in 0..3 {
+            let u = state.player.draw.remove(0);
+            state.player.hand.push(u);
+        }
+        if relic {
+            state.relics.push(crate::Relic {
+                id: NonZeroU32::new(1).expect("non-zero"),
+                kind: crate::RelicKind::WhisperingEarring,
+                counter: 0,
+                is_wax: false,
+                is_melted: false,
+            });
+        }
+        state
+    }
+
+    /// F6 step42 (`whispering-earring-autoplay`): on turn 1 the Late pass pays for
+    /// and plays the first playable cards in hand order until the energy is gone
+    /// (`AfterAutoPrePlayPhaseEnteredLate`); no relic, or a later turn, plays none.
+    #[test]
+    fn whispering_earring_late_pass_plays_the_opening_hand_paid() {
+        let mut state = earring_state(1, true, 2);
+        run_whispering_earring_late_pass(&mut state);
+        assert_eq!(state.player.energy, 0, "two 1-cost cards paid for");
+        assert_eq!(state.player.hand.len(), 1, "the unaffordable third stays");
+        assert_eq!(state.player.discard.len(), 2);
+        assert_eq!(
+            state.player.hand[0].get(),
+            3,
+            "hand order: cards 1 and 2 went first"
+        );
+        assert!(!state.vakuu_selector_active && !state.autoplay_inline_resolve);
+        for (round, relic) in [(2u16, true), (1, false)] {
+            let mut control = earring_state(round, relic, 2);
+            run_whispering_earring_late_pass(&mut control);
+            assert_eq!(control.player.energy, 2, "round {round} relic {relic}");
+            assert_eq!(control.player.hand.len(), 3);
+        }
     }
 
     #[test]
