@@ -2205,9 +2205,15 @@ fn whispering_earring_next_card(
     let mut best: Option<(u8, Option<u8>)> = None;
     for a in crate::legal_actions(&probe) {
         if let crate::Action::PlayCard { hand_index, target } = a {
-            if best.is_none_or(|(h, t)| {
-                hand_index < h || (hand_index == h && target.zip(t).is_some_and(|(x, y)| x < y))
-            }) {
+            // Lowest hand index first; for one card, the lowest enemy index
+            // (the first hittable enemy).
+            let better = match best {
+                None => true,
+                Some((h, t)) => {
+                    hand_index < h || (hand_index == h && target.zip(t).is_some_and(|(x, y)| x < y))
+                }
+            };
+            if better {
                 best = Some((hand_index, target));
             }
         }
