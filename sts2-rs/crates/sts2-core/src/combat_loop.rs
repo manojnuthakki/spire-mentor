@@ -10187,6 +10187,11 @@ pub(crate) fn finish_auto_played_card_impl(
         // before `AfterCardPlayed`), and once per replay below. RightHandHand reads
         // the `EnergyValue` stamped above (GH #741 follow-up).
         crate::card_effects::fire_late_effects(state, &hook_played_ctx);
+        // The enchantment's first-play latch (Swift / Sown / Vigorous / Glam's
+        // `Status = Disabled`, set inside their `OnPlay`) flips for an auto-play
+        // exactly as for a hand play (F6 step42; 5XJKC8QWRV@1036: the auto-played
+        // Bash's status stayed Normal), before the replay loop.
+        crate::enchantment_hooks::dispatch_after_card_played(state, top_uid);
 
         // Bead `sts2-rs-xk9yo`: an AUTO-PLAYED card honors its per-instance
         // `base_replay_count` just like a hand-played one. C#
@@ -13212,8 +13217,19 @@ mod tests {
             if corrupted {
                 state.cards[0].set_enchantment(crate::cards::EnchantmentId::Corrupted, 1);
             }
+            if corrupted {
+                state.cards[0].set_enchantment(crate::cards::EnchantmentId::Swift, 1);
+            }
             let hp = state.player.current_hp;
             assert!(auto_play_card_from_draw_top(&mut state, false));
+            if corrupted {
+                assert_ne!(
+                    state.cards[0].combat_var(crate::cards::VarKey::EnchantmentUsed)
+                        & crate::enchantment_hooks::SWIFT_USED_BIT,
+                    0,
+                    "the auto-played Swift card's first-play latch is set"
+                );
+            }
             assert_eq!(
                 state.player.current_hp,
                 hp - if corrupted { 2 } else { 0 },

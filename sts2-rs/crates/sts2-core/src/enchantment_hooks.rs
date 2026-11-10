@@ -51,7 +51,7 @@ use crate::{CardUid, CombatState, PlayerCombatState};
 // the dispatch path, not from sts2-content helpers.
 const VIGOROUS_USED_BIT: i32 = 0b0001;
 const GLAM_USED_BIT: i32 = 0b0010;
-const SWIFT_USED_BIT: i32 = 0b0100;
+pub(crate) const SWIFT_USED_BIT: i32 = 0b0100;
 const SOWN_USED_BIT: i32 = 0b1000;
 
 /// Extra plays a card's enchantment adds: C# `CardModel.GetEnchantedReplayCount`
