@@ -411,3 +411,257 @@ fn imbued_listeners_suspended_draw_completes_before_play_opens() {
     assert_eq!(state.player.hand.len(), 8);
     assert!(state.pending_autoplay_resume.is_none() && state.pending_cluster_resume.is_none());
 }
+
+// ---------------------------------------------------------------------------
+// F6 step43: one continuation chain for suspended callbacks and replays.
+// ---------------------------------------------------------------------------
+
+fn pick_card(state: &mut CombatState, uid: CardUid) -> StepResult {
+    let idx = state
+        .pending_choice
+        .as_ref()
+        .and_then(|c| c.options.iter().position(|o| o.card_uid == Some(uid)))
+        .expect("the card is among the options");
+    let mut selection: SmallVec<[u8; 4]> = SmallVec::new();
+    selection.push(u8::try_from(idx).expect("fits"));
+    apply(state, Action::ResolveChoice { selection })
+}
+
+fn skip_choice(state: &mut CombatState) -> StepResult {
+    apply(
+        state,
+        Action::ResolveChoice {
+            selection: SmallVec::new(),
+        },
+    )
+}
+
+fn strike_card(cards: &mut sts2_core::CardStore, id: CardId) -> CardUid {
+    let uid = push_card(cards, id, CardType::Attack);
+    let c = &mut cards[uid.get() as usize - 1];
+    c.target_type = TargetType::Enemy;
+    c.base_damage = 6;
+    c.tags = sts2_core::cards::CardTags::one(sts2_core::cards::CardTag::Strike);
+    uid
+}
+
+fn clean(s: &CombatState) {
+    assert!(s.pending_choice.is_none(), "{:?}", s.pending_choice);
+    assert!(
+        s.player.play.is_empty(),
+        "stranded in Play: {:?}",
+        s.player.play
+    );
+    assert!(
+        s.pending_autoplay_resume.is_none()
+            && s.pending_draw_resume.is_none()
+            && s.pending_cluster_resume.is_none()
+            && s.pending_play.is_none()
+    );
+}
+
+#[test]
+fn imbued_cascade_finishes_its_enchantments_draw_before_the_card() {
+    // F5 (step42 r3, deferred): an Imbued Cascade auto-plays a Swift(3) Defend;
+    // Swift's draw reshuffles the three discarded Strikes and Stratagem opens a
+    // select. The draw is the Defend's own callback: it completes before the
+    // Defend is routed, so the Defend ends in discard, not reshuffled into hand.
+    let mut deck = vec![(D, false); 5];
+    deck.push((D, false)); // the Swift Defend, alone in the draw pile after the hand
+    deck.push((CardId::Cascade, true));
+    let (mut state, u) = board(&deck, &[RelicKind::GamblingChip]);
+    state.cards[u[6].get() as usize - 1].cost = -1;
+    state.cards[u[5].get() as usize - 1].set_enchantment(EnchantmentId::Swift, 3);
+    for _ in 0..3 {
+        let s = strike_card(&mut state.cards, CardId::StrikeIronclad);
+        state.player.discard.push(s);
+    }
+    let puid = state.player.creature_uid.unwrap();
+    sts2_core::card_effects::apply_power_to_creature(&mut state, puid, PowerKind::Stratagem, 1);
+    assert_eq!(start_player_turn(&mut state), StepResult::PendingChoice);
+    state.player.energy = 1; // the mulligan screen is open: one energy for the X cost
+    assert_eq!(skip_choice(&mut state), StepResult::PendingChoice);
+    assert!(state.pending_choice.is_some(), "Stratagem's select");
+    let _ = answer_choice(&mut state);
+    clean(&state);
+    assert!(
+        state.player.discard.contains(&u[5]),
+        "the Swift Defend is discarded: hand {:?} draw {:?}",
+        state.player.hand,
+        state.player.draw
+    );
+    assert!(!state.player.hand.contains(&u[5]) && !state.player.draw.contains(&u[5]));
+}
+
+/// The F9 board: one energy, Cascade in hand, a Swift(3) Defend alone in the
+/// draw pile, one Defend and four Seeker Strikes in the discard pile, Stratagem
+/// and Hellraiser up.
+fn hellraiser_board() -> (CombatState, Vec<CardUid>) {
+    let mut deck = vec![(D, false); 4];
+    deck.insert(0, (CardId::Cascade, false));
+    deck.push((D, false)); // Swift Defend
+    let (mut state, u) = board(&deck, &[]);
+    state.cards[u[0].get() as usize - 1].cost = -1;
+    state.cards[u[5].get() as usize - 1].set_enchantment(EnchantmentId::Swift, 3);
+    let mut ids = u.clone();
+    let d2 = push_card(&mut state.cards, D, CardType::Skill);
+    state.player.discard.push(d2);
+    ids.push(d2);
+    for _ in 0..4 {
+        let s = strike_card(&mut state.cards, CardId::SeekerStrike);
+        state.player.discard.push(s);
+        ids.push(s);
+    }
+    let puid = state.player.creature_uid.unwrap();
+    sts2_core::card_effects::apply_power_to_creature(&mut state, puid, PowerKind::Stratagem, 1);
+    sts2_core::card_effects::apply_power_to_creature(&mut state, puid, PowerKind::Hellraiser, 1);
+    let _ = start_player_turn(&mut state);
+    state.player.energy = 1;
+    (state, ids)
+}
+
+#[test]
+fn a_select_opened_while_the_enchantments_draw_resumes_keeps_both_frames() {
+    // F9 (step42 r3, deferred): resuming Swift's draw plays a drawn Seeker Strike
+    // through Hellraiser; its own select must not replace the parked Swift finish
+    // (nor be lost): both Attack plays finish and nothing stays in Play.
+    let (mut state, ids) = hellraiser_board();
+    assert_eq!(state.player.energy, 1);
+    state.combat_log.event_log.set_recording(true);
+    let res = apply(
+        &mut state,
+        Action::PlayCard {
+            hand_index: 0,
+            target: Some(0),
+        },
+    );
+    assert_eq!(res, StepResult::PendingChoice, "Stratagem's select");
+    let defend2 = ids[ids.len() - 5];
+    let res = pick_card(&mut state, defend2);
+    assert_eq!(res, StepResult::PendingChoice, "Seeker Strike's select");
+    let mut guard = 0;
+    while state.pending_choice.is_some() && guard < 8 {
+        let _ = answer_choice(&mut state);
+        guard += 1;
+    }
+    clean(&state);
+    assert!(state.player.discard.contains(&ids[5]), "the Swift Defend");
+    use sts2_core::event_log::EventLogEntry::{CardPlayFinished, CardPlayStarted};
+    let (mut started, mut finished) = (Vec::new(), Vec::new());
+    for r in state.combat_log.event_log.rows() {
+        match r.entry {
+            CardPlayStarted { card, .. } => started.push(card),
+            CardPlayFinished { card, .. } => finished.push(card),
+            _ => {}
+        }
+    }
+    assert_eq!(started.len(), finished.len(), "every play finished once");
+    // Hellraiser's Seeker Strikes finish inside the Defend's Swift draw, before
+    // the Defend (which finishes only after its callback), and Cascade last.
+    assert_eq!(finished.last(), Some(&CardId::Cascade));
+    assert_eq!(finished[finished.len() - 2], D);
+    assert!(finished[..finished.len() - 2]
+        .iter()
+        .all(|&c| c == CardId::SeekerStrike));
+    assert_eq!(
+        usize::try_from(state.player.cards_played_this_turn[CardType::Attack.index()]).unwrap(),
+        finished.len() - 2,
+        "every Attack play counted"
+    );
+}
+
+/// A hand of Armaments and four Defends under Echo Form (or Spiral), one
+/// energy spent on it.
+fn armaments_board(spiral: bool, echo: bool) -> (CombatState, Vec<CardUid>) {
+    let mut deck = vec![(CardId::Armaments, false)];
+    deck.extend(vec![(D, false); 8]);
+    let (mut state, u) = board(&deck, &[]);
+    if spiral {
+        state.cards[u[0].get() as usize - 1].set_enchantment(EnchantmentId::Spiral, 1);
+    }
+    let _ = start_player_turn(&mut state);
+    if echo {
+        let puid = state.player.creature_uid.unwrap();
+        sts2_core::card_effects::apply_power_to_creature(&mut state, puid, PowerKind::EchoForm, 1);
+    }
+    (state, u)
+}
+
+fn replay_surfaces_its_select(spiral: bool, echo: bool) {
+    let (mut state, u) = armaments_board(spiral, echo);
+    let upgraded = |s: &CombatState| s.cards.iter().filter(|c| c.upgraded).count();
+    let idx = state
+        .player
+        .hand
+        .iter()
+        .position(|&h| h == u[0])
+        .expect("in hand");
+    let res = apply(
+        &mut state,
+        Action::PlayCard {
+            hand_index: u8::try_from(idx).unwrap(),
+            target: None,
+        },
+    );
+    assert_eq!(res, StepResult::PendingChoice, "the first select");
+    assert_eq!(answer_choice(&mut state), StepResult::PendingChoice);
+    assert!(
+        state.pending_choice.is_some(),
+        "the replay's select surfaces"
+    );
+    assert_eq!(upgraded(&state), 1, "only the first pick has landed");
+    assert!(
+        state.player.play.contains(&u[0]),
+        "the card still awaits it"
+    );
+    let _ = answer_choice(&mut state);
+    clean(&state);
+    assert_eq!(upgraded(&state), 2);
+    assert!(state.player.discard.contains(&u[0]));
+    assert_eq!(state.combat_log.card_plays_finished_this_turn, 2);
+}
+
+#[test]
+fn an_echo_replays_select_surfaces() {
+    replay_surfaces_its_select(false, true);
+}
+
+#[test]
+fn a_replay_count_replays_select_surfaces() {
+    replay_surfaces_its_select(true, false);
+}
+
+#[test]
+fn a_cascade_autoplayed_replays_select_surfaces() {
+    // A hand-played Cascade auto-plays an Armaments with Spiral (two plays). Each
+    // play opens its own upgrade select; the replay's reaches the player too.
+    let mut deck = vec![(CardId::Cascade, false)];
+    deck.extend(vec![(D, false); 4]);
+    deck.push((CardId::Armaments, false));
+    deck.extend(vec![(D, false); 3]);
+    let (mut state, u) = board(&deck, &[]);
+    state.cards[u[0].get() as usize - 1].cost = -1;
+    state.cards[u[5].get() as usize - 1].set_enchantment(EnchantmentId::Spiral, 1);
+    let _ = start_player_turn(&mut state);
+    state.player.energy = 1;
+    let upgraded = |s: &CombatState| s.cards.iter().filter(|c| c.upgraded).count();
+    let res = apply(
+        &mut state,
+        Action::PlayCard {
+            hand_index: 0,
+            target: Some(0),
+        },
+    );
+    assert_eq!(res, StepResult::PendingChoice, "the first select");
+    assert_eq!(answer_choice(&mut state), StepResult::PendingChoice);
+    assert!(
+        state.pending_choice.is_some(),
+        "the replay's select surfaces"
+    );
+    assert_eq!(upgraded(&state), 1);
+    let _ = answer_choice(&mut state);
+    clean(&state);
+    assert_eq!(upgraded(&state), 2);
+    assert!(state.player.discard.contains(&u[5]) && state.player.discard.contains(&u[0]));
+    assert_eq!(state.combat_log.card_plays_finished_this_turn, 3);
+}

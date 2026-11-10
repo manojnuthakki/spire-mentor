@@ -9660,30 +9660,30 @@ fn resolve_choice_atomic(
                 continuation,
                 parent_chain,
             } = resume;
-            // F6 step42 review r2 (F5): a select inside the card's OWN enchantment
-            // callback (Swift's draw into a Stratagem shuffle) parked this finish
-            // with `ench_done` set and no replay half pending. The suspended draw
-            // then belongs to that callback, which must complete before the play
-            // finishes (its card stays in Play until then) — the inverse of an
-            // outer draw awaiting an on-draw auto-play, handled below.
-            if finish.ench_done && !finish.replay_resume {
-                if let Some(pdr) = state.pending_draw_resume.take() {
-                    let r = state.resume_suspended_draw(pdr);
-                    if state.pending_choice.is_some() {
-                        state.pending_autoplay_resume = Some(crate::PendingAutoplayResume {
-                            finish,
-                            remaining,
-                            force_exhaust,
-                            continuation,
-                            parent_chain,
-                        });
-                        return r.unwrap_or(StepResult::PendingChoice);
-                    }
-                }
-            }
             let prev_inline = state.autoplay_inline_resolve;
             state.autoplay_inline_resolve = true;
-            crate::combat_loop::finish_auto_played_card(state, finish);
+            // F6 step43: a finish that owns its enchantment's suspended draw
+            // completes that draw first; if the draw opens a select again (its own
+            // shuffle, or a Hellraiser auto-play's) the finish re-parks, behind any
+            // inner frame the draw created, and the work this arm still owed
+            // follows it in the same order.
+            // A replay's select (and the enchantment callback's) reaches the player as
+            // in the Imbued arm: the finish runs with inline resolution off and parks
+            // the rest behind a select it surfaces (`replay-after-selection`).
+            state.autoplay_inline_resolve = false;
+            let parked = crate::combat_loop::finish_auto_played_card_impl(state, finish, true);
+            state.autoplay_inline_resolve = true;
+            if parked {
+                state.autoplay_inline_resolve = prev_inline;
+                crate::combat_loop::adopt_owed_tail(
+                    state,
+                    remaining,
+                    force_exhaust,
+                    parent_chain,
+                    continuation,
+                );
+                return StepResult::PendingChoice;
+            }
             // Play the remaining collected cards (Cascade-for-N where the
             // surfacing card was not the last). Each runs with inline-resolve on
             // so its own choices drain rather than re-surface.
@@ -9703,7 +9703,8 @@ fn resolve_choice_atomic(
             // re-selection `continuation` (the outermost loop) and the parent
             // hand-play tail, matching the C# resume order. Bead `sts2-rs`
             // (#181), follow-up to `sts2-rs-cata-suspend`.
-            for frame in parent_chain {
+            let mut frames = parent_chain.into_iter();
+            while let Some(frame) = frames.next() {
                 if state.is_over {
                     break;
                 }
@@ -9719,7 +9720,21 @@ fn resolve_choice_atomic(
                         break;
                     }
                 }
-                crate::combat_loop::finish_auto_played_card(state, frame.finish);
+                state.autoplay_inline_resolve = false;
+                let parked =
+                    crate::combat_loop::finish_auto_played_card_impl(state, frame.finish, true);
+                state.autoplay_inline_resolve = true;
+                if parked {
+                    state.autoplay_inline_resolve = prev_inline;
+                    crate::combat_loop::adopt_owed_tail(
+                        state,
+                        frame.remaining,
+                        frame.force_exhaust,
+                        frames.collect(),
+                        continuation,
+                    );
+                    return StepResult::PendingChoice;
+                }
                 for uid in frame.remaining {
                     if state.is_over {
                         break;
