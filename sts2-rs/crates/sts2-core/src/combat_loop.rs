@@ -2121,7 +2121,37 @@ fn finish_normal_pass(
     if !state.is_over {
         run_whispering_earring_late_pass(state);
     }
-    finish_turn_start_tail(state)
+    let result = finish_turn_start_tail(state);
+    // A card the Late pass played asked to end the turn (Void Form,
+    // `PlayerCmd.EndTurn`): run the end-turn pipeline now, as `play_card` does.
+    if state.player.request_end_turn_after_play {
+        state.player.request_end_turn_after_play = false;
+        if result == StepResult::Advanced
+            && state.phase == CombatPhase::PlayerPlayPhase
+            && !state.is_over
+        {
+            return end_turn_dispatch(state);
+        }
+    }
+    result
+}
+
+/// The bookkeeping of one card payment's energy (C# `CardModel.SpendEnergy`):
+/// `Hook.AfterEnergySpent`, the turn's spent-energy tally (HelixDrill reads it)
+/// and the event log (a zero spend records nothing). Shared by `play_card` and
+/// the Earring driver.
+fn note_energy_spent(state: &mut CombatState, amount: i32) {
+    crate::hooks::dispatch_after_energy_spent(state, amount);
+    state.combat_log.energy_spent_this_turn = state
+        .combat_log
+        .energy_spent_this_turn
+        .saturating_add(amount);
+    if amount > 0 {
+        crate::event_log::record(
+            state,
+            crate::event_log::EventLogEntry::EnergySpent { amount },
+        );
+    }
 }
 
 /// Max cards Whispering Earring plays (`WhisperingEarring.maxCardsToPlay`).
@@ -2161,32 +2191,38 @@ fn run_whispering_earring_late_pass(state: &mut CombatState) {
             break;
         };
         let idx = uid.0.get() as usize - 1;
-        let (energy_spent, star_cost) = {
-            let card = &state.cards[idx];
-            let stars = crate::effective_star_cost_in_combat(state, card);
-            let energy = if card.is_x_cost() {
-                i32::from(state.player.energy.max(0))
-            } else {
-                crate::hooks::effective_card_cost(state, uid)
-            };
-            (energy, stars)
+        // `CardModel.SpendResources()`: energy (X takes all of it), then stars
+        // (Stardust's X takes all of them and captures the amount, which
+        // `AutoPlay(skipXCapture: true)` then keeps).
+        let energy_spent = if state.cards[idx].is_x_cost() {
+            let x = i32::from(state.player.energy).max(0);
+            state.player.energy = 0;
+            x
+        } else {
+            let cost = crate::hooks::effective_card_cost(state, uid);
+            let c = i8::try_from(cost.clamp(0, 127)).unwrap_or(127);
+            state.player.energy = state.player.energy.saturating_sub(c).max(0);
+            cost.max(0)
         };
-        state.player.energy = state
-            .player
-            .energy
-            .saturating_sub(i8::try_from(energy_spent.clamp(0, 127)).unwrap_or(127))
-            .max(0);
-        if star_cost > 0 {
-            state.player.stars = state
-                .player
-                .stars
-                .saturating_sub(i8::try_from(star_cost.clamp(0, 127)).unwrap_or(127))
-                .max(0);
+        note_energy_spent(state, energy_spent);
+        let star_cost = crate::effective_star_cost_in_combat(state, &state.cards[idx]);
+        if crate::card_has_star_cost_x(state.cards[idx].card_id) {
+            let spent = state.spend_stars(i32::from(state.player.stars));
+            state.cards[idx].set_combat_var(crate::cards::VarKey::AutoPlayStarX, spent + 1);
+        } else if star_cost > 0 {
+            state.spend_stars(star_cost);
+        }
+        if state.is_over {
+            break;
         }
         let _ = crate::cards::move_card(&mut state.player, uid, PileKind::Hand, PileKind::Play);
         resolve_auto_played_card_paid(state, uid, target, false, Some(energy_spent));
         resolve_inline_auto_play_choices(state);
         played += 1;
+        // `IsPlayerReadyToEndTurn`: a card that ended the turn (Void Form) stops the pass.
+        if state.player.request_end_turn_after_play {
+            break;
+        }
     }
     state.autoplay_inline_resolve = prev_inline;
     state.vakuu_selector_active = prev_vakuu;
@@ -7095,23 +7131,7 @@ pub fn play_card(state: &mut CombatState, hand_index: u8, target: Option<u8>) ->
     // after the energy is deducted and BEFORE the card's `OnPlay`
     // (CardModel.cs:1414-1424). The sole player-side listener at the pin is
     // OrbitPower's per-4-energy-spent grant. Regent parity coverage (Orbit).
-    crate::hooks::dispatch_after_energy_spent(state, energy_spent_for_hook);
-    // Tally this card's energy into the per-turn total (C# writes an
-    // `EnergySpentEntry` here). HelixDrill's hit count reads this sum.
-    state.combat_log.energy_spent_this_turn = state
-        .combat_log
-        .energy_spent_this_turn
-        .saturating_add(energy_spent_for_hook);
-    // Event log (C# `EnergySpentEntry`), at the pin the comment above names.
-    // Zero-cost plays record nothing — C# only writes an entry for a spend.
-    if energy_spent_for_hook > 0 {
-        crate::event_log::record(
-            state,
-            crate::event_log::EventLogEntry::EnergySpent {
-                amount: energy_spent_for_hook,
-            },
-        );
-    }
+    note_energy_spent(state, energy_spent_for_hook);
 
     // UI play-log: record this MANUAL play BEFORE the card body dispatches, so
     // a trigger that auto-plays other cards (Cascade / Havoc / Catastrophe)
@@ -7919,9 +7939,6 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
         // once PER play — each OneTwoPunch replay drains another `Amount`, not
         // just the initial play. Mirror the initial-play drain captured above.
         // Bead `sts2-rs-7ert6`.
-        if weighted_drain != 0 {
-            state.player.energy = state.player.energy.saturating_sub(weighted_drain).max(0);
-        }
         // Bead `sts2-rs-replay-choice`: resolve THIS replay's choice inline
         // before `after_card_played` (C# resolves each iteration's `OnPlay`
         // grid before its `AfterCardPlayed`). Without this, the next replay
@@ -7929,8 +7946,12 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
         if state.pending_choice.is_some() {
             resolve_inline_auto_play_choices(state);
         }
-        // F6 step42: the replay's own `Enchantment.OnPlay` (per iteration).
+        // F6 step42: C# runs body, then `Enchantment.OnPlay`, then the
+        // affliction's `OnPlay` (the Weighted drain), per iteration.
         dispatch_enchantment_on_play_iteration(state, card_uid);
+        if weighted_drain != 0 {
+            state.player.energy = state.player.energy.saturating_sub(weighted_drain).max(0);
+        }
         if relic_channel_live(state, PlannedChannel::AfterCardPlayed) {
             let _ = crate::relic_effects::dispatch_after_card_played(state, &played_ctx);
         }
@@ -8049,19 +8070,21 @@ pub(crate) fn finish_card_play(state: &mut CombatState, fin: CardPlayFinish) -> 
             // Re-run the card effect.
             let _ =
                 crate::card_effects::dispatch_for_card(state, card_uid, card.card_id, target_uid);
-            // C# fires the affliction `OnPlay` once per play iteration
-            // (CardModel.cs:1513-1522), so a Weighted card's `LoseEnergy` drains
-            // another `Amount` on every Echo replay too — same as the
-            // `extra_plays` loop above. Bead `sts2-rs-7ert6`.
-            if weighted_drain != 0 {
-                state.player.energy = state.player.energy.saturating_sub(weighted_drain).max(0);
-            }
             // Bead `sts2-rs-replay-choice`: resolve this Echo replay's choice
             // inline before `after_card_played`, same as the `extra_plays`
             // loop above (a choice-card under EchoForm would otherwise lose
             // every replay's selection to slot-overwrite).
             if state.pending_choice.is_some() {
                 resolve_inline_auto_play_choices(state);
+            }
+            // F6 step42: body, then `Enchantment.OnPlay`, then the affliction.
+            dispatch_enchantment_on_play_iteration(state, card_uid);
+            // C# fires the affliction `OnPlay` once per play iteration
+            // (CardModel.cs:1513-1522), so a Weighted card's `LoseEnergy` drains
+            // another `Amount` on every Echo replay too — same as the
+            // `extra_plays` loop above. Bead `sts2-rs-7ert6`.
+            if weighted_drain != 0 {
+                state.player.energy = state.player.energy.saturating_sub(weighted_drain).max(0);
             }
             // Re-fire both after_card_played buses so Rage / Afterimage /
             // PhantomBlades / Storm / SerpentForm (hooks) and event-reward
@@ -9587,16 +9610,6 @@ pub(crate) fn resolve_auto_played_card_paid(
     // clamp-at-0 as C#). The auto-play resolver previously dropped it, so a
     // Cascade/Catastrophe that auto-played Weighted cards under Grasp left
     // RS with surplus energy (Doormaker PLAYER_STATE cluster).
-    let auto_weighted_drain: i8 = if let Some(crate::card_afflictions::CardAffliction {
-        kind: crate::card_afflictions::CardAfflictionKind::Weighted,
-        stacks,
-        ..
-    }) = state.cards[top_idx].affliction
-    {
-        i8::try_from(stacks.clamp(0, i32::from(i8::MAX))).expect("clamp keeps value in i8 range")
-    } else {
-        0
-    };
 
     // Power-side `BeforeCardPlayed` dispatch for auto-plays. C# `OnPlayWrapper`
     // fires `Hook.BeforeCardPlayed` for auto-plays too (isAutoPlay=true,
@@ -9719,7 +9732,7 @@ pub(crate) fn resolve_auto_played_card_paid(
     // the hit count without calling `spend_stars` — an auto-played Stardust
     // (Mayhem) hits `Stars` times but leaves the stars intact. regent-legal-action
     // Fix B (seed 2010). Manual plays never set this var, so they still spend.
-    if top_card_id == cards::CardId::Stardust {
+    if top_card_id == cards::CardId::Stardust && paid.is_none() {
         let captured = i32::from(state.player.stars).max(0);
         state.cards[top_idx].set_combat_var(crate::cards::VarKey::AutoPlayStarX, captured + 1);
     }
@@ -9733,13 +9746,8 @@ pub(crate) fn resolve_auto_played_card_paid(
     if !skip_dispatch {
         let _ = crate::card_effects::dispatch_for_card(state, top_uid, top_card_id, target_uid);
     }
-    if auto_weighted_drain != 0 {
-        state.player.energy = state
-            .player
-            .energy
-            .saturating_sub(auto_weighted_drain)
-            .max(0);
-    }
+    // The Weighted drain is the affliction leg: it runs in `finish_auto_played_card_impl`
+    // after the enchantment's `OnPlay` (F6 step42; C# body, enchantment, affliction).
 
     // Bead `sts2-rs-y1fic`: resolve any card-select choice opened by the
     // auto-played card's OnPlay INLINE, before moving to the next collected
@@ -9791,6 +9799,7 @@ pub(crate) fn resolve_auto_played_card_paid(
             saved_play_snapshots,
             rebound_at_auto_play_start,
             replay_resume: false,
+            ench_done: false,
         };
         park_auto_play_finish(state, fin, force_exhaust);
         return;
@@ -9809,6 +9818,7 @@ pub(crate) fn resolve_auto_played_card_paid(
         saved_play_snapshots,
         rebound_at_auto_play_start,
         replay_resume: false,
+        ench_done: false,
     };
     finish_auto_played_card(state, fin);
 }
@@ -9846,6 +9856,9 @@ pub struct AutoPlayFinish {
     /// F6 step34: re-entered inside a replay whose dispatch surfaced a select;
     /// the first of `extra_plays` owes only its post-dispatch half.
     pub(crate) replay_resume: bool,
+    /// The enchantment's `OnPlay` already ran (F6 step42): a finish parked behind a
+    /// select the callback opened resumes after it, not before.
+    pub(crate) ench_done: bool,
 }
 
 impl std::fmt::Debug for AutoPlayFinish {
@@ -9872,6 +9885,7 @@ impl Clone for AutoPlayFinish {
             saved_play_snapshots: self.saved_play_snapshots.clone(),
             rebound_at_auto_play_start: self.rebound_at_auto_play_start,
             replay_resume: self.replay_resume,
+            ench_done: self.ench_done,
         }
     }
 }
@@ -9889,6 +9903,7 @@ impl PartialEq for AutoPlayFinish {
             && self.saved_play_snapshots == other.saved_play_snapshots
             && self.rebound_at_auto_play_start == other.rebound_at_auto_play_start
             && self.replay_resume == other.replay_resume
+            && self.ench_done == other.ench_done
     }
 }
 
@@ -10055,6 +10070,7 @@ pub(crate) fn finish_auto_played_card_impl(
         saved_play_snapshots,
         rebound_at_auto_play_start,
         replay_resume,
+        ench_done,
     } = fin;
     let top_idx = top_uid.0.get() as usize - 1;
     let top_card = &state.cards[top_idx];
@@ -10092,7 +10108,41 @@ pub(crate) fn finish_auto_played_card_impl(
         // wrapper, `IsAutoPlay` only a flag): Corrupted's owner damage, Swift's
         // draw, Sown's energy, Momentum. Before the play counters and both
         // `AfterCardPlayed` buses, like the manual `finish_card_play`.
-        dispatch_enchantment_on_play_iteration(state, top_uid);
+        if !ench_done {
+            dispatch_enchantment_on_play_iteration(state, top_uid);
+            // The callback can open a select (Swift's draw into a Stratagem
+            // shuffle): the play is still awaiting it, so park the rest of the
+            // finish (counters, hooks, routing) behind it like a body's select.
+            if auto_play_choice_should_surface(state) {
+                let again = AutoPlayFinish {
+                    top_uid,
+                    target_uid,
+                    force_exhaust,
+                    skip_dispatch,
+                    corruption_active_pre_dispatch,
+                    auto_resolved_cost,
+                    auto_card_is_ethereal,
+                    extra_plays,
+                    saved_play_snapshots,
+                    rebound_at_auto_play_start,
+                    replay_resume: false,
+                    ench_done: true,
+                };
+                park_auto_play_finish(state, again, force_exhaust);
+                return;
+            }
+            resolve_inline_auto_play_choices(state);
+        }
+        // Affliction `OnPlay` (Weighted's energy drain) after the enchantment.
+        if let Some(crate::card_afflictions::CardAffliction {
+            kind: crate::card_afflictions::CardAfflictionKind::Weighted,
+            stacks,
+            ..
+        }) = state.cards[top_idx].affliction
+        {
+            let drain = i8::try_from(stacks.clamp(0, i32::from(i8::MAX))).unwrap_or(i8::MAX);
+            state.player.energy = state.player.energy.saturating_sub(drain).max(0);
+        }
         // Bead `sts2-rs-rnyme` follow-up: record this auto-play in the
         // combat-wide counter NOW — after the on-play dispatch + inline choice
         // resolution, before `AfterCardPlayed` — mirroring C#
@@ -10279,6 +10329,7 @@ pub(crate) fn finish_auto_played_card_impl(
                         saved_play_snapshots,
                         rebound_at_auto_play_start,
                         replay_resume: true,
+                        ench_done: true,
                     };
                     park_auto_play_finish(state, again, force_exhaust);
                     return;
@@ -13245,6 +13296,11 @@ mod tests {
         state.phase = CombatPhase::PlayerTurnStart;
         state.player.energy = energy;
         state.player.pinned_top.clear();
+        for c in &mut state.cards {
+            if c.card_id != crate::cards::CardId::DefendIronclad {
+                c.target_type = crate::cards::TargetType::Enemy;
+            }
+        }
         for _ in 0..3 {
             let u = state.player.draw.remove(0);
             state.player.hand.push(u);
@@ -13283,6 +13339,86 @@ mod tests {
             assert_eq!(control.player.energy, 2, "round {round} relic {relic}");
             assert_eq!(control.player.hand.len(), 3);
         }
+    }
+
+    fn add_player_power(state: &mut CombatState, id: u32, kind: crate::PowerKind, amount: i32) {
+        let pid = NonZeroU32::new(id).expect("non-zero");
+        state.powers.push(crate::Power::new(pid, kind, amount));
+        state.player.powers.push(crate::PowerUid(pid));
+    }
+
+    /// F6 step42 review F1: the Earring's payment records the turn's spent
+    /// energy (HelixDrill reads it). Stardust's star spend and the end-turn
+    /// stop need the card bodies: `sts2-wire/tests/whispering_earring_pass.rs`.
+    #[test]
+    fn whispering_earring_payment_records_the_energy_spent() {
+        let mut state = earring_state(1, true, 2);
+        run_whispering_earring_late_pass(&mut state);
+        assert_eq!(state.combat_log.energy_spent_this_turn, 2);
+    }
+
+    /// F3: body, enchantment, then affliction: Sown's energy lands before
+    /// Weighted's drain on an auto-play, as for a hand play.
+    #[test]
+    fn auto_play_runs_the_enchantment_before_the_affliction() {
+        let mut state = state_with_pinned_top_card(crate::cards::CardId::DefendIronclad);
+        let _ = state.init_player_creature();
+        state.player.energy = 0;
+        state.cards[0].set_enchantment(crate::cards::EnchantmentId::Sown, 1);
+        state.cards[0].affliction = Some(crate::card_afflictions::CardAffliction {
+            kind: crate::card_afflictions::CardAfflictionKind::Weighted,
+            stacks: 1,
+            applied_exhaust: false,
+        });
+        assert!(auto_play_card_from_draw_top(&mut state, false));
+        assert_eq!(state.player.energy, 0, "gain 1, then drain 1");
+    }
+
+    /// F4: an Echo Form replay runs the enchantment's `OnPlay` too.
+    #[test]
+    fn echo_form_replay_runs_the_enchantment_on_play() {
+        let mut state = earring_state(1, false, 3);
+        state.phase = CombatPhase::PlayerPlayPhase;
+        state.cards[0].set_enchantment(crate::cards::EnchantmentId::Corrupted, 1);
+        add_player_power(&mut state, 78, crate::PowerKind::EchoForm, 1);
+        let hp = state.player.current_hp;
+        let _ = play_card(&mut state, 0, None);
+        assert_eq!(
+            state.player.current_hp,
+            hp - 4,
+            "two plays, two Corrupted hits"
+        );
+    }
+
+    /// F5: the card is still awaiting its enchantment's draw while that draw's
+    /// select is open: it stays in Play and no play has finished yet.
+    #[test]
+    fn auto_play_holds_the_finish_behind_an_enchantment_select() {
+        let mut state = state_with_pinned_top_card(crate::cards::CardId::DefendIronclad);
+        let _ = state.init_player_creature();
+        state.player.pinned_top.clear();
+        state.cards[0].set_enchantment(crate::cards::EnchantmentId::Swift, 2);
+        // Draw pile: only the played Defend; discard: two Strikes so Swift's draw
+        // reshuffles and Stratagem's AfterShuffle opens a select.
+        state.player.draw.clear();
+        state.player.draw.push(CardUid::new(1).expect("non-zero"));
+        for u in [2u32, 3] {
+            state
+                .player
+                .discard
+                .push(CardUid::new(u).expect("non-zero"));
+        }
+        add_player_power(&mut state, 79, crate::PowerKind::Stratagem, 1);
+        assert!(auto_play_card_from_draw_top(&mut state, false));
+        assert!(state.pending_choice.is_some(), "Stratagem's select is open");
+        assert!(
+            state
+                .player
+                .play
+                .contains(&CardUid::new(1).expect("non-zero")),
+            "the card is still in Play behind the awaited callback"
+        );
+        assert_eq!(state.combat_log.card_plays_finished_this_turn, 0);
     }
 
     #[test]
