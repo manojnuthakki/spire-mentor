@@ -10045,6 +10045,20 @@ fn dispatch_enchantment_on_play_iteration(state: &mut CombatState, card_uid: cra
     crate::enchantment_hooks::dispatch_on_card_played(state, card_uid);
 }
 
+/// Affliction `OnPlay` for one play iteration, after the enchantment's
+/// (Weighted's energy drain; C# `OnPlayWrapper` runs it every iteration).
+fn dispatch_affliction_on_play_iteration(state: &mut CombatState, top_idx: usize) {
+    if let Some(crate::card_afflictions::CardAffliction {
+        kind: crate::card_afflictions::CardAfflictionKind::Weighted,
+        stacks,
+        ..
+    }) = state.cards[top_idx].affliction
+    {
+        let drain = i8::try_from(stacks.clamp(0, i32::from(i8::MAX))).unwrap_or(i8::MAX);
+        state.player.energy = state.player.energy.saturating_sub(drain).max(0);
+    }
+}
+
 pub(crate) fn finish_auto_played_card(state: &mut CombatState, fin: AutoPlayFinish) {
     finish_auto_played_card_impl(state, fin, false);
 }
@@ -10133,16 +10147,7 @@ pub(crate) fn finish_auto_played_card_impl(
             }
             resolve_inline_auto_play_choices(state);
         }
-        // Affliction `OnPlay` (Weighted's energy drain) after the enchantment.
-        if let Some(crate::card_afflictions::CardAffliction {
-            kind: crate::card_afflictions::CardAfflictionKind::Weighted,
-            stacks,
-            ..
-        }) = state.cards[top_idx].affliction
-        {
-            let drain = i8::try_from(stacks.clamp(0, i32::from(i8::MAX))).unwrap_or(i8::MAX);
-            state.player.energy = state.player.energy.saturating_sub(drain).max(0);
-        }
+        dispatch_affliction_on_play_iteration(state, top_idx);
         // Bead `sts2-rs-rnyme` follow-up: record this auto-play in the
         // combat-wide counter NOW — after the on-play dispatch + inline choice
         // resolution, before `AfterCardPlayed` — mirroring C#
@@ -10340,6 +10345,7 @@ pub(crate) fn finish_auto_played_card_impl(
             // Each replay iteration runs its own `Enchantment.OnPlay`
             // (`OnPlayWrapper`'s loop body), after its body and selection.
             dispatch_enchantment_on_play_iteration(state, top_uid);
+            dispatch_affliction_on_play_iteration(state, top_idx);
             state.combat_log.player_card_plays_this_combat = state
                 .combat_log
                 .player_card_plays_this_combat
@@ -10372,6 +10378,9 @@ pub(crate) fn finish_auto_played_card_impl(
     // loop and once per replay INSIDE it — see bead
     // `sts2-rs-distilled-chaos-replay-scale` above. Formerly a single
     // post-loop bump here, which under-counted a replayed scaling Attack.)
+
+    // The series is over: drop Stardust's captured star X (kept for every replay).
+    state.cards[top_idx].set_combat_var(VarKey::AutoPlayStarX, 0);
 
     // Cleanup routing. C# `CardPileCmd.AutoPlayFromDrawPile` sets
     // `card.ExhaustOnNextPlay = forceExhaust` before the auto-play, so the
@@ -13372,6 +13381,54 @@ mod tests {
         });
         assert!(auto_play_card_from_draw_top(&mut state, false));
         assert_eq!(state.player.energy, 0, "gain 1, then drain 1");
+    }
+
+    /// Review r2 F3: every replay iteration of an auto-play drains for Weighted,
+    /// with enough energy that the clamp cannot hide a missing drain.
+    #[test]
+    fn auto_play_replays_run_the_affliction_each_iteration() {
+        let mut state = state_with_pinned_top_card(crate::cards::CardId::DefendIronclad);
+        let _ = state.init_player_creature();
+        state.player.energy = 5;
+        state.cards[0].base_replay_count = 2;
+        state.cards[0].affliction = Some(crate::card_afflictions::CardAffliction {
+            kind: crate::card_afflictions::CardAfflictionKind::Weighted,
+            stacks: 1,
+            applied_exhaust: false,
+        });
+        assert!(auto_play_card_from_draw_top(&mut state, false));
+        assert_eq!(state.player.energy, 2, "three iterations, three drains");
+    }
+
+    /// Review r2 F5: answering the select inside Swift's draw finishes the draw
+    /// BEFORE the play: the Defend stays out of the reshuffled draw.
+    #[test]
+    fn auto_play_enchantment_draw_completes_before_the_card_is_disposed() {
+        let mut state = state_with_pinned_top_card(crate::cards::CardId::DefendIronclad);
+        let _ = state.init_player_creature();
+        state.player.pinned_top.clear();
+        state.cards[0].set_enchantment(crate::cards::EnchantmentId::Swift, 2);
+        state.player.draw.clear();
+        state.player.draw.push(CardUid::new(1).expect("non-zero"));
+        for u in [2u32, 3] {
+            state
+                .player
+                .discard
+                .push(CardUid::new(u).expect("non-zero"));
+        }
+        add_player_power(&mut state, 79, crate::PowerKind::Stratagem, 1);
+        assert!(auto_play_card_from_draw_top(&mut state, false));
+        assert!(state.pending_choice.is_some());
+        let mut sel: SmallVec<[u8; 4]> = SmallVec::new();
+        sel.push(0);
+        let _ = crate::apply(&mut state, crate::Action::ResolveChoice { selection: sel });
+        let defend = CardUid::new(1).expect("non-zero");
+        assert!(
+            !state.player.hand.contains(&defend) && !state.player.draw.contains(&defend),
+            "the Defend was not reshuffled into its own draw"
+        );
+        assert!(state.player.discard.contains(&defend), "then discarded");
+        assert_eq!(state.combat_log.card_plays_finished_this_turn, 1);
     }
 
     /// F4: an Echo Form replay runs the enchantment's `OnPlay` too.

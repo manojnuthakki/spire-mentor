@@ -35,13 +35,8 @@ pub(crate) fn play_stardust(state: &mut CombatState, _t: Option<CreatureUid>) ->
         .and_then(|&uid| state.cards.get(uid.0.get() as usize - 1))
         .map_or(0, |c| c.combat_var(sts2_core::cards::VarKey::AutoPlayStarX));
     let hits = if auto_star_x > 0 {
-        if let Some(idx) =
-            sts2_core::card_effects::resolving_card_uid(state).map(|u| u.0.get() as usize - 1)
-        {
-            if let Some(card) = state.cards.get_mut(idx) {
-                card.set_combat_var(sts2_core::cards::VarKey::AutoPlayStarX, 0);
-            }
-        }
+        // The capture belongs to the whole play series (replays reuse it); the
+        // auto-play finish clears it when the series ends (step42 review r2 F1).
         auto_star_x - 1
     } else {
         state.spend_stars(i32::from(state.player.stars))

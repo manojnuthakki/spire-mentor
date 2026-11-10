@@ -64,3 +64,18 @@ fn stardust_spends_its_stars_under_the_earring() {
         "no Stardust left a star another could reuse"
     );
 }
+
+/// Review r2 F1: the captured star X belongs to the whole series: the Earring
+/// plays Gather Light, Transfigure (replay +1) and Stardust, and both hits land.
+#[test]
+fn replayed_stardust_reuses_its_captured_x() {
+    let s = state(
+        &["GATHER_LIGHT", "STARDUST", "TRANSFIGURE"],
+        &["WHISPERING_EARRING"],
+        "Regent",
+    );
+    let uid = s.enemy_uids.first().expect("an enemy").0;
+    let e = s.creatures.iter().find(|c| c.id == uid).expect("creature");
+    let (hp, max) = (e.current_hp, e.max_hp);
+    assert_eq!(max - hp, 10, "two Stardust hits of 5, got {}", max - hp);
+}

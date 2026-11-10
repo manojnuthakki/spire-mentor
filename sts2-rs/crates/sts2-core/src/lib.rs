@@ -9660,6 +9660,27 @@ fn resolve_choice_atomic(
                 continuation,
                 parent_chain,
             } = resume;
+            // F6 step42 review r2 (F5): a select inside the card's OWN enchantment
+            // callback (Swift's draw into a Stratagem shuffle) parked this finish
+            // with `ench_done` set and no replay half pending. The suspended draw
+            // then belongs to that callback, which must complete before the play
+            // finishes (its card stays in Play until then) — the inverse of an
+            // outer draw awaiting an on-draw auto-play, handled below.
+            if finish.ench_done && !finish.replay_resume {
+                if let Some(pdr) = state.pending_draw_resume.take() {
+                    let r = state.resume_suspended_draw(pdr);
+                    if state.pending_choice.is_some() {
+                        state.pending_autoplay_resume = Some(crate::PendingAutoplayResume {
+                            finish,
+                            remaining,
+                            force_exhaust,
+                            continuation,
+                            parent_chain,
+                        });
+                        return r.unwrap_or(StepResult::PendingChoice);
+                    }
+                }
+            }
             let prev_inline = state.autoplay_inline_resolve;
             state.autoplay_inline_resolve = true;
             crate::combat_loop::finish_auto_played_card(state, finish);
