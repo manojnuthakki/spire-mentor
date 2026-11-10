@@ -3388,6 +3388,7 @@ fn build_combat_state(
         pending_end_turn_resume: None,
         pending_autoplay_resume: None,
         autoplay_inline_resolve: false,
+        vakuu_selector_active: false,
         pending_curse_choice: None,
         pending_potion_hook_resume: None,
         pending_enemy_exec_resume: None,
