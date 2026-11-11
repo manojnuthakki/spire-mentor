@@ -1244,7 +1244,11 @@ impl PowerStore {
         let mut f = f;
         let old_powers = core::mem::take(&mut self.powers);
         let old_serials = core::mem::take(&mut self.serials);
-        debug_assert_eq!(old_powers.len(), old_serials.len(), "serials parallel to powers");
+        debug_assert_eq!(
+            old_powers.len(),
+            old_serials.len(),
+            "serials parallel to powers"
+        );
         for (p, serial) in old_powers.into_iter().zip(old_serials) {
             if f(&p) {
                 self.powers.push(p);

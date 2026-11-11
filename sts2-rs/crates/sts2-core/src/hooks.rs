@@ -14229,7 +14229,7 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
                 .filter_map(|(oi, uid)| {
                     crate::creature_by_id(&state.creatures, uid.0).map(|c| (oi, c))
                 })
-                .flat_map(|(oi, c)| c.powers.iter().filter_map(move |u| Some((oi, *u))))
+                .flat_map(|(oi, c)| c.powers.iter().map(move |u| (oi, *u)))
                 .filter(|(_, u)| {
                     state
                         .powers
