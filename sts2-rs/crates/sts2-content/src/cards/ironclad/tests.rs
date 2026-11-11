@@ -1620,6 +1620,55 @@ fn thrash_fold_ignores_vulnerable_on_the_player() {
     );
 }
 
+/// A6c27: Thrash's fold is `Hook.ModifyDamage(..., cardSource: exhausted)`, so the
+/// exhausted card's own source context applies: a held Strike Dummy adds its +3 to an
+/// exhausted Strike (the null target removes only target-side modifiers).
+#[test]
+fn thrash_fold_applies_strike_dummy_to_the_exhausted_strike() {
+    install_pool();
+    crate::relics::dispatch::ensure_installed();
+    let (mut state, enemy) = fresh_state_with_enemy(200);
+    if state.player.creature_uid.is_none() {
+        let _ = state.init_player_creature();
+        state.sync_player_creature();
+    }
+    state.relics.push(sts2_core::Relic {
+        id: std::num::NonZeroU32::new(1).expect("nz"),
+        kind: sts2_core::RelicKind::StrikeDummy,
+        counter: 0,
+        is_wax: false,
+        is_melted: false,
+    });
+    let thrash = push_play_card(&mut state, CardId::Thrash, /*base_damage=*/ 4, 0);
+    let strike = push_hand_card(&mut state, CardId::StrikeIronclad);
+    state.cards[strike.0.get() as usize - 1].tags =
+        CardTags::one(sts2_core::cards::CardTag::Strike);
+    let _ = dispatch(&mut state, CardId::Thrash, Some(enemy));
+    assert_eq!(
+        state.cards[thrash.0.get() as usize - 1].base_damage,
+        13,
+        "fold = exhausted Strike's 6 + Strike Dummy's 3"
+    );
+}
+
+/// A6c27: the exhausted card's own enchantment applies to the fold (Sharp +3 here),
+/// not the resolving Thrash's.
+#[test]
+fn thrash_fold_applies_the_exhausted_cards_enchantment() {
+    install_pool();
+    let (mut state, enemy) = fresh_state_with_enemy(200);
+    let thrash = push_play_card(&mut state, CardId::Thrash, /*base_damage=*/ 4, 0);
+    let attack = push_hand_card(&mut state, CardId::StrikeIronclad);
+    state.cards[attack.0.get() as usize - 1]
+        .add_enchantment(sts2_core::cards::EnchantmentId::Sharp, 3);
+    let _ = dispatch(&mut state, CardId::Thrash, Some(enemy));
+    assert_eq!(
+        state.cards[thrash.0.get() as usize - 1].base_damage,
+        13,
+        "fold = exhausted attack's 6 + its Sharp 3"
+    );
+}
+
 /// Push a card POD into `state.cards` and the Hand pile; returns its uid.
 fn push_hand_card(state: &mut CombatState, card_id: CardId) -> sts2_core::CardUid {
     let raw = u32::try_from(state.cards.len() + 1).expect("cards len fits in u32");

@@ -137,6 +137,17 @@ pub fn player_modified_card_damage_frac(state: &CombatState, base: i32) -> (i64,
     hooks::player_modified_card_damage_frac(state, base)
 }
 
+/// [`player_modified_card_damage_frac`] with the exhausted card as `cardSource`
+/// (its enchantment and the registry relics' card-keyed additives apply). A6c27.
+#[must_use]
+pub fn player_modified_card_damage_frac_for_card(
+    state: &CombatState,
+    base: i32,
+    source: crate::CardUid,
+) -> (i64, i64) {
+    hooks::player_modified_card_damage_frac_for_card(state, base, source)
+}
+
 /// Like [`deal_damage_player_to_enemy`] but returns the full
 /// [`damage::DamageOutcome`] so callers that need the unclamped post-block
 /// damage (incl. overkill) — e.g. Fisticuffs' block-on-damage rider

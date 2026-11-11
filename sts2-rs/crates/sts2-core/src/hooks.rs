@@ -11162,6 +11162,19 @@ pub fn modify_damage(state: &CombatState, base_damage: i32, ctx: &DamageCtx) -> 
 #[must_use]
 #[inline]
 pub fn modify_damage_parts(state: &CombatState, ctx: &DamageCtx) -> DamageParts {
+    modify_damage_parts_for_source(state, ctx, crate::card_effects::resolving_card_inst(state))
+}
+
+/// [`modify_damage_parts`] with an explicit card source (C# `Hook.ModifyDamage`'s
+/// `cardSource`): the card whose enchantment pre-stage applies. The regular path
+/// passes the resolving card (top of the play pile); Thrash's fold passes the
+/// exhausted card, which is not the resolving one.
+#[must_use]
+pub fn modify_damage_parts_for_source(
+    state: &CombatState,
+    ctx: &DamageCtx,
+    source_card: Option<&crate::cards::Card>,
+) -> DamageParts {
     // Single-pass listener fold. The additive sum, the multiplicative
     // composition, and the cap-min are three independent accumulators,
     // so we walk `iter_power_listeners` / `iter_relic_listeners` ONCE
@@ -11251,7 +11264,7 @@ pub fn modify_damage_parts(state: &CombatState, ctx: &DamageCtx) -> DamageParts 
     let mut enchant_mul = DamageMul::ONE;
     let mut enchant_additive = 0;
     if dealt_by_player_or_osty {
-        if let Some(card) = crate::card_effects::resolving_card_inst(state) {
+        if let Some(card) = source_card {
             {
                 let powered = ctx.props.is_powered();
                 enchant_additive = crate::enchantment_hooks::enchant_damage_additive(card, powered);
@@ -11623,6 +11636,49 @@ pub fn player_modified_card_damage_frac(state: &CombatState, base: i32) -> (i64,
     let mul = mul.compose(relic_mul);
     let num = i64::from(base.saturating_add(additive)).saturating_mul(mul.num);
     (num, mul.den)
+}
+
+/// Thrash's fold for one exhausted card: C# `Hook.ModifyDamage(.., target: null,
+/// dealer: owner, base, Move, cardSource: exhausted, ..)` — the exhausted INSTANCE is the
+/// card source, so its enchantment pre-stage and the registry relics' card-keyed
+/// additives (Strike Dummy, Miniature Cannon, Mystic Lighter, ...) apply, while the
+/// null target drops every target-side modifier. Same stage order as the real hit
+/// ([`DamageParts::unrounded`]); returns the un-floored `(num, den)` (no cap, as
+/// [`player_modified_card_damage_frac`]). Vigor is not applied by the caller's
+/// pre-subtraction convention (its latch is on the Thrash hit, not this card).
+#[must_use]
+pub fn player_modified_card_damage_frac_for_card(
+    state: &CombatState,
+    base: i32,
+    source: crate::CardUid,
+) -> (i64, i64) {
+    let ctx = DamageCtx {
+        dealer: CreatureRef::Player,
+        target: CreatureRef::Nobody,
+        props: ValueProps::MOVE,
+    };
+    let card = state.cards.get(source.0.get() as usize - 1);
+    let parts = modify_damage_parts_for_source(state, &ctx, card);
+    let registry_add = match (card, state.player.creature_uid) {
+        (Some(card), Some(player))
+            if relic_channel_live(state, PlannedChannel::ModifyDamageAdditive) =>
+        {
+            // No registry additive reads the target (Strike Dummy, Miniature Cannon,
+            // Mystic Lighter, Fake Strike Dummy key on dealer, props and the card),
+            // so the owner stands in for C#'s null target in this context only.
+            let md_ctx = crate::relic_effects::ModifyDamageCtx {
+                dealer: Some(player),
+                target: player,
+                base_damage: base,
+                props: ValueProps::MOVE,
+                card: Some(card.card_id),
+                card_uid: Some(source),
+            };
+            crate::relic_effects::dispatch_modify_damage_additive(state, &md_ctx)
+        }
+        _ => 0,
+    };
+    parts.unrounded(i64::from(base), 1, registry_add)
 }
 
 dispatch_fold_hook!(

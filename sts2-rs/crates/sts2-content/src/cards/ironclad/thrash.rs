@@ -89,8 +89,11 @@ pub(crate) fn play_thrash(state: &mut CombatState, target: Option<CreatureUid>) 
         // C# folds the UN-floored `ModifyDamage` decimal; capture it as an exact
         // rational `(term_num, term_den)` so the sub-integer part is preserved
         // across plays instead of being floored away each fold.
-        let (term_num, term_den) =
-            card_effects::player_modified_card_damage_frac(state, exhausted_base - vigor);
+        let (term_num, term_den) = card_effects::player_modified_card_damage_frac_for_card(
+            state,
+            exhausted_base - vigor,
+            exhausted_uid,
+        );
         exhaust_hand_card(state, exhausted_uid);
         // Accumulate `rem + term` (rational add). The integer part flows into
         // `base_damage`; the reduced fractional remainder (in [0, 1)) goes back
