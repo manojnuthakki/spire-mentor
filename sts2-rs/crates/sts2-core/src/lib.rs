@@ -7588,7 +7588,9 @@ impl CombatState {
             // the flat single-slot affliction model matches C#
             // `CardModel.Affliction` semantics, and `Bound`'s `CanAfflict`
             // returns false on already-afflicted cards.
+            // C# `AfterCardDrawn` also requires `CurrentSide == Owner.Side`.
             if chains_stacks > 0
+                && self.side == Side::Player
                 && self.combat_log.bound_cards_afflicted_by_chains_this_turn < chains_stacks
             {
                 if let Some(c) = self.cards.get_mut(idx) {
@@ -7599,7 +7601,9 @@ impl CombatState {
                         )
                         && c.set_affliction(crate::card_afflictions::CardAffliction::new(
                             crate::card_afflictions::CardAfflictionKind::Bound,
-                            1,
+                            // C# `AfflictAndPreview<Bound>(cards, base.Amount)`: the
+                            // marker carries the power's current stack count.
+                            i32::try_from(chains_stacks).unwrap_or(i32::MAX),
                         ))
                     {
                         self.combat_log.bound_cards_afflicted_by_chains_this_turn = self
@@ -13624,6 +13628,69 @@ mod tests {
         assert_eq!(
             state.combat_log.bound_cards_afflicted_by_chains_this_turn, 3,
             "budget unchanged after cap-hit draws",
+        );
+    }
+
+    /// Step46 (bound-turn-end): C# `ChainsOfBindingPower.AfterCardDrawn` calls
+    /// `AfflictAndPreview<Bound>(card, base.Amount)`, so the Bound marker carries the
+    /// power's stack count (3 here), not 1; a draw on the enemy's side is not afflicted
+    /// (`CurrentSide == Owner.Side`).
+    #[test]
+    fn chains_of_binding_marks_drawn_cards_with_the_power_amount() {
+        use smallvec::SmallVec;
+        let mut state = CombatState::default();
+        let player_id = NonZeroU32::new(99).expect("nz");
+        state.creatures.push(Creature {
+            id: player_id,
+            current_hp: 80,
+            max_hp: 80,
+            block: 0,
+            powers: SmallVec::<[PowerUid; 8]>::new(),
+            species: None,
+            intent: None,
+            intent_history: IntentHistory::default(),
+            monster_id: MonsterId("Player"),
+            ai: None,
+        });
+        state.player.creature_uid = Some(CreatureUid(player_id));
+        for i in 1u32..=2 {
+            let uid = CardUid::new(i).expect("nz");
+            state.cards.push(cards::Card {
+                uid,
+                card_id: cards::CardId::StrikeIronclad,
+                cost: 1,
+                card_type: cards::CardType::Attack,
+                target_type: cards::TargetType::Enemy,
+                base_damage: 6,
+                ..cards::Card::pod_defaults()
+            });
+        }
+        let pow_uid = PowerUid::new(1).expect("nz");
+        state.powers.push(Power {
+            id: pow_uid.0,
+            kind: powers::PowerKind::ChainsOfBinding,
+            amount: 3,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state.player.powers.push(pow_uid);
+        state.player.hand.push(CardUid::new(1).expect("nz"));
+        state.invoke_card_drawn_for_newly_drawn(0, true);
+        assert_eq!(
+            state.cards[0].affliction,
+            Some(card_afflictions::CardAffliction::new(
+                card_afflictions::CardAfflictionKind::Bound,
+                3
+            )),
+            "the Bound marker carries the Chains amount"
+        );
+        state.side = Side::Enemy;
+        state.player.hand.push(CardUid::new(2).expect("nz"));
+        state.invoke_card_drawn_for_newly_drawn(1, true);
+        assert_eq!(
+            state.cards[1].affliction, None,
+            "a card drawn on the enemy side is not afflicted"
         );
     }
 
