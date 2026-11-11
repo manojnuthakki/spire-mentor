@@ -147,6 +147,21 @@ fn eligible_potion_kinds(rarity: PotionRarity, character: CharacterId) -> Vec<Po
 
 // ── Main populator ───────────────────────────────────────────────────
 
+/// C# `MerchantCardEntry.Populate` runs `Hook.ModifyMerchantCardCreationResults`
+/// on the rolled card before the entry is priced: the egg relics (`MoltenEgg`
+/// Attacks, `FrozenEgg` Powers, `ToxicEgg` Skills) upgrade it and `FresnelLens`
+/// enchants it, so the shop OFFERS the card that way and a later purchase finds
+/// nothing left to change. No RNG is drawn. sts2-agent fork (egg-shop-upgrades).
+fn modify_offered_card(
+    rs: &mut RunState,
+    card: Option<&mut sts2_core::cards::Card>,
+    is_colorless: bool,
+) {
+    if let Some(card) = card {
+        rs.modify_merchant_card_creation_results(card, is_colorless);
+    }
+}
+
 /// Fill in the per-slot `card` / `relic_id` / `potion_kind` fields of
 /// an inventory previously shaped by
 /// [`sts2_core::shop::generate_shop_inventory`].
@@ -183,6 +198,7 @@ pub fn populate_shop_inventory(rs: &mut RunState, inv: &mut ShopInventory) {
         let idx = rs.rng.shops.next_int_exclusive(0, candidates.len() as i32) as usize;
         let id = candidates[idx];
         entry.card = card_pod_from_id(id, false);
+        modify_offered_card(rs, entry.card.as_mut(), false);
     }
 
     // 2. Colorless cards.
@@ -195,6 +211,7 @@ pub fn populate_shop_inventory(rs: &mut RunState, inv: &mut ShopInventory) {
         let idx = rs.rng.shops.next_int_exclusive(0, candidates.len() as i32) as usize;
         let id = candidates[idx];
         entry.card = card_pod_from_id(id, false);
+        modify_offered_card(rs, entry.card.as_mut(), true);
     }
 
     // 3. Relics — drain via the per-rarity grab-bag with fallback
@@ -265,6 +282,52 @@ mod tests {
                 entry.rarity
             );
         }
+    }
+
+    /// F6 step45 (`egg-shop-upgrades`): `MerchantCardEntry.Populate` runs `ModifyMerchantCardCreationResults`
+    /// on every rolled card, so the shop OFFERS the egg's cards upgraded (Toxic Egg: Skills; Molten Egg: Attacks;
+    /// Frozen Egg: Powers) and none of the others; the roll draws the same RNG as without the egg.
+    #[test]
+    fn populator_offers_egg_relics_cards_upgraded() {
+        use sts2_core::cards::CardType;
+        use sts2_core::relics::RelicId;
+        crate::relics::dispatch::ensure_installed();
+        let roll = |eggs: &[RelicId]| {
+            let mut rs = fresh_ironclad_runstate();
+            rs.relics.extend_from_slice(eggs);
+            let mut inv = core_generate(&mut rs.rng.shops.clone(), &rs.card_rarity_odds, 0);
+            populate_shop_inventory(&mut rs, &mut inv);
+            (inv, rs.rng.shops.counter())
+        };
+        let (plain, plain_rng) = roll(&[]);
+        let (eggs, eggs_rng) = roll(&[RelicId::ToxicEgg, RelicId::MoltenEgg, RelicId::FrozenEgg]);
+        assert_eq!(plain_rng, eggs_rng, "the egg upgrades draw no Shops RNG");
+        let mut checked = 0;
+        for (a, b) in plain
+            .cards
+            .iter()
+            .chain(&plain.colorless_cards)
+            .zip(eggs.cards.iter().chain(&eggs.colorless_cards))
+        {
+            let (a, b) = (
+                a.card.as_ref().expect("card"),
+                b.card.as_ref().expect("card"),
+            );
+            assert_eq!(a.card_id, b.card_id, "the same card is rolled");
+            let upgradable = matches!(
+                a.card_type,
+                CardType::Attack | CardType::Skill | CardType::Power
+            ) && !a.upgraded
+                && a.is_upgradable();
+            assert_eq!(
+                b.upgraded,
+                upgradable || a.upgraded,
+                "{:?} offered upgraded",
+                a.card_id
+            );
+            checked += usize::from(upgradable);
+        }
+        assert!(checked > 0, "the roll offers at least one upgradable card");
     }
 
     #[test]

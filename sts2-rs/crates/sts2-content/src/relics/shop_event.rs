@@ -1694,7 +1694,9 @@ fn listener_iron_club(state: &mut CombatState, _ctx: &CardEventCtx) -> EffectRes
         }
     }
     if should_draw {
-        let _ = state.draw_into_hand(1);
+        // C# `IronClub.AfterCardPlayed` draws with `CardPileCmd.Draw` (`IronClub.cs:92`), which `Hook.ShouldDraw`
+        // gates: No Draw / Scrutiny veto it (a card-effect draw, `fromHandDraw == false`).
+        let _ = state.draw_into_hand_card_effect(1);
         EffectResult::Resolved
     } else {
         EffectResult::NotImplemented
@@ -9905,6 +9907,47 @@ mod tests {
             hand_before + 2,
             "IronClub must draw 1 card on the 8th play"
         );
+    }
+
+    /// F6 step45 (`iron-club-no-draw`): the game's `IronClub.AfterCardPlayed` draws through `CardPileCmd.Draw`,
+    /// which No Draw vetoes (a card-effect draw); the counter still counts and the pile and the shuffle stay put.
+    #[test]
+    fn listener_iron_club_draws_nothing_under_no_draw() {
+        use sts2_core::cards::{Card, CardId, CardType};
+        use sts2_core::relic_effects::{dispatch_after_card_played, CardEventCtx};
+        crate::relics::dispatch::ensure_installed();
+        let mut state = CombatState::default();
+        equip_relic(&mut state, RelicKind::IronClub);
+        let pid = std::num::NonZeroU32::new(9_001).expect("non-zero");
+        state
+            .powers
+            .push(sts2_core::Power::new(pid, sts2_core::PowerKind::NoDraw, 1));
+        state.player.powers.push(sts2_core::PowerUid(pid));
+        for _ in 0..6 {
+            let card = Card {
+                card_id: CardId::StrikeIronclad,
+                card_type: CardType::Attack,
+                ..Card::pod_defaults()
+            };
+            let _ = state.add_card_to_draw_pile(card);
+        }
+        let ctx = CardEventCtx {
+            card_id: CardId::StrikeIronclad,
+            card_uid: None,
+            target: None,
+            card_tags: sts2_core::cards::CardTags::NONE,
+            energy_spent: 0,
+        };
+        let (hand, pile) = (state.player.hand.len(), state.player.draw.len());
+        for _ in 0..4 {
+            let _ = dispatch_after_card_played(&mut state, &ctx);
+        }
+        assert_eq!(
+            state.player.hand.len(),
+            hand,
+            "No Draw vetoes Iron Club's draw"
+        );
+        assert_eq!(state.player.draw.len(), pile);
     }
 
     #[test]
