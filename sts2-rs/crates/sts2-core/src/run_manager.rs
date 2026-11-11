@@ -4241,6 +4241,32 @@ impl RunManager {
         self.shop_inventory.as_ref()
     }
 
+    /// Mutable shop inventory, for scenario setup (a test puts a chosen relic on sale).
+    #[doc(hidden)]
+    pub fn debug_shop_inventory_mut(&mut self) -> Option<&mut crate::shop::ShopInventory> {
+        self.shop_inventory.as_mut()
+    }
+
+    /// C# `MerchantInventory.UpdateEntries` (subscribed to every entry's `PurchaseCompleted`): after any
+    /// completed purchase each stocked card entry's `UpdateEntry` re-runs `Hook.ModifyMerchantCardCreationResults`
+    /// on its card, so an egg relic bought in the shop upgrades the offers already on the shelf. Draws no RNG and
+    /// rerolls nothing. sts2-agent fork (egg-shop-upgrades).
+    fn refresh_shop_card_offers(&mut self) {
+        let Some(inv) = self.shop_inventory.as_mut() else {
+            return;
+        };
+        let rs = &mut self.run_state;
+        for (colorless, entries) in [(false, &mut inv.cards), (true, &mut inv.colorless_cards)] {
+            for e in entries.iter_mut() {
+                if crate::shop::is_shop_entry_available(e.price) {
+                    if let Some(card) = e.card.as_mut() {
+                        rs.modify_merchant_card_creation_results(card, colorless);
+                    }
+                }
+            }
+        }
+    }
+
     /// Boss-relic offers currently visible to the player on the
     /// [`Phase::BossRelic`] choice screen, in the order
     /// `RunAction::PickBossRelic { idx }` indexes them. Empty outside
@@ -4285,6 +4311,7 @@ impl RunManager {
                     == crate::shop::ShopPurchaseOutcome::Bought
                 {
                     self.restock_slot_if_courier(crate::shop::ShopSlot::Card(next));
+                    self.refresh_shop_card_offers();
                 }
             } else if next < relics {
                 let idx = next - cards;
@@ -4392,6 +4419,7 @@ impl RunManager {
     fn finish_relic_purchase(&mut self, (slot, gold_spent): (crate::shop::ShopSlot, i32)) {
         let _ = crate::run_effects::dispatch_on_item_purchased(&mut self.run_state, gold_spent);
         self.restock_slot_if_courier(slot);
+        self.refresh_shop_card_offers();
     }
 
     /// After a successful merchant purchase, re-populate the just-bought
@@ -4432,6 +4460,7 @@ impl RunManager {
         match crate::shop::buy_card(&mut self.run_state, inv, idx) {
             crate::shop::ShopPurchaseOutcome::Bought => {
                 self.restock_slot_if_courier(crate::shop::ShopSlot::Card(idx));
+                self.refresh_shop_card_offers();
                 ActionResult::Advanced
             }
             other => ActionResult::ShopPurchaseFailed(other),
@@ -4481,6 +4510,7 @@ impl RunManager {
                 // is RNG-free — so the stream position stays C#-aligned.
                 self.restock_slot_if_courier(crate::shop::ShopSlot::Potion(idx));
                 self.drain_pending_rewards();
+                self.refresh_shop_card_offers();
                 ActionResult::Advanced
             }
             // A full belt (or procure veto) is a graceful no-op in C#:
@@ -4500,7 +4530,10 @@ impl RunManager {
             return ActionResult::InvalidForPhase;
         };
         match crate::shop::purchase_card_removal(&mut self.run_state, inv, deck_idx) {
-            crate::shop::PurchaseCardRemovalResult::Removed { .. } => ActionResult::Advanced,
+            crate::shop::PurchaseCardRemovalResult::Removed { .. } => {
+                self.refresh_shop_card_offers();
+                ActionResult::Advanced
+            }
             other => ActionResult::ShopRemoveCardFailed(other),
         }
     }
