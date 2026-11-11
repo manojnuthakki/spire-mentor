@@ -1070,6 +1070,18 @@ pub struct PowerStore {
     /// no power that could make that dispatcher act exists. Derived like
     /// `present_kinds`: excluded from `PartialEq` and from `Debug`.
     hook_live: u64,
+    /// Instance identity (step46, galvanic-card-affliction): `serials[slot]` is the
+    /// never-reused serial of `powers[slot]`, assigned at [`PowerStore::push`]. A numeric
+    /// power id IS reused (`max+1` allocation), a serial never is, so a listener a hook
+    /// captured before its power was removed and its id reused still names its own
+    /// instance (C# holds the model object). Derived: excluded from `PartialEq` / `Debug`.
+    serials: SmallVec<[u64; 16]>,
+    /// Next serial to hand out; monotonic for the store's life (survives `clear`).
+    next_serial: u64,
+    /// Powers removed by [`PowerStore::retain`], with their serial and their state as of
+    /// the removal: a captured listener's model keeps its last mutated amount after the
+    /// power leaves its owner. Derived, like `serials`; cleared with the store.
+    retired: SmallVec<[(u64, Power); 2]>,
 }
 
 /// The derived output of the fields before `hook_live` existed, so a state's
@@ -1123,6 +1135,9 @@ impl PowerStore {
             slot_of_id: SmallVec::new(),
             present_kinds: PowerKindSet::EMPTY,
             hook_live: 0,
+            serials: SmallVec::new(),
+            next_serial: 1,
+            retired: SmallVec::new(),
         }
     }
 
@@ -1135,6 +1150,9 @@ impl PowerStore {
             slot_of_id: SmallVec::new(),
             present_kinds: PowerKindSet::EMPTY,
             hook_live: 0,
+            serials: SmallVec::new(),
+            next_serial: 1,
+            retired: SmallVec::new(),
         }
     }
 
@@ -1181,7 +1199,40 @@ impl PowerStore {
         self.slot_of_id[i] = slot + 1;
         self.present_kinds.insert(power.kind);
         self.hook_live |= crate::hooks::power_hook_bits(power.kind);
+        self.serials.push(self.next_serial);
+        self.next_serial += 1;
         self.powers.push(power);
+    }
+
+    /// The instance serial of the live power with this id (see the `serials` field).
+    #[inline]
+    #[must_use]
+    pub fn serial_of_id(&self, id: NonZeroU32) -> Option<u64> {
+        let slot = *self.slot_of_id.get(Self::id_index(id))?;
+        if slot == 0 {
+            return None;
+        }
+        self.serials.get((slot - 1) as usize).copied()
+    }
+
+    /// Resolve a power instance by serial: the live row, else the state it had when
+    /// [`PowerStore::retain`] removed it (a hook that captured the instance before the
+    /// removal still reads its last amount). `None` once the store was cleared.
+    #[must_use]
+    pub fn get_by_serial(&self, serial: u64) -> Option<&Power> {
+        if let Some(slot) = self.serials.iter().position(|s| *s == serial) {
+            return self.powers.get(slot);
+        }
+        self.retired
+            .iter()
+            .find(|(s, _)| *s == serial)
+            .map(|(_, p)| p)
+    }
+
+    /// Whether the instance with this serial is still installed (live row).
+    #[must_use]
+    pub fn serial_is_live(&self, serial: u64) -> bool {
+        self.serials.contains(&serial)
     }
 
     /// Retain powers matching `f`, then rebuild the slot index (slots shift
@@ -1190,7 +1241,18 @@ impl PowerStore {
     where
         F: FnMut(&Power) -> bool,
     {
-        self.powers.retain(f);
+        let mut f = f;
+        let old_powers = core::mem::take(&mut self.powers);
+        let old_serials = core::mem::take(&mut self.serials);
+        debug_assert_eq!(old_powers.len(), old_serials.len(), "serials parallel to powers");
+        for (p, serial) in old_powers.into_iter().zip(old_serials) {
+            if f(&p) {
+                self.powers.push(p);
+                self.serials.push(serial);
+            } else {
+                self.retired.push((serial, p));
+            }
+        }
         self.rebuild_index();
     }
 
@@ -1198,6 +1260,8 @@ impl PowerStore {
     #[inline]
     pub fn clear(&mut self) {
         self.powers.clear();
+        self.serials.clear();
+        self.retired.clear();
         self.slot_of_id.clear();
         self.present_kinds = PowerKindSet::EMPTY;
         self.hook_live = 0;
@@ -1267,11 +1331,15 @@ impl<'a> IntoIterator for &'a mut PowerStore {
 impl From<Vec<Power>> for PowerStore {
     #[inline]
     fn from(powers: Vec<Power>) -> Self {
+        let n = powers.len() as u64;
         let mut store = Self {
             powers,
             slot_of_id: SmallVec::new(),
             present_kinds: PowerKindSet::EMPTY,
             hook_live: 0,
+            serials: (1..=n).collect(),
+            next_serial: n + 1,
+            retired: SmallVec::new(),
         };
         store.rebuild_index();
         store
@@ -4749,9 +4817,12 @@ impl CombatState {
         // entering combat) and HungerPower were skipped for cards created via
         // this path (PrimalForce→GiantRock, Charge→MinionStrike, Regent /
         // Necrobinder transforms). Mirrors `card_effects::transform_card_in_place`
-        // and `fire_after_card_entered_combat`; Exhaust is not a card-entered
-        // event.
-        if !matches!(pile, crate::cards::PileKind::Exhaust) {
+        // and `fire_after_card_entered_combat`. The installed DLL includes
+        // Exhaust in combat piles; its scoped Galvanic leg covers that entry
+        // while the other existing Exhaust bus omissions stay separate.
+        if matches!(pile, crate::cards::PileKind::Exhaust) {
+            crate::monster_power_effects::galvanic_exhaust_entry(self, new_uid);
+        } else {
             let _ = crate::relic_effects::dispatch_after_card_entered_combat(self, new_uid, true);
             let _ =
                 crate::monster_power_effects::dispatch_after_card_entered_combat_on_monster_powers(

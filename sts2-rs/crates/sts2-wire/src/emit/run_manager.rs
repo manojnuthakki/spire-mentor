@@ -906,6 +906,11 @@ pub fn shop_inventory(rm: &RunManager) -> Value {
             set(&mut cd, "id", format!("{:?}", c.card_id));
             // The offer itself can be upgraded (the egg relics' `ModifyMerchantCardCreationResults`).
             set(&mut cd, "upgraded", c.upgraded);
+            // ... and enchanted (Fresnel Lens's `Nimble`), in the deck card's spelling.
+            if let Some((id, amount)) = c.enchantments.first() {
+                set(&mut cd, "enchantment", id.wire_name());
+                set(&mut cd, "enchantment_amount", *amount);
+            }
         }
         set(&mut cd, "price", price_of(e.price));
         set(&mut cd, "on_sale", e.on_sale);

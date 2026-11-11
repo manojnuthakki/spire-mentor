@@ -392,6 +392,7 @@ pub fn start_combat(state: &mut CombatState) -> StepResult {
     // shuffled-and-present (Step 2 above) and any other before-combat listeners
     // have run.
     crate::monster_power_effects::vital_spark_before_combat_start(state);
+    crate::monster_power_effects::galvanic_before_combat_start(state);
     // Bead `sts2-rs-j87`: parallel relic-effects bus drain. The
     // `hooks::*` registry above carries the legacy power+relic
     // walk; the `relic_effects::*` channel carries the per-relic
