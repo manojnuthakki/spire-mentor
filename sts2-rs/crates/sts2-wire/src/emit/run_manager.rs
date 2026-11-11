@@ -904,6 +904,8 @@ pub fn shop_inventory(rm: &RunManager) -> Value {
         set(&mut cd, "idx", idx);
         if let Some(c) = &e.card {
             set(&mut cd, "id", format!("{:?}", c.card_id));
+            // The offer itself can be upgraded (the egg relics' `ModifyMerchantCardCreationResults`).
+            set(&mut cd, "upgraded", c.upgraded);
         }
         set(&mut cd, "price", price_of(e.price));
         set(&mut cd, "on_sale", e.on_sale);
