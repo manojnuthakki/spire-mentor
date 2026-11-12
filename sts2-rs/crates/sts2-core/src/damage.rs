@@ -3364,9 +3364,10 @@ mod tests {
     }
 
     /// Bead `sts2-rs-ar9ll` (dvqa1.1): a positive→zero HP transition on
-    /// an enemy gets recorded into `combat_log.newly_dead_this_turn`,
-    /// and the same uid is not double-recorded if `apply_damage` is
-    /// invoked again on the already-dead creature.
+    /// an enemy is recorded into `combat_log.newly_dead_this_turn`, and
+    /// (step48, `queen-amalgam-death`) delivered to the AfterDeath
+    /// listeners at the kill, which drains the carrier; an already-dead
+    /// creature is not recorded (or delivered) again.
     #[test]
     fn newly_dead_this_turn_records_enemy_zero_transition() {
         let mut state = vulnerable_scenario();
@@ -3399,10 +3400,9 @@ mod tests {
             dead_uid_after_lethal <= 0,
             "sanity: 200 raw damage reduced HP to <= 0 (got {dead_uid_after_lethal})"
         );
-        assert_eq!(
-            state.combat_log.newly_dead_this_turn.as_slice(),
-            &[cultist_uid()],
-            "lethal hit records the dead creature's uid"
+        assert!(
+            state.combat_log.newly_dead_this_turn.is_empty(),
+            "the lethal hit's death was delivered at the kill, which drained the carrier"
         );
 
         // Posthumous hit must not double-record. pre_hp is already 0,
@@ -3415,9 +3415,8 @@ mod tests {
             ValueProps::UNPOWERED,
             None,
         );
-        assert_eq!(
-            state.combat_log.newly_dead_this_turn.as_slice(),
-            &[cultist_uid()],
+        assert!(
+            state.combat_log.newly_dead_this_turn.is_empty(),
             "posthumous hit does not re-record"
         );
 
