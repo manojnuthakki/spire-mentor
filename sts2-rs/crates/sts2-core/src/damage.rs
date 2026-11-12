@@ -995,6 +995,11 @@ fn apply_damage_hit(
         && !state.combat_log.newly_dead_this_turn.contains(&target)
     {
         state.combat_log.newly_dead_this_turn.push(target);
+        // Step48 (`queen-amalgam-death`): C# runs `Hook.AfterDeath` at the kill
+        // (`CreatureCmd.Kill`), not when an enemy next acts; deliver the monster
+        // callbacks here. The enemy walk's own call after a move stays and finds
+        // the carrier drained.
+        crate::combat_loop::dispatch_after_death_listeners(state);
     }
     // Bead `sts2-rs-RP13`: C# `SwipePower.BeforeDeath` restores any card the
     // thief stole when it DIES (vs escapes). Reclaim here at the damage-death

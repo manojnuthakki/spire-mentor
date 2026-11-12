@@ -2396,12 +2396,25 @@ fn queen_after_death(
     let Some(owner_idx) = state.creatures.iter().position(|c| c.id == owner.0) else {
         return;
     };
-    let Some(ai) = state.creatures[owner_idx].ai.as_mut() else {
+    // C# `SetMoveImmediate` is the move AND its intent: re-point `creature.intent` too.
+    let creature = &mut state.creatures[owner_idx];
+    let Some(ai) = creature.ai.as_mut() else {
         return;
     };
     ai.set_counter(1);
     if ai.current_state_id() == "BURN_BRIGHT_FOR_ME_MOVE" {
-        ai.force_next_state("ENRAGE_MOVE");
+        if ai.performed_current_move() {
+            // The move on show was already performed this turn and the engine rolls the
+            // next one after the enemy walk (a kill inside the walk): queue the override
+            // for that roll.
+            ai.force_next_state("ENRAGE_MOVE");
+        } else {
+            // `NextMove == BurnBrightForMeState` still to be performed (a play's kill, or
+            // Demise at the enemy turn's end after the roll): `SetMoveImmediate` replaces
+            // it at once.
+            ai.force_current_state("ENRAGE_MOVE");
+            creature.intent = ai.current_move().intents.first().copied();
+        }
     }
 }
 
@@ -4248,10 +4261,11 @@ mod tests {
         let ai = queen.ai.as_ref().expect("queen has ai");
         assert_eq!(ai.counter(), 1, "HasAmalgamDied counter flips to 1");
         assert_eq!(
-            ai.forced_next_state(),
-            Some("ENRAGE_MOVE"),
-            "BURN_BRIGHT → ENRAGE short-circuit",
+            ai.current_state_id(),
+            "ENRAGE_MOVE",
+            "an unperformed BURN_BRIGHT is replaced at once (SetMoveImmediate)",
         );
+        assert_eq!(ai.forced_next_state(), None);
     }
 
     /// Negative path for `sts2-rs-6g4v4`: the listener ignores deaths of
