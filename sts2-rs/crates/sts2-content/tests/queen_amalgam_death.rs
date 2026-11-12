@@ -85,9 +85,10 @@ fn a_player_kill_of_the_amalgam_sets_the_queens_move_at_once() {
 }
 
 #[test]
-fn a_demise_kill_at_the_enemy_turns_end_shows_enrage_for_the_next_turn() {
+fn a_demise_kill_after_her_move_skips_enrage_in_the_roll_that_follows() {
     // Demise ticks at the owner's (enemy) turn end, after the Queen performed Burn Bright and
-    // her next move was rolled (Burn Bright again); the kill's SetMoveImmediate replaces it.
+    // before the roll. Native: SetMoveImmediate(Enraged) then the roll continues from Enraged,
+    // so the next turn shows Off With Your Head (checked against the game's DLL).
     let (mut s, amalgam, queen) = board(5);
     sts2_core::card_effects::apply_power_to_creature(&mut s, amalgam, PowerKind::Demise, 9);
     let _ = apply(&mut s, Action::EndTurn);
@@ -101,7 +102,7 @@ fn a_demise_kill_at_the_enemy_turns_end_shows_enrage_for_the_next_turn() {
     );
     let q = s.creatures.iter().find(|c| c.id == queen.0).unwrap();
     assert_eq!(q.block, 20, "she performed Burn Bright this turn");
-    assert_eq!(queen_state(&s, queen), ("ENRAGE_MOVE", 1));
+    assert_eq!(queen_state(&s, queen), ("OFF_WITH_YOUR_HEAD_MOVE", 1));
     assert_eq!(
         q.intent,
         q.ai.as_ref()
@@ -114,7 +115,7 @@ fn a_demise_kill_at_the_enemy_turns_end_shows_enrage_for_the_next_turn() {
 }
 
 #[test]
-fn a_kill_inside_the_enemy_walk_after_her_move_queues_enrage_for_the_roll() {
+fn a_kill_inside_the_enemy_walk_after_her_move_sets_enrage_then_the_roll_follows_it() {
     let (mut s, _amalgam, queen) = board(5);
     let q = s.creatures.iter_mut().find(|c| c.id == queen.0).unwrap();
     q.ai.as_mut().unwrap().on_move_started(); // Burn Bright on show was already performed
@@ -127,8 +128,59 @@ fn a_kill_inside_the_enemy_walk_after_her_move_queues_enrage_for_the_roll() {
         sts2_core::hooks::ValueProps::UNPOWERED,
         None,
     );
-    let c = s.creatures.iter().find(|c| c.id == queen.0).unwrap();
-    let ai = c.ai.as_ref().unwrap();
-    assert_eq!(ai.current_state_id(), BURN_BRIGHT);
-    assert_eq!(ai.forced_next_state(), Some("ENRAGE_MOVE"));
+    let c = s.creatures.iter_mut().find(|c| c.id == queen.0).unwrap();
+    let ai = c.ai.as_mut().unwrap();
+    assert_eq!(ai.current_state_id(), "ENRAGE_MOVE");
+    assert_eq!(ai.forced_next_state(), None);
+    let _ = ai.roll_move_seeded(1);
+    assert_eq!(ai.current_state_id(), "OFF_WITH_YOUR_HEAD_MOVE");
+}
+
+static DELIVERIES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn count_delivery(_: &mut CombatState, _dead: CreatureUid, _owner: CreatureUid) {
+    DELIVERIES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[test]
+fn a_lethal_hit_delivers_the_death_to_listeners_exactly_once() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let (mut s, amalgam, queen) = board(5);
+    s.creatures
+        .iter_mut()
+        .find(|c| c.id == queen.0)
+        .unwrap()
+        .ai
+        .as_mut()
+        .unwrap()
+        .after_death = Some(count_delivery);
+    DELIVERIES.store(0, SeqCst);
+    let hit = |s: &mut CombatState, n: i32| {
+        sts2_core::damage::apply_damage_full(
+            s,
+            sts2_core::hooks::CreatureRef::Player,
+            amalgam,
+            n,
+            sts2_core::hooks::ValueProps::UNPOWERED,
+            None,
+        )
+    };
+    let _ = hit(&mut s, 2);
+    assert_eq!(
+        DELIVERIES.load(SeqCst),
+        0,
+        "a non-lethal hit delivers nothing"
+    );
+    let _ = hit(&mut s, 50);
+    assert_eq!(
+        DELIVERIES.load(SeqCst),
+        1,
+        "the lethal hit delivers at the kill"
+    );
+    let _ = hit(&mut s, 5);
+    assert_eq!(
+        DELIVERIES.load(SeqCst),
+        1,
+        "a posthumous hit does not deliver again"
+    );
 }

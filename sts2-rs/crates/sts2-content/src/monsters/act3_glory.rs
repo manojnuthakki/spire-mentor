@@ -2403,18 +2403,12 @@ fn queen_after_death(
     };
     ai.set_counter(1);
     if ai.current_state_id() == "BURN_BRIGHT_FOR_ME_MOVE" {
-        if ai.performed_current_move() {
-            // The move on show was already performed this turn and the engine rolls the
-            // next one after the enemy walk (a kill inside the walk): queue the override
-            // for that roll.
-            ai.force_next_state("ENRAGE_MOVE");
-        } else {
-            // `NextMove == BurnBrightForMeState` still to be performed (a play's kill, or
-            // Demise at the enemy turn's end after the roll): `SetMoveImmediate` replaces
-            // it at once.
-            ai.force_current_state("ENRAGE_MOVE");
-            creature.intent = ai.current_move().intents.first().copied();
-        }
+        // `SetMoveImmediate(EnragedState)`: NextMove AND the machine's current state become
+        // Enraged at once, whether or not Burn Bright already ran this turn. When it
+        // had (a kill inside the walk, Demise at the turn's end), the roll that follows
+        // continues from Enraged, so the next move is its follow-up (Off With Your Head).
+        ai.force_current_state("ENRAGE_MOVE");
+        creature.intent = ai.current_move().intents.first().copied();
     }
 }
 
