@@ -96,6 +96,12 @@ pub fn run_action_to_value(a: &RunAction) -> Value {
         RunAction::CollectTreasure => {
             set(&mut d, "action", "collect_treasure");
         }
+        RunAction::CrystalSphereDivine { x, y, big } => {
+            set(&mut d, "action", "crystal_sphere_divine");
+            set(&mut d, "x", *x);
+            set(&mut d, "y", *y);
+            set(&mut d, "big", *big);
+        }
         RunAction::SacrificeCardReward => {
             set(&mut d, "action", "sacrifice_card_reward");
         }
@@ -262,6 +268,11 @@ pub fn run_action_from_value(v: &Value) -> Result<RunAction, EmitError> {
             idx: req_usize(d, "idx")?,
         },
         "collect_treasure" => RunAction::CollectTreasure,
+        "crystal_sphere_divine" => RunAction::CrystalSphereDivine {
+            x: u8::try_from(req_usize(d, "x")?).map_err(|_| EmitError::new("x out of range"))?,
+            y: u8::try_from(req_usize(d, "y")?).map_err(|_| EmitError::new("y out of range"))?,
+            big: d.get("big").and_then(|v| v.as_bool()).unwrap_or(true),
+        },
         "sacrifice_card_reward" => RunAction::SacrificeCardReward,
         // Bead `sts2-rs-i6h9i.1`: surface in-combat pending-choice
         // resolution (added to the core RunManager API in `sts2-rs-6dtxp`)

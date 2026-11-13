@@ -1707,6 +1707,12 @@ pub struct RunState {
     /// pin; the workbench opts in at construction.
     pub direct_event_relic_grant: bool,
 
+    /// The Crystal Sphere minigame while the event is on its grid (C#
+    /// `CrystalSphereMinigame`; sts2-agent fork, lane F's F8): set by an
+    /// option of the event, cleared when the last divination is spent and its
+    /// rewards are offered.
+    pub crystal_sphere: Option<crate::crystal_sphere::CrystalSphere>,
+
     /// Opt-in rewards screen after a won combat (sts2-agent fork). When
     /// `true`, the room's rewards (gold, a dropped potion, the card reward,
     /// an elite's relic) are rolled in the same `Rewards`-stream order as
@@ -2139,6 +2145,7 @@ impl Default for RunState {
             pending_potion_swaps: Vec::new(),
             potions_overflow_dropped: 0,
             direct_event_relic_grant: false,
+            crystal_sphere: None,
             rooms_generated: false,
             visited_event_ids: std::collections::BTreeSet::new(),
             // Bead `sts2-rs-4aunm`: identity ascension + no map

@@ -1078,6 +1078,53 @@ impl PyRunManager {
         emit_rm::relics(&self.inner)
     }
 
+    /// The Crystal Sphere minigame as its screen shows it (sts2-agent fork,
+    /// lane F's F8), or `None` when the event is not on its grid: `width`,
+    /// `height`, `cleared` (cells `[x, y]`, row by row), `divinations_left`,
+    /// `tool` (`"big"` / `"small"`), and `items` for the items with at least
+    /// one cleared cell only (`kind`, `x`, `y`, `width`, `height`, `revealed`,
+    /// and `rarity` for a card reward whose banner row is uncovered). Items
+    /// under the fog are not in it; the engine's hidden layout never leaves
+    /// the engine.
+    fn crystal_sphere_state(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+        use sts2_core::crystal_sphere::{ItemKind, SphereCardRarity, Tool, GRID};
+        let Some(sphere) = self.inner.run_state.crystal_sphere.as_ref() else {
+            return Ok(None);
+        };
+        let items: Vec<serde_json::Value> = sphere
+            .visible_items()
+            .into_iter()
+            .map(|(i, revealed)| {
+                let item = &sphere.items()[i];
+                let (w, h) = item.kind.size();
+                let rarity = match item.kind {
+                    ItemKind::CardReward(r) if sphere.banner_shown(i) => Some(match r {
+                        SphereCardRarity::Common => "common",
+                        SphereCardRarity::Uncommon => "uncommon",
+                        SphereCardRarity::Rare => "rare",
+                    }),
+                    _ => None,
+                };
+                serde_json::json!({
+                    "kind": item.kind.name(), "x": item.x, "y": item.y,
+                    "width": w, "height": h, "revealed": revealed, "rarity": rarity,
+                })
+            })
+            .collect();
+        let cleared: Vec<serde_json::Value> = sphere
+            .cleared_cells()
+            .into_iter()
+            .map(|(x, y)| serde_json::json!([x, y]))
+            .collect();
+        let value = serde_json::json!({
+            "width": GRID, "height": GRID, "cleared": cleared,
+            "divinations_left": sphere.divinations_left(),
+            "tool": if sphere.tool() == Tool::Small { "small" } else { "big" },
+            "items": items,
+        });
+        crate::value_to_py(py, &value).map(|o| Some(o.unbind()))
+    }
+
     /// The run-side relic state, read-only (sts2-agent fork): `counters` (each
     /// `relic_counters` entry by relic name), `paels_wing_sacrificed`,
     /// `paels_tooth_stored`, `winged_boots_used` (`WingedBoots.TimesUsed`). See `emit::run_manager::run_relic_state`.

@@ -121,6 +121,10 @@ pub enum RunAction {
         potion_slot: usize,
         target: Option<u32>,
     },
+    /// Event (Crystal Sphere minigame): one divination at hidden cell
+    /// `(x, y)` with the Big (3x3) or Small (1x1) tool. sts2-agent fork,
+    /// lane F's F8.
+    CrystalSphereDivine { x: u8, y: u8, big: bool },
     /// CardReward: pick option index `idx` (0..3), or skip via `None`.
     PickCardReward { idx: Option<usize> },
     /// CardReward: accept the currently-offered relic reward.
@@ -474,6 +478,19 @@ pub struct ContentCallbacks {
     /// `TheFutureOfPotions`, …) are reachable through the public
     /// action surface.
     pub resolve_event_at: Option<fn(rs: &mut RunState, idx: usize) -> bool>,
+    /// One Crystal Sphere divination at `(x, y)` with the Big (`true`) or
+    /// Small tool: reveals items, adds the curse of a revealed one to the
+    /// deck and, on the last divination, offers the revealed items' rewards
+    /// and closes the minigame. `Ok(true)` when it finished. sts2-agent fork,
+    /// lane F's F8 (`crystal-sphere`).
+    pub crystal_sphere_divine: Option<
+        fn(
+            rs: &mut RunState,
+            x: i32,
+            y: i32,
+            big: bool,
+        ) -> Result<bool, crate::crystal_sphere::DivineError>,
+    >,
     /// Number of options the currently-active event offers. Returns 0
     /// when no event is active (`current_event == None`). The engine
     /// uses this in `get_available_actions` to enumerate one
@@ -1837,6 +1854,27 @@ impl RunManager {
                     .map(|idx| RunAction::RestOption { idx })
                     .collect()
             }
+            Phase::Event if self.run_state.crystal_sphere.is_some() => {
+                // The Crystal Sphere's grid: a divination per hidden cell and tool.
+                let sphere = self.run_state.crystal_sphere.as_ref().expect("checked");
+                let mut out = Vec::new();
+                if !sphere.is_finished() {
+                    for y in 0..crate::crystal_sphere::GRID {
+                        for x in 0..crate::crystal_sphere::GRID {
+                            if sphere.is_hidden(x as i32, y as i32) {
+                                for big in [true, false] {
+                                    out.push(RunAction::CrystalSphereDivine {
+                                        x: x as u8,
+                                        y: y as u8,
+                                        big,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+                out
+            }
             Phase::Event => {
                 // Bead sts2-rs-nzdz1: enumerate one EventChoice per
                 // option offered by the active event. When no
@@ -2018,6 +2056,15 @@ impl RunManager {
             }
             (Phase::RestSite, RunAction::RestOption { idx }) => self.do_rest_site_at(idx),
             (Phase::RestSite, RunAction::SmithCard { idx }) => self.do_smith_card_at(idx),
+            (Phase::Event, RunAction::CrystalSphereDivine { x, y, big }) => {
+                self.do_crystal_sphere_divine(i32::from(x), i32::from(y), big)
+            }
+            (Phase::Event, RunAction::EventChoice { .. })
+                if self.run_state.crystal_sphere.is_some() =>
+            {
+                // On the grid the minigame has no way out but divining.
+                ActionResult::InvalidForPhase
+            }
             (Phase::Event, RunAction::EventChoice { idx }) => {
                 if self.event_choice_refused(idx) {
                     ActionResult::InvalidForPhase
@@ -5120,6 +5167,26 @@ impl RunManager {
             .event_option_count
             .map_or(0, |f| f(&self.run_state));
         (0..n).any(|i| self.event_option_enabled(i))
+    }
+
+    /// One Crystal Sphere divination (lane F's F8). Refused without the
+    /// minigame open or on a cell the game's screen ignores; on the last one
+    /// the event ends and its offered rewards open, as after any event.
+    fn do_crystal_sphere_divine(&mut self, x: i32, y: i32, big: bool) -> ActionResult {
+        if self.run_state.crystal_sphere.is_none() {
+            return ActionResult::InvalidForPhase;
+        }
+        let Some(divine) = self.callbacks.crystal_sphere_divine else {
+            return ActionResult::NotImplemented;
+        };
+        match divine(&mut self.run_state, x, y, big) {
+            Err(_) => ActionResult::InvalidForPhase,
+            Ok(false) => ActionResult::Advanced,
+            Ok(true) => {
+                self.run_state.exit_event_room();
+                self.route_after_event_rewards()
+            }
+        }
     }
 
     fn do_event_choice(&mut self, idx: usize) -> ActionResult {

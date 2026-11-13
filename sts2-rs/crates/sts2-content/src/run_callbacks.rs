@@ -64,6 +64,7 @@ pub fn ironclad_content_callbacks() -> ContentCallbacks {
         setup_boss_relic_ancient: Some(setup_boss_relic_ancient),
         generate_treasure_relic_pools: Some(generate_treasure_relic_pools),
         resolve_event_at: Some(crate::events::dispatch::resolve_event_at_callback),
+        crystal_sphere_divine: Some(crate::events::crystal_sphere::divine),
         event_option_count: Some(crate::events::dispatch::event_option_count_callback),
         event_option_enabled: Some(crate::events::dispatch::event_option_enabled_callback),
         bind_event_room: Some(crate::events::dispatch::bind_event_room_callback),

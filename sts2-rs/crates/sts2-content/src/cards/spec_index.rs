@@ -2461,6 +2461,60 @@ pub fn roll_card_reward_cards(
     cards
 }
 
+/// `CrystalSphereCardReward.ToReward`: a 3-card reward of ONE rarity
+/// (`CardRarityOddsType.Uniform`, predicate `Rarity == r`, `WithRngOverride`):
+/// per card `NextItem` over the character pool's cards of that rarity minus
+/// those already offered, then `RollForUpgrade` (act-scaled, off the same RNG),
+/// then the relics' late reward hook. All off `rng` (the event's), which is
+/// swapped into the run's `Rewards` slot for the hook. Not modelled: the
+/// `LastingCandy` mid hook (its nested roll needs a Uniform odds context).
+/// Lane F's F8 (`crystal-sphere`).
+pub fn roll_card_reward_of_rarity(
+    rs: &mut RunState,
+    rng: &mut sts2_core::DotNetRng,
+    rarity: CardRarity,
+    count: usize,
+    character: CharacterId,
+) -> Vec<sts2_core::cards::Card> {
+    use sts2_core::card_rewards::{
+        combat_card_upgrade_base_chance, roll_for_upgrade_with_dotnet, RewardRarity,
+    };
+    let reward_rarity = match rarity {
+        CardRarity::Uncommon => RewardRarity::Uncommon,
+        CardRarity::Rare => RewardRarity::Rare,
+        _ => RewardRarity::Common,
+    };
+    let act_index = rs.act_index.saturating_sub(1);
+    let ascension_level = rs.card_rarity_odds.ascension_level;
+    let upgrade_base = combat_card_upgrade_base_chance();
+    let mut chosen: Vec<CardId> = Vec::new();
+    let mut cards = Vec::with_capacity(count);
+    for _ in 0..count {
+        let mut candidates = eligible_ids_for_rarity(&[character], false, rarity);
+        candidates.retain(|id| !chosen.contains(id));
+        if candidates.is_empty() {
+            continue;
+        }
+        let idx = rng.next_int_exclusive(0, candidates.len() as i32) as usize;
+        let pick = candidates[idx];
+        chosen.push(pick);
+        let upgraded = roll_for_upgrade_with_dotnet(
+            rng,
+            reward_rarity,
+            act_index,
+            ascension_level,
+            upgrade_base,
+        );
+        if let Some(card) = card_pod_from_id(pick, upgraded) {
+            cards.push(card);
+        }
+    }
+    std::mem::swap(&mut rs.rng.rewards, rng);
+    let _ = sts2_core::run_effects::dispatch_modify_card_reward_options_late(rs, &mut cards);
+    std::mem::swap(&mut rs.rng.rewards, rng);
+    cards
+}
+
 /// `LastingCandy.TryModifyCardRewardOptions` (sts2-wiki v0.103.2
 /// `LastingCandy.cs:100-137`): on every 2nd combat reward (the relic's
 /// `IsInTriggeringCombat` — `CombatsSeen > 0 && CombatsSeen % 2 == 0`,

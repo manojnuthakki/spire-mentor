@@ -47,6 +47,7 @@ pub mod act1_overgrowth;
 pub mod act2_hive;
 pub mod act2_hive_wave_b;
 pub mod act3_glory;
+pub mod crystal_sphere;
 pub mod dispatch;
 pub mod neow_blessing;
 pub mod shared;

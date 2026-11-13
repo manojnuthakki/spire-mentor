@@ -41,21 +41,35 @@ use super::{
 
 // ── CrystalSphere ────────────────────────────────────────────────────
 
-/// `CrystalSphere::pay` cost. Python rolls 50 + up_front.next_int(1, 50)
-/// (`act2.py:54`) — range [51, 100]. Pinned to the deterministic
-/// midpoint 75 until `6ynt.4.rng` lands.
-pub const CRYSTAL_SPHERE_PAY_COST: i32 = 75;
+/// The event's RNG stream (`Id.Entry`); `CalculateVars` draws the Uncover
+/// Future cost off it, and the minigame and its rewards continue on the same
+/// RNG (C# `base.Rng`).
+pub const CRYSTAL_SPHERE_STREAM: &str = "CRYSTAL_SPHERE";
 
-fn crystal_sphere_generate_options(_state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
-    let cost = CRYSTAL_SPHERE_PAY_COST;
+/// `UncoverFutureCost`: `50 + Rng.NextInt(1, 50)` (`CrystalSphere.CalculateVars`),
+/// the event RNG's first draw: 51-99, so `IsAllowed`'s 100 gold always affords it.
+fn crystal_sphere_cost(state: &RunState) -> (i32, sts2_core::DotNetRng) {
+    let mut rng = sts2_core::DotNetRng::with_name(state.rng.seed, CRYSTAL_SPHERE_STREAM);
+    (50 + rng.next_int_exclusive(1, 50), rng)
+}
+
+fn crystal_sphere_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let (cost, _) = crystal_sphere_cost(state);
     vec![
         EventOptionInfo {
             option_id: "pay",
             loc_key: "CRYSTAL_SPHERE.pages.INITIAL.options.UNCOVER_FUTURE",
-            vars: Vec::new(),
+            vars: vec![
+                (
+                    "UncoverFutureCost",
+                    sts2_core::EventVar::Int(i64::from(cost)),
+                ),
+                ("UncoverFutureProphesizeCount", sts2_core::EventVar::Int(3)),
+                ("CurseTitle", sts2_core::EventVar::Text("Debt".to_string())),
+            ],
             title_vars: Vec::new(),
             label: format!("Uncover Future ({cost}g)"),
-            description: "3 Prophesize picks.".to_string(),
+            description: "3 divinations.".to_string(),
             // C# `CrystalSphere` never locks it: `IsAllowed` admits the event
             // only at 100+ gold, above any rolled cost (51-99) (sts2-agent fork).
             enabled: true,
@@ -63,34 +77,47 @@ fn crystal_sphere_generate_options(_state: &RunState, _spec: &EventSpec) -> Vec<
         EventOptionInfo {
             option_id: "debt",
             loc_key: "CRYSTAL_SPHERE.pages.INITIAL.options.PAYMENT_PLAN",
-            vars: Vec::new(),
+            vars: vec![
+                ("PaymentPlanCount", sts2_core::EventVar::Int(6)),
+                ("CurseTitle", sts2_core::EventVar::Text("Debt".to_string())),
+            ],
             title_vars: Vec::new(),
             label: "Payment Plan".to_string(),
-            description: "6 Prophesize picks, gain Debt curse.".to_string(),
+            description: "6 divinations, gain Debt curse.".to_string(),
             enabled: true,
         },
     ]
 }
 
+/// Uncover Future: lose the rolled cost (`PlayerCmd.LoseGold` floors at 0),
+/// then the 3-divination minigame (the event stays open until it ends).
 fn crystal_sphere_pay(state: &mut RunState) -> EventOutcome {
-    // C# `PlayerCmd.LoseGold` floors the gold at 0.
-    state.gold = (state.gold - CRYSTAL_SPHERE_PAY_COST).max(0);
-    EventOutcome::finished(format!(
-        "Paid {CRYSTAL_SPHERE_PAY_COST}g — 3 Prophesize picks deferred to 6ynt.4.prophesize."
-    ))
+    let (cost, rng) = crystal_sphere_cost(state);
+    state.gold = (state.gold - cost).max(0);
+    state.crystal_sphere = Some(sts2_core::crystal_sphere::CrystalSphere::new(rng, 3));
+    EventOutcome {
+        finished: false,
+        description: format!("Paid {cost}g: 3 divinations."),
+        effects: Vec::new(),
+    }
 }
 
+/// Payment Plan: `AddCurseToDeck<Debt>` (unconditional deck append), then the
+/// 6-divination minigame.
 fn crystal_sphere_debt(state: &mut RunState) -> EventOutcome {
-    // C# `CrystalSphere` Payment Plan: `AddCurseToDeck<Debt>` (unconditional
-    // deck append), then a 6-pick Prophesize minigame — the multi-page picks
-    // stay deferred (`6ynt.4.prophesize`); only the Debt curse-add is wired here.
     use sts2_core::cards::CardId;
+    // The cost draw is made whichever option is taken (`CalculateVars` runs
+    // when the event is built).
+    let (_, rng) = crystal_sphere_cost(state);
     if let Some(curse) = crate::cards::spec_index::card_pod_from_id(CardId::Debt, false) {
         state.add_card_to_deck(curse, sts2_core::relic_effects::AddSource::EventGain);
     }
-    EventOutcome::finished(
-        "Payment Plan — gained a Debt curse (6 Prophesize picks deferred to 6ynt.4.prophesize).",
-    )
+    state.crystal_sphere = Some(sts2_core::crystal_sphere::CrystalSphere::new(rng, 6));
+    EventOutcome {
+        finished: false,
+        description: "Payment Plan: gained a Debt curse, 6 divinations.".to_string(),
+        effects: Vec::new(),
+    }
 }
 
 const CRYSTAL_SPHERE_OPTIONS: &[EventOptionSpec] = &[
@@ -98,14 +125,8 @@ const CRYSTAL_SPHERE_OPTIONS: &[EventOptionSpec] = &[
         option_id: "pay",
         loc_key: "CRYSTAL_SPHERE.pages.INITIAL.options.UNCOVER_FUTURE",
         default_label: "Uncover Future",
-        default_description: "Pay ~75g for 3 Prophesize picks.",
-        default_vars: &[
-            (
-                "UncoverFutureCost",
-                EventVarSpec::Int(CRYSTAL_SPHERE_PAY_COST as i64),
-            ),
-            ("UncoverFutureProphesizeCount", EventVarSpec::Int(3)),
-        ],
+        default_description: "Pay 51-99g for 3 divinations.",
+        default_vars: &[("UncoverFutureProphesizeCount", EventVarSpec::Int(3))],
         vars_fn: None,
         title_vars_fn: None,
         handler: crystal_sphere_pay,
@@ -114,7 +135,7 @@ const CRYSTAL_SPHERE_OPTIONS: &[EventOptionSpec] = &[
         option_id: "debt",
         loc_key: "CRYSTAL_SPHERE.pages.INITIAL.options.PAYMENT_PLAN",
         default_label: "Payment Plan",
-        default_description: "6 Prophesize picks, gain Debt curse.",
+        default_description: "6 divinations, gain Debt curse.",
         default_vars: &[
             ("CurseTitle", EventVarSpec::Text("Debt")),
             ("PaymentPlanCount", EventVarSpec::Int(6)),
@@ -1264,11 +1285,17 @@ mod tests {
     // ── CrystalSphere ──────────────────────────────────────────────
 
     #[test]
-    fn crystal_sphere_pay_deducts_cost() {
+    fn crystal_sphere_pay_deducts_the_rolled_cost_and_opens_the_minigame() {
+        // Lane F's F8: the cost is `50 + NextInt(1, 50)` off the event's RNG
+        // (51-99, not the old fixed 75) and the event stays open on the grid.
         let mut rs = rs_with_gold(200);
+        let (cost, _) = crystal_sphere_cost(&rs);
+        assert!((51..=99).contains(&cost));
         let outcome = (CRYSTAL_SPHERE.options[0].handler)(&mut rs);
-        assert!(outcome.finished);
-        assert_eq!(rs.gold, 200 - CRYSTAL_SPHERE_PAY_COST);
+        assert!(!outcome.finished, "the minigame follows");
+        assert_eq!(rs.gold, 200 - cost);
+        let sphere = rs.crystal_sphere.as_ref().expect("the minigame is open");
+        assert_eq!(sphere.divinations_left(), 3);
     }
 
     #[test]
@@ -1277,7 +1304,11 @@ mod tests {
         let mut rs = rs_with_gold(50);
         let deck_before = rs.master_deck.len();
         let outcome = (CRYSTAL_SPHERE.options[1].handler)(&mut rs);
-        assert!(outcome.finished);
+        assert!(!outcome.finished, "the minigame follows");
+        assert_eq!(
+            rs.crystal_sphere.as_ref().map(|s| s.divinations_left()),
+            Some(6)
+        );
         assert_eq!(rs.gold, 50, "Payment Plan defers the gold cost");
         assert_eq!(rs.master_deck.len(), deck_before + 1);
         assert!(rs.master_deck.iter().any(|c| c.card_id == CardId::Debt));

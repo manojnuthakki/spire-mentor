@@ -415,6 +415,27 @@ fn full_potion_options(character: CharacterId) -> Vec<PotionKind> {
     pool
 }
 
+/// `CrystalSpherePotion.ToReward`: one `NextItem` over `GetPotionOptions`
+/// filtered to the item's rarity (character pool before the shared pool, pool
+/// order kept, nothing removed) off the event's RNG. `None`, drawing nothing,
+/// when no potion of that rarity exists. Lane F's F8 (`crystal-sphere`).
+#[must_use]
+pub fn roll_potion_of_rarity(
+    rng: &mut DotNetRng,
+    character: CharacterId,
+    rarity: PotionRarity,
+) -> Option<PotionKind> {
+    let items: Vec<PotionKind> = full_potion_options(character)
+        .into_iter()
+        .filter(|k| spec_for(*k).rarity == rarity)
+        .collect();
+    if items.is_empty() {
+        return None;
+    }
+    let idx = rng.next_int_exclusive(0, items.len() as i32) as usize;
+    Some(items[idx])
+}
+
 /// One `PlayerRng.Rewards` `NextItem` over the FULL character++shared
 /// pool — the shape five events share (TheLegendsWereTrue
 /// `SlowlyFindAnExit`, Wellspring `Bottle`, BattlewornDummy `Setting1`,

@@ -382,6 +382,7 @@ pub use acts::{act_1, act_2, act_3, all_acts, ActConfig};
 // Port pin `sts2-rl-agent@01c094d:sts2_env/run/odds.py::CardRarityOdds`
 // + `sts2_env/run/rewards.py::{generate_card_reward, roll_for_upgrade}`.
 pub mod card_rewards;
+pub mod crystal_sphere;
 pub use card_rewards::{
     combat_card_upgrade_base_chance, roll_for_upgrade, CardRarityOdds, RarityContext, RewardRarity,
 };
