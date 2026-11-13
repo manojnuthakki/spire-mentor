@@ -4277,6 +4277,25 @@ impl RunState {
         crate::boss_ancient_offers::roll_offers(ancient, &mut rng, &cond)
     }
 
+    /// The 3 relic offers of `ancient` entered as an event NOW (the harness's
+    /// forced room entry, or any event path that opens an Ancient in the
+    /// current act): the same per-event RNG and `GenerateInitialOptions`
+    /// port as [`Self::roll_boss_relic_offers`], with the conditions read
+    /// from the current act (`act_index` is 1-based) instead of the next
+    /// one. Neow's offers come from `neow_offers`: empty here.
+    #[must_use]
+    pub fn roll_ancient_event_offers(
+        &self,
+        ancient: crate::run_room_gen::AncientId,
+    ) -> Vec<RelicId> {
+        if ancient == crate::run_room_gen::AncientId::Neow {
+            return Vec::new();
+        }
+        let cond = self.compute_ancient_conditions((i32::from(self.act_index) - 1).max(0));
+        let mut rng = crate::boss_ancient_offers::event_rng(self.rng.seed, ancient);
+        crate::boss_ancient_offers::roll_offers(ancient, &mut rng, &cond)
+    }
+
     /// Orobas's `OptionPool3`: Touch of Orobas when a Starter relic is held
     /// (`TouchOfOrobas.SetupForPlayer`), Archaic Tooth when the deck holds a
     /// card it transcends (`ArchaicTooth.SetupForPlayer`: Bash, Neutralize,

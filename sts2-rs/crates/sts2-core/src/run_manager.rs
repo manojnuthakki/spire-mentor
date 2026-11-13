@@ -5617,6 +5617,12 @@ impl RunManager {
         }
         if let Some(v) = hp {
             self.run_state.current_hp = v;
+            // A dead player ends the run, as the host's `DetectDecisionPoint`
+            // answers `game_over` for one before anything else (lane F's F8).
+            if v <= 0 && self.phase != Phase::RunOver {
+                self.phase = Phase::RunOver;
+                self.run_state.player_won = false;
+            }
         }
         if let Some(v) = gold {
             self.run_state.gold = v;
@@ -5853,6 +5859,49 @@ impl RunManager {
             self.run_state.wax_relics.remove(&relic);
             self.run_state.melted_relics.remove(&relic);
         }
+        true
+    }
+
+    /// Add `relic` the way the host's `set_player` does (C# `SetPlayerImpl`:
+    /// the model is added to the player's list with no `RelicCmd.Obtain`):
+    /// no `after_obtained` hook, no counter set, and the relic listens at
+    /// once (`AddRelicInternal` subscribes it), so in a live fight it joins
+    /// the fight's relic store too, with its initial counter. sts2-agent
+    /// fork; the harness setup of lane F's F8, not a gameplay acquisition
+    /// (`RunState::accept_relic_reward` and the pyo3 `force_add_relic` keep
+    /// the obtain hooks).
+    ///
+    /// Returns `false`, changing nothing, when the relic is already held.
+    pub fn force_add_relic_bare(&mut self, relic: crate::RelicId) -> bool {
+        if self.run_state.relics.contains(&relic) {
+            return false;
+        }
+        self.run_state.relics.push(relic);
+        if self.phase == Phase::Combat {
+            if let (Some(combat), Some(kind)) = (self.combat.as_mut(), relic.to_relic_kind()) {
+                let raw = u32::try_from(self.run_state.relics.len()).expect("relic count fits");
+                combat.relics.push(crate::Relic {
+                    id: std::num::NonZeroU32::new(raw).expect("non-zero"),
+                    kind,
+                    counter: kind.initial_counter(),
+                    is_wax: false,
+                    is_melted: false,
+                });
+            }
+        }
+        true
+    }
+
+    /// Append `card` to the master deck at its base or upgraded values (the
+    /// registered factory builds either: an upgraded Bludgeon deals 42, not
+    /// the base 32 with a flag), the engine side of the host's `set_player`
+    /// deck entries such as `BLUDGEON+1` (sts2-agent fork, lane F's F8).
+    /// `false`, changing nothing, when no factory or spec knows the card.
+    pub fn force_add_card(&mut self, card: crate::cards::CardId, upgraded: bool) -> bool {
+        let Some(card) = crate::lookup_card_factory().and_then(|f| f(card, upgraded)) else {
+            return false;
+        };
+        self.run_state.master_deck.push(card);
         true
     }
 

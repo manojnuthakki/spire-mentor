@@ -1170,19 +1170,23 @@ impl PyRunManager {
     /// taking a `pick_card_reward {idx: None}` (skip) so the engine's
     /// reward queue drains while the deck still matches the human's.
     /// Bead `sts2-rs-i6h9i.1`.
-    fn force_add_card(&mut self, card_id: &str) -> PyResult<()> {
+    ///
+    /// `upgraded=True` builds the card at its upgraded values (the registered
+    /// factory's upgraded card, as the host's `set_player` deck entry
+    /// `BLUDGEON+1` is), not the base card with a flag
+    /// (`force_upgrade_card`). sts2-agent fork, lane F's F8.
+    #[pyo3(signature = (card_id, upgraded = false))]
+    fn force_add_card(&mut self, card_id: &str, upgraded: bool) -> PyResult<()> {
         let cid = card_id_from_str(card_id)?;
         // Build via the registered factory so spec stats (cost / damage /
         // block / keywords) are populated, matching the real card-reward
         // path; fall back to a bare POD only if no spec is known.
-        let card = sts2_core::lookup_card_factory()
-            .and_then(|f| f(cid, false))
-            .unwrap_or_else(|| {
-                let mut c = sts2_core::cards::Card::pod_defaults();
-                c.card_id = cid;
-                c
-            });
-        self.inner.run_state.master_deck.push(card);
+        if !self.inner.force_add_card(cid, upgraded) {
+            let mut c = sts2_core::cards::Card::pod_defaults();
+            c.card_id = cid;
+            c.upgraded = upgraded;
+            self.inner.run_state.master_deck.push(c);
+        }
         Ok(())
     }
 
@@ -1254,10 +1258,19 @@ impl PyRunManager {
     /// mirror scraped `relic_choices[was_picked]` across every floor
     /// type without going through the diverged relic-reward RNG.
     /// Bead `sts2-rs-i6h9i.1`.
-    fn force_add_relic(&mut self, relic_id: &str) -> PyResult<bool> {
+    ///
+    /// `obtain=False` adds it the way the host's `set_player` does (no
+    /// `after_obtained`, no counter; in a live fight it joins the fight's
+    /// relic store at once): `RunManager::force_add_relic_bare`. sts2-agent
+    /// fork, lane F's F8.
+    #[pyo3(signature = (relic_id, obtain = true))]
+    fn force_add_relic(&mut self, relic_id: &str, obtain: bool) -> PyResult<bool> {
         let stripped = relic_id.strip_prefix("RELIC.").unwrap_or(relic_id);
         let rid = sts2_content::names::relic_id_from_str(stripped)
             .ok_or_else(|| PyValueError::new_err(format!("unknown relic id {relic_id:?}")))?;
+        if !obtain {
+            return Ok(self.inner.force_add_relic_bare(rid));
+        }
         let rs = &mut self.inner.run_state;
         if rs.relics.contains(&rid) {
             return Ok(false);

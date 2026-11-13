@@ -1712,199 +1712,144 @@ pub const INFESTED_AUTOMATON: EventSpec = EventSpec {
     options: INFESTED_OPTIONS,
 };
 
-// ── Nonupeipe ────────────────────────────────────────────────────────
+// ── Nonupeipe, Orobas, Pael: Ancients entered as events ──────────────
+//
+// A run reaches an Ancient through the boss-relic surface
+// (`RunState::roll_boss_relic_offers`); these specs serve the harness's forced
+// room entry (`enter_room type event`), where the host presents the Ancient as
+// an ordinary event whose three options are the relics its `OptionPool` rolled
+// off the per-event RNG (the same roll and conditions as the run's Ancient,
+// `RunState::roll_ancient_event_offers`). Picking one is C# `RelicOption`'s
+// direct `RelicCmd.Obtain`, as Darv's. Lane F's F8 (`ancient-forced-as-event`).
 
-fn nonupeipe_relic_1(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::BlessedAntler)));
-    EventOutcome::finished("Obtained a relic from Nonupeipe (RNG pool deferred).")
+/// The loc keys of the rolled options, interned: `EventOptionInfo::loc_key` is
+/// `&'static str` and the set is small and bounded (3 ancients x their pools).
+fn ancient_loc_key(event: &str, relic: RelicId) -> &'static str {
+    use std::collections::BTreeMap;
+    use std::sync::{Mutex, OnceLock};
+    static KEYS: OnceLock<Mutex<BTreeMap<String, &'static str>>> = OnceLock::new();
+    let key = format!("{event}.pages.INITIAL.options.{}", relic.to_python_name());
+    let mut map = KEYS
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+        .expect("loc key table");
+    if let Some(k) = map.get(&key) {
+        return k;
+    }
+    let leaked: &'static str = Box::leak(key.clone().into_boxed_str());
+    map.insert(key, leaked);
+    leaked
 }
 
-fn nonupeipe_relic_2(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::BrilliantScarf)));
-    EventOutcome::finished("Obtained a relic from Nonupeipe (RNG pool deferred).")
+fn ancient_of_event(id: EventId) -> sts2_core::run_room_gen::AncientId {
+    use sts2_core::run_room_gen::AncientId;
+    match id {
+        EventId::Nonupeipe => AncientId::Nonupeipe,
+        EventId::Orobas => AncientId::Orobas,
+        EventId::Pael => AncientId::Pael,
+        other => unreachable!("{other:?} is not a forced-entry Ancient stub"),
+    }
 }
 
-fn nonupeipe_relic_3(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::DelicateFrond)));
-    EventOutcome::finished("Obtained a relic from Nonupeipe (RNG pool deferred).")
+fn ancient_event_name(id: EventId) -> &'static str {
+    ancient_of_event(id).entry()
 }
 
-const NONUPEIPE_OPTIONS: &[EventOptionSpec] = &[
+fn ancient_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+    let offers = state.roll_ancient_event_offers(ancient_of_event(spec.id));
+    ["relic_1", "relic_2", "relic_3"]
+        .iter()
+        .zip(offers.iter())
+        .map(|(id, relic)| EventOptionInfo {
+            option_id: id,
+            // The game's own row: `<ANCIENT>.pages.INITIAL.options.<RELIC>`.
+            loc_key: ancient_loc_key(ancient_event_name(spec.id), *relic),
+            vars: Vec::new(),
+            title_vars: Vec::new(),
+            label: format!("{relic:?}"),
+            description: "Gain this relic.".to_string(),
+            enabled: true,
+        })
+        .collect()
+}
+
+fn ancient_grant(state: &mut RunState, slot: usize) -> EventOutcome {
+    let id = state.current_event.expect("an Ancient event is open");
+    let relic = state.roll_ancient_event_offers(ancient_of_event(id))[slot];
+    state.grant_event_relic(relic);
+    EventOutcome::finished("Obtained a relic from the Ancient.")
+}
+
+fn ancient_relic_1(state: &mut RunState) -> EventOutcome {
+    ancient_grant(state, 0)
+}
+
+fn ancient_relic_2(state: &mut RunState) -> EventOutcome {
+    ancient_grant(state, 1)
+}
+
+fn ancient_relic_3(state: &mut RunState) -> EventOutcome {
+    ancient_grant(state, 2)
+}
+
+const ANCIENT_OPTIONS: &[EventOptionSpec] = &[
     EventOptionSpec {
         option_id: "relic_1",
         loc_key: "",
-        default_label: "Blessed Antler",
+        default_label: "Relic 1",
         default_description: "Gain a relic",
         default_vars: &[],
         vars_fn: None,
         title_vars_fn: None,
-        handler: nonupeipe_relic_1,
+        handler: ancient_relic_1,
     },
     EventOptionSpec {
         option_id: "relic_2",
         loc_key: "",
-        default_label: "Brilliant Scarf",
+        default_label: "Relic 2",
         default_description: "Gain a relic",
         default_vars: &[],
         vars_fn: None,
         title_vars_fn: None,
-        handler: nonupeipe_relic_2,
+        handler: ancient_relic_2,
     },
     EventOptionSpec {
         option_id: "relic_3",
         loc_key: "",
-        default_label: "Delicate Frond",
+        default_label: "Relic 3",
         default_description: "Gain a relic",
         default_vars: &[],
         vars_fn: None,
         title_vars_fn: None,
-        handler: nonupeipe_relic_3,
+        handler: ancient_relic_3,
     },
 ];
 
-/// `Nonupeipe` spec. Pin: `shared.py:1096`.
+/// `Nonupeipe` spec. Pin: `shared.py:1096`; C# `Nonupeipe.cs`.
 pub const NONUPEIPE: EventSpec = EventSpec {
     id: EventId::Nonupeipe,
     python_name: "Nonupeipe",
     is_allowed: always_allowed,
-    generate_options: default_option_info_from_spec,
-    options: NONUPEIPE_OPTIONS,
+    generate_options: ancient_generate_options,
+    options: ANCIENT_OPTIONS,
 };
 
-// ── Orobas ───────────────────────────────────────────────────────────
-
-fn orobas_relic_1(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::ElectricShrymp)));
-    EventOutcome::finished("Obtained a relic from Orobas (RNG/setup deferred).")
-}
-
-fn orobas_relic_2(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::AlchemicalCoffer)));
-    EventOutcome::finished("Obtained a relic from Orobas (RNG/setup deferred).")
-}
-
-fn orobas_relic_3(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::TouchOfOrobas)));
-    EventOutcome::finished("Obtained a relic from Orobas (RNG/setup deferred).")
-}
-
-const OROBAS_OPTIONS: &[EventOptionSpec] = &[
-    EventOptionSpec {
-        option_id: "relic_1",
-        loc_key: "",
-        default_label: "Electric Shrymp",
-        default_description: "Gain a relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: orobas_relic_1,
-    },
-    EventOptionSpec {
-        option_id: "relic_2",
-        loc_key: "",
-        default_label: "Alchemical Coffer",
-        default_description: "Gain a relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: orobas_relic_2,
-    },
-    EventOptionSpec {
-        option_id: "relic_3",
-        loc_key: "",
-        default_label: "Touch of Orobas",
-        default_description: "Gain a relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: orobas_relic_3,
-    },
-];
-
-/// `Orobas` spec. Pin: `shared.py:1143`.
+/// `Orobas` spec. Pin: `shared.py:1143`; C# `Orobas.cs`.
 pub const OROBAS: EventSpec = EventSpec {
     id: EventId::Orobas,
     python_name: "Orobas",
     is_allowed: always_allowed,
-    generate_options: default_option_info_from_spec,
-    options: OROBAS_OPTIONS,
+    generate_options: ancient_generate_options,
+    options: ANCIENT_OPTIONS,
 };
 
-// ── Pael ─────────────────────────────────────────────────────────────
-
-fn pael_relic_1(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::PaelsFlesh)));
-    EventOutcome::finished("Obtained a Pael relic (RNG pool deferred).")
-}
-
-fn pael_relic_2(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::PaelsWing)));
-    EventOutcome::finished("Obtained a Pael relic (RNG pool deferred).")
-}
-
-fn pael_relic_3(state: &mut RunState) -> EventOutcome {
-    state
-        .pending_rewards
-        .push(Reward::Relic(RelicReward::new(RelicId::PaelsEye)));
-    EventOutcome::finished("Obtained a Pael relic (RNG pool deferred).")
-}
-
-const PAEL_OPTIONS: &[EventOptionSpec] = &[
-    EventOptionSpec {
-        option_id: "relic_1",
-        loc_key: "",
-        default_label: "Pael's Flesh",
-        default_description: "Gain a Pael relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: pael_relic_1,
-    },
-    EventOptionSpec {
-        option_id: "relic_2",
-        loc_key: "",
-        default_label: "Pael's Wing",
-        default_description: "Gain a Pael relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: pael_relic_2,
-    },
-    EventOptionSpec {
-        option_id: "relic_3",
-        loc_key: "",
-        default_label: "Pael's Eye",
-        default_description: "Gain a Pael relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: pael_relic_3,
-    },
-];
-
-/// `Pael` spec. Pin: `shared.py:1222`.
+/// `Pael` spec. Pin: `shared.py`; C# `Pael.cs`.
 pub const PAEL: EventSpec = EventSpec {
     id: EventId::Pael,
     python_name: "Pael",
     is_allowed: always_allowed,
-    generate_options: default_option_info_from_spec,
-    options: PAEL_OPTIONS,
+    generate_options: ancient_generate_options,
+    options: ANCIENT_OPTIONS,
 };
 
 // ── PunchOff ─────────────────────────────────────────────────────────
@@ -2787,6 +2732,11 @@ mod tests {
             }
             for opt in spec.options {
                 let mut rs = RunState::new();
+                // The Ancient stubs roll their relic from the event the handler
+                // belongs to (`resolve` has bound it): lane F's F8.
+                if matches!(*id, EventId::Nonupeipe | EventId::Orobas | EventId::Pael) {
+                    rs.current_event = Some(*id);
+                }
                 let outcome = (opt.handler)(&mut rs);
                 // BattlewornDummy options STAGE an event→combat fight (bead
                 // `sts2-rs-ck9z6`, GH #166): a NOT-finished outcome that sets
@@ -3078,23 +3028,19 @@ mod tests {
     }
 
     #[test]
-    fn pael_relic_choices_all_push_pael_relics() {
-        for opt in PAEL.options {
+    fn pael_relic_choices_all_grant_a_rolled_pael_relic() {
+        // Lane F's F8: Pael's options are its rolled pool (no longer three
+        // fixed `PAELS_*` stubs); each slot grants the relic it presents.
+        for slot in 0..3 {
             let mut rs = RunState::new();
-            (opt.handler)(&mut rs);
-            assert_eq!(rs.pending_rewards.len(), 1);
-            let Reward::Relic(r) = rs.pending_rewards[0].clone() else {
-                panic!("expected Relic reward");
-            };
-            // All three Pael options push a `PAELS_*` relic id.
-            assert!(
-                matches!(
-                    r.relic_id,
-                    RelicId::PaelsFlesh | RelicId::PaelsWing | RelicId::PaelsEye
-                ),
-                "got {:?}",
-                r.relic_id
-            );
+            rs.direct_event_relic_grant = true;
+            rs.current_event = Some(EventId::Pael);
+            let offers = rs.roll_ancient_event_offers(sts2_core::run_room_gen::AncientId::Pael);
+            let relic = offers[slot];
+            let held = rs.relics.len();
+            (PAEL.options[slot].handler)(&mut rs);
+            assert_eq!(rs.relics.len(), held + 1);
+            assert_eq!(rs.relics.last(), Some(&relic));
         }
     }
 
