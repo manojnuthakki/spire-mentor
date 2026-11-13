@@ -295,3 +295,42 @@ fn belief_root_preserves_pins_sorts_middle_and_sets_flag() {
         "the unpinned middle must be the SAME multiset, in SORTED (canonical) order"
     );
 }
+
+/// F7 `havoc-belief`, second half: a belief root's search must not depend on
+/// the state's RUN-level randomness (the run seed and the cursors of the
+/// run-draw streams: rewards, shops, transformations, unknown-map-point,
+/// treasure-room), only on the search seed. The combat engine reads none of
+/// those streams, so the root Q and the chosen action are identical across
+/// states that differ only there (the old note's "about 0.01-0.03 in Q" does
+/// not reproduce at this pin: the run-level reseed is moot, not a defect).
+#[test]
+fn belief_draw_root_value_ignores_the_run_seed_and_run_stream_cursors() {
+    let base = build_vertical_slice(7);
+    let cfg = belief_draw_config(0xC0FF_EE01, 400);
+
+    let mut reference = Mcts::new(base.clone(), cfg);
+    let ref_action = reference.search();
+    let ref_q = reference.root_q();
+
+    for run_seed in [1, 12345, -987_654] {
+        let mut state = base.clone();
+        state.run_rng = sts2_core::run_rng_set::RunRngSet::new(run_seed);
+        // Same combat-stream positions as `base` are irrelevant (belief_root
+        // abandons them); advance every run-level stream too.
+        for _ in 0..5 {
+            let _ = state.run_rng.rewards.next_int(0, 1_000_000);
+            let _ = state.run_rng.shops.next_int(0, 1_000_000);
+            let _ = state.run_rng.transformations.next_int(0, 1_000_000);
+            let _ = state.run_rng.unknown_map_point.next_int(0, 1_000_000);
+            let _ = state.run_rng.treasure_room.next_int(0, 1_000_000);
+        }
+        let mut m = Mcts::new(state, cfg);
+        let action = m.search();
+        assert_eq!(format!("{action:?}"), format!("{ref_action:?}"));
+        assert_eq!(
+            m.root_q().map(f32::to_bits),
+            ref_q.map(f32::to_bits),
+            "run seed {run_seed}: the root Q must not move with run-level state"
+        );
+    }
+}

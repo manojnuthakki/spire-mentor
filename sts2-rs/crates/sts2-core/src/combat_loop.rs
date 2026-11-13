@@ -1308,17 +1308,9 @@ fn auto_play_collect_suspending(
                 return Some(ap);
             }
         }
-        let Some(&top_uid) = state.player.draw.first() else {
+        let Some(top_uid) = take_draw_top_for_auto_play(state) else {
             break;
         };
-        state.player.draw.remove(0);
-        // Bead `sts2-rs-09x5n`: this is a raw physical-top pop that bypasses
-        // `cards::pop_next_card`, so it must clear any stale `pinned_top`
-        // entry itself — otherwise a later `pop_next_card` sees a non-empty
-        // `pinned_top` and short-circuits to a deterministic `draw.remove(0)`
-        // for what may now be a heterogeneous unknown draw, silently
-        // suppressing a chance node.
-        cards::unpin(&mut state.player, top_uid);
         state.player.play.push(top_uid);
         // Queued, not started: the same batch-pending marker as
         // `auto_play_n_from_draw_top` (cleared when its own play starts), so
@@ -8718,6 +8710,24 @@ fn check_for_empty_hand(state: &mut CombatState, finished: crate::CardUid) {
     });
 }
 
+/// Take the card an `AutoPlayFromDrawPile` plays off the draw pile (Havoc,
+/// Cascade, Distilled Chaos, Mayhem). F7 `havoc-belief`: the card comes from
+/// [`cards::pop_next_card`], exactly like a draw. A materialized pile
+/// (`deferred_draw_order` off) yields its physical front with no RNG read, as
+/// before. Under a belief pile (`deferred_draw_order`) the random choice among
+/// the unknown segment is made here, so the search sees a chance node and no
+/// longer plays the canonically first card for certain. The pop clears the
+/// taken card's pin (bead `sts2-rs-09x5n`: a stale `pinned_top` would make a
+/// later pop skip a chance node). `None` when the draw pile is empty.
+fn take_draw_top_for_auto_play(state: &mut CombatState) -> Option<crate::CardUid> {
+    if state.player.draw.is_empty() {
+        return None;
+    }
+    let uid = cards::pop_next_card(&mut state.player, &mut state.run_rng.shuffle);
+    cards::unpin(&mut state.player, uid);
+    Some(uid)
+}
+
 /// Auto-play the top card of the draw pile, force-exhausting it after the
 /// effect resolves. Mirrors Python's `auto_play_card(card, force_exhaust=True)`
 /// at `sts2-rl-agent@01c094d:sts2_env/core/combat.py:2067-2089` (which routes
@@ -8782,17 +8792,11 @@ pub fn auto_play_card_from_draw_top(state: &mut CombatState, force_exhaust: bool
             resolve_inline_auto_play_choices(state);
         }
     }
-    let Some(&top_uid) = state.player.draw.first() else {
-        return false;
-    };
     // Pop the top of draw and push it onto the Play pile, preserving any
     // currently-resolving card underneath (e.g. Havoc itself).
-    state.player.draw.remove(0);
-    // Bead `sts2-rs-09x5n`: raw physical-top pop, bypasses
-    // `cards::pop_next_card` — clear a stale pin on `top_uid` so a later
-    // `pop_next_card` doesn't short-circuit to a deterministic pop for a
-    // now-possibly-heterogeneous draw and skip a chance node.
-    cards::unpin(&mut state.player, top_uid);
+    let Some(top_uid) = take_draw_top_for_auto_play(state) else {
+        return false;
+    };
     state.player.play.push(top_uid);
     resolve_auto_played_card(state, top_uid, force_exhaust);
     true
@@ -9000,13 +9004,9 @@ pub fn auto_play_n_from_draw_top(state: &mut CombatState, count: i32, force_exha
                 resolve_inline_auto_play_choices(state);
             }
         }
-        let Some(&top_uid) = state.player.draw.first() else {
+        let Some(top_uid) = take_draw_top_for_auto_play(state) else {
             break;
         };
-        state.player.draw.remove(0);
-        // Bead `sts2-rs-09x5n`: raw physical-top pop, bypasses
-        // `cards::pop_next_card` — see `auto_play_card_from_draw_top`.
-        cards::unpin(&mut state.player, top_uid);
         state.player.play.push(top_uid);
         // Mark this card as a batch-pending play: it now sits on the Play pile
         // (phase 1) but its own play has NOT started, so the Nostalgia
@@ -13698,6 +13698,98 @@ mod tests {
             "no Stratagem grid-select opened; the collect should complete"
         );
         assert_pin_cleared_and_next_draw_is_chance(&mut state);
+    }
+
+    // ── F7 `havoc-belief`: the draw-top auto-plays honour the belief order ──
+    //
+    // Under `deferred_draw_order` the unknown draw segment is a canonical
+    // (uid-sorted) multiset and the random CHOICE of the next card is deferred
+    // to `cards::pop_next_card`. The auto-plays used to take the physical front
+    // (always the canonically first card, no RNG read), so a Havoc at a belief
+    // root played one fixed card for certain and never became a chance node.
+
+    /// A belief state: three unpinned, distinguishable cards (uid 1 Defend,
+    /// 2 Strike, 3 Anger) in the unknown segment, the shuffle stream seeded
+    /// by `seed`.
+    fn belief_state_unpinned(seed: i32) -> CombatState {
+        let mut state = state_with_pinned_top_card(crate::cards::CardId::DefendIronclad);
+        state.player.pinned_top.clear();
+        state.run_rng.shuffle = crate::dotnet_rng::Rng::new(seed);
+        state
+    }
+
+    /// The uid auto-played first (the first card to reach the discard/exhaust
+    /// pile or leave the draw pile), by which card is gone from draw.
+    fn first_taken_from_draw(state: &CombatState) -> Vec<u32> {
+        (1..=3u32)
+            .filter(|n| {
+                !state
+                    .player
+                    .draw
+                    .contains(&CardUid::new(*n).expect("non-zero"))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn belief_havoc_draw_top_samples_the_unknown_segment() {
+        let mut taken = std::collections::BTreeSet::new();
+        for seed in 0..64 {
+            let mut state = belief_state_unpinned(seed);
+            let before = state.run_rng.shuffle.counter();
+            assert!(auto_play_card_from_draw_top(&mut state, true));
+            assert_eq!(
+                state.run_rng.shuffle.counter(),
+                before + 1,
+                "a >=2-card unknown segment: the deferred choice reads the stream once"
+            );
+            let gone = first_taken_from_draw(&state);
+            assert_eq!(gone.len(), 1, "exactly one card left the draw pile");
+            taken.insert(gone[0]);
+        }
+        assert_eq!(
+            taken.len(),
+            3,
+            "every card of the belief segment can be the one Havoc plays: {taken:?}"
+        );
+    }
+
+    #[test]
+    fn belief_auto_play_n_and_collect_sample_the_unknown_segment() {
+        let mut taken_n = std::collections::BTreeSet::new();
+        let mut taken_c = std::collections::BTreeSet::new();
+        for seed in 0..64 {
+            let mut state = belief_state_unpinned(seed);
+            let before = state.run_rng.shuffle.counter();
+            auto_play_n_from_draw_top(&mut state, 1, true);
+            assert_eq!(state.run_rng.shuffle.counter(), before + 1);
+            taken_n.extend(first_taken_from_draw(&state));
+
+            let mut state = belief_state_unpinned(seed);
+            let ap = crate::PendingAutoplay {
+                remaining: 1,
+                collected: SmallVec::new(),
+                force_exhaust: true,
+            };
+            assert!(auto_play_collect_suspending(&mut state, ap).is_none());
+            taken_c.extend(first_taken_from_draw(&state));
+        }
+        assert_eq!(taken_n.len(), 3, "{taken_n:?}");
+        assert_eq!(taken_c.len(), 3, "{taken_c:?}");
+    }
+
+    /// A materialized (non-belief) pile keeps taking its true top card with no
+    /// RNG read: the fix is conditional on `deferred_draw_order`.
+    #[test]
+    fn true_order_havoc_still_plays_the_physical_top() {
+        for seed in 0..8 {
+            let mut state = belief_state_unpinned(seed);
+            state.player.deferred_draw_order = false;
+            let before = state.run_rng.shuffle.counter();
+            assert!(auto_play_card_from_draw_top(&mut state, true));
+            assert_eq!(state.run_rng.shuffle.counter(), before);
+            assert_eq!(first_taken_from_draw(&state), vec![1]);
+        }
     }
 
     /// Combat-log placeholder is reset on entry. At this pin
