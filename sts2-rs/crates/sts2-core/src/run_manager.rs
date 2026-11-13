@@ -3089,6 +3089,7 @@ impl RunManager {
                 let amount = self.run_state.rng.rewards.next_int(amount, amount);
                 ScreenReward::Gold { amount }
             }
+            OfferedReward::GoldRolled(amount) => ScreenReward::Gold { amount },
             OfferedReward::Potion(kind) => ScreenReward::Potion {
                 kind: kind.or_else(|| {
                     self.callbacks
@@ -5384,7 +5385,7 @@ impl RunManager {
                             crate::runstate::CardReward::from_options(vec![card.card_id]),
                         ));
                     }
-                    OfferedReward::Gold(amount) => {
+                    OfferedReward::Gold(amount) | OfferedReward::GoldRolled(amount) => {
                         self.run_state
                             .pending_rewards
                             .push(Reward::Gold { amount: *amount });

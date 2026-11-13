@@ -789,6 +789,10 @@ pub struct PendingDeckEnchant {
 pub enum OfferedReward {
     /// `GoldReward(amount)`.
     Gold(i32),
+    /// A `GoldReward` whose amount the producer already drew (from its own
+    /// RNG, as the Crystal Sphere's items do): shown as it is, no draw on
+    /// the run's `rewards` stream. sts2-agent fork.
+    GoldRolled(i32),
     /// `PotionReward`: a named potion, or `None` to roll one (C#
     /// `PotionReward.Populate`, the `roll_potion_reward_kind` callback).
     Potion(Option<crate::potions::PotionKind>),

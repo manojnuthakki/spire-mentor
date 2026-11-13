@@ -43,6 +43,7 @@ fn uncover_future_follows_the_recording() {
     );
     assert_eq!(rm.run_state.gold, 247, "300 - the rolled 53");
     assert_eq!(rm.phase(), Phase::Event);
+    let rewards_before = rm.run_state.rng.rewards.counter();
     assert_eq!(
         rm.run_state
             .crystal_sphere
@@ -77,6 +78,11 @@ fn uncover_future_follows_the_recording() {
     // The last divination ended the event: its rewards, gold before potion.
     assert!(rm.run_state.crystal_sphere.is_none());
     let screen = rm.reward_screen().expect("the revealed items' rewards");
+    assert_eq!(
+        rm.run_state.rng.rewards.counter(),
+        rewards_before,
+        "the sphere's gold is drawn from the event's stream, not the run's rewards stream"
+    );
     assert!(matches!(screen[0], ScreenReward::Gold { .. }), "{screen:?}");
     assert!(
         matches!(&screen[1], ScreenReward::Potion { kind } if *kind == PotionKind::StrengthPotion),

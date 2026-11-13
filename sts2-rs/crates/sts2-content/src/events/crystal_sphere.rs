@@ -22,7 +22,7 @@ use sts2_core::{RelicId, RelicReward, RunState};
 /// `RelicReward` 3, `CardReward` 5).
 fn set_index(r: &OfferedReward) -> u8 {
     match r {
-        OfferedReward::Gold(_) => 1,
+        OfferedReward::Gold(_) | OfferedReward::GoldRolled(_) => 1,
         OfferedReward::Potion(_) => 2,
         OfferedReward::Relic(_) | OfferedReward::RandomRelic { .. } => 3,
         _ => 5,
@@ -92,7 +92,7 @@ fn finish(rs: &mut RunState) {
             ItemKind::Gold { big } => {
                 let amount = if *big { 30 } else { 10 };
                 let drawn = rng.next_int_exclusive(amount, amount + 1);
-                offered.push(OfferedReward::Gold(drawn));
+                offered.push(OfferedReward::GoldRolled(drawn));
             }
             ItemKind::Potion { .. } => {
                 if let Some(p) = potion {

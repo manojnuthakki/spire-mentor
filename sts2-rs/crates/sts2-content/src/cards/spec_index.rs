@@ -2466,8 +2466,10 @@ pub fn roll_card_reward_cards(
 /// per card `NextItem` over the character pool's cards of that rarity minus
 /// those already offered, then `RollForUpgrade` (act-scaled, off the same RNG),
 /// then the relics' late reward hook. All off `rng` (the event's), which is
-/// swapped into the run's `Rewards` slot for the hook. Not modelled: the
-/// `LastingCandy` mid hook (its nested roll needs a Uniform odds context).
+/// swapped into the run's `Rewards` slot for the hook. Lasting Candy's mid
+/// hook does not apply: the sphere creates its options with
+/// `CardCreationSource.Other` and `LastingCandy.cs:106` acts only on
+/// `Encounter` (checked in the decompile, F8 step52).
 /// Lane F's F8 (`crystal-sphere`).
 pub fn roll_card_reward_of_rarity(
     rs: &mut RunState,
