@@ -1124,6 +1124,22 @@ impl RunPolicy for PpoPolicy {
         // than declining does. Measure such a net on the rollback arm
         // (`STS2_RUNAI_POTION_SWAP=0`, `arena::run_cell`) and only compare
         // arms once a campaign has run with the flag on.
+        // The Crystal Sphere minigame is outside the net's action space
+        // (no encoder surface): divine the first listed cell with the
+        // default tool, so a reference run passes through the event.
+        if let Some(i) = actions
+            .iter()
+            .position(|a| matches!(a, RunAction::CrystalSphereDivine { .. }))
+        {
+            self.last_eval = Some(MetaEvalRecord {
+                source: "ppo_sphere_first",
+                actions: actions.to_vec(),
+                probs: Vec::new(),
+                value: None,
+                argmax: None,
+            });
+            return Some(i);
+        }
         let masked = mask_rejectable(rm, phase, actions);
         if masked.len() == 1 {
             // Single-remaining-candidate auto-take: no inference, per
