@@ -124,9 +124,61 @@ fn finish(rs: &mut RunState) {
             ItemKind::Curse => {}
         }
     }
-    // `Rewards.Sort(RewardsSetIndex)`: stable for a list this short.
-    offered.sort_by_key(set_index);
+    // `Rewards.Sort(RewardsSetIndex)`: .NET's introsort. Under 16 items it
+    // is an insertion sort (stable) except for exactly 3, a compare-swap
+    // network that can reorder equal keys.
+    dotnet_small_sort(&mut offered, set_index);
     if rs.interactive_rewards {
         rs.offer_custom_rewards(offered, true);
+    }
+}
+
+/// `List<T>.Sort` for at most 16 elements (the sphere has 15 items).
+fn dotnet_small_sort<T, K: Ord>(v: &mut [T], key: impl Fn(&T) -> K) {
+    match v.len() {
+        0 | 1 => {}
+        2 => {
+            if key(&v[0]) > key(&v[1]) {
+                v.swap(0, 1);
+            }
+        }
+        3 => {
+            for (a, b) in [(0, 1), (0, 2), (1, 2)] {
+                if key(&v[a]) > key(&v[b]) {
+                    v.swap(a, b);
+                }
+            }
+        }
+        _ => {
+            for i in 0..v.len() - 1 {
+                let mut j = i;
+                while key(&v[j + 1]) < key(&v[j]) {
+                    v.swap(j, j + 1);
+                    if j == 0 {
+                        break;
+                    }
+                    j -= 1;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod sort_tests {
+    use super::dotnet_small_sort;
+
+    #[test]
+    fn three_elements_use_the_swap_network() {
+        let mut v = [(2, 'a'), (2, 'b'), (1, 'c')];
+        dotnet_small_sort(&mut v, |x| x.0);
+        assert_eq!(v.map(|x| x.1), ['c', 'b', 'a']);
+    }
+
+    #[test]
+    fn four_or_more_are_stable() {
+        let mut v = [(2, 'a'), (2, 'b'), (1, 'c'), (1, 'd')];
+        dotnet_small_sort(&mut v, |x| x.0);
+        assert_eq!(v.map(|x| x.1), ['c', 'd', 'a', 'b']);
     }
 }
