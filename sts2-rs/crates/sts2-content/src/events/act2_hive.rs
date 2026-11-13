@@ -1306,7 +1306,9 @@ mod tests {
         let outcome = (CRYSTAL_SPHERE.options[1].handler)(&mut rs);
         assert!(!outcome.finished, "the minigame follows");
         assert_eq!(
-            rs.crystal_sphere.as_ref().map(|s| s.divinations_left()),
+            rs.crystal_sphere
+                .as_ref()
+                .map(sts2_core::crystal_sphere::CrystalSphere::divinations_left),
             Some(6)
         );
         assert_eq!(rs.gold, 50, "Payment Plan defers the gold cost");

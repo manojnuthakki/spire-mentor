@@ -271,7 +271,10 @@ pub fn run_action_from_value(v: &Value) -> Result<RunAction, EmitError> {
         "crystal_sphere_divine" => RunAction::CrystalSphereDivine {
             x: u8::try_from(req_usize(d, "x")?).map_err(|_| EmitError::new("x out of range"))?,
             y: u8::try_from(req_usize(d, "y")?).map_err(|_| EmitError::new("y out of range"))?,
-            big: d.get("big").and_then(|v| v.as_bool()).unwrap_or(true),
+            big: d
+                .get("big")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(true),
         },
         "sacrifice_card_reward" => RunAction::SacrificeCardReward,
         // Bead `sts2-rs-i6h9i.1`: surface in-combat pending-choice
