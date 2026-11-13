@@ -721,6 +721,10 @@ impl core::fmt::Debug for ContentCallbacks {
                 "resume_event_after_combat",
                 &self.resume_event_after_combat.is_some(),
             )
+            .field(
+                "crystal_sphere_divine",
+                &self.crystal_sphere_divine.is_some(),
+            )
             .finish()
     }
 }
