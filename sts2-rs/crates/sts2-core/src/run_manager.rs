@@ -1476,7 +1476,9 @@ impl RunManager {
     /// bundle, a choose-a-card screen or the Smith pick). sts2-agent fork.
     fn belt_shown(&self) -> bool {
         match self.phase {
-            Phase::RunOver => false,
+            // A won run's emulated final screens still show the belt (the game's
+            // final-boss rewards screen and the Architect's dialogue); a lost one ends.
+            Phase::RunOver => self.run_state.player_won,
             Phase::Combat => self
                 .combat
                 .as_ref()
@@ -1941,7 +1943,13 @@ impl RunManager {
     }
 
     fn take_action_inner(&mut self, action: RunAction) -> ActionResult {
-        if self.phase == Phase::RunOver {
+        if self.phase == Phase::RunOver
+            && !(matches!(
+                action,
+                RunAction::DiscardPotion { .. } | RunAction::DrinkPotion { .. }
+            ) && self.get_available_actions().contains(&action))
+        {
+            // sts2-agent fork: only a won run's belt actions (`belt_shown`) run on the ended run.
             return ActionResult::RunOver;
         }
         // Phase-agnostic: a pending interactive deck removal is resolved
@@ -7199,6 +7207,52 @@ mod tests {
         assert_eq!((added.card_id, added.upgraded), (CardId::Bash, true));
         assert_eq!(rm.reward_screen(), Some(&[][..]));
         assert_eq!(rm.get_available_actions(), vec![RunAction::ProceedRewards]);
+    }
+
+    /// The final boss's win ends the engine's run, but the game's rewards
+    /// screen (and the Architect's dialogue after it) still lets the player
+    /// drink and discard: a won run offers the belt's actions, a lost one
+    /// nothing, and no other action runs on the ended run.
+    #[test]
+    fn a_won_run_over_keeps_the_belt_actions() {
+        use crate::potions::PotionKind;
+        let mut rm = RunManager::new(0, CharacterId::Ironclad);
+        rm.run_state.interactive_potions = true;
+        rm.run_state.potions = vec![PotionKind::BlockPotion, PotionKind::BloodPotion];
+        rm.set_phase(Phase::RunOver);
+        rm.run_state.player_won = false;
+        assert!(rm.get_available_actions().is_empty());
+        rm.run_state.player_won = true;
+        let actions = rm.get_available_actions();
+        assert!(
+            actions.contains(&RunAction::DiscardPotion { slot: 0 }),
+            "{actions:?}"
+        );
+        assert!(
+            actions.contains(&RunAction::DiscardPotion { slot: 1 }),
+            "{actions:?}"
+        );
+        assert!(
+            actions.contains(&RunAction::DrinkPotion {
+                potion_slot: 1,
+                target: None
+            }),
+            "{actions:?}"
+        );
+        assert_eq!(actions.len(), 3, "{actions:?}");
+        assert_eq!(rm.take_action(RunAction::EndTurn), ActionResult::RunOver);
+        assert_eq!(
+            rm.take_action(RunAction::DiscardPotion { slot: 0 }),
+            ActionResult::Advanced
+        );
+        assert_eq!(rm.run_state.potions, vec![PotionKind::BloodPotion]);
+        assert_eq!(
+            rm.take_action(RunAction::DiscardPotion { slot: 1 }),
+            ActionResult::RunOver
+        );
+        assert!(rm.is_over());
+        rm.run_state.interactive_potions = false;
+        assert!(rm.get_available_actions().is_empty());
     }
 
     /// A potion reward is unclaimable on a full belt and stays listed; a
