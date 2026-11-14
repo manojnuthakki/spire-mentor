@@ -11,9 +11,13 @@ use sts2_core::run_manager::{
 };
 
 fn run() -> RunManager {
+    run_seed("3")
+}
+
+fn run_seed(name: &str) -> RunManager {
     sts2_content::relics::dispatch::ensure_installed();
     sts2_content::cards::dispatch::ensure_installed();
-    let seed = sts2_core::deterministic_hash_code(&sts2_core::canonicalize_seed("3"));
+    let seed = sts2_core::deterministic_hash_code(&sts2_core::canonicalize_seed(name));
     let mut rm =
         sts2_content::run_callbacks::new_run_manager_for_character(seed, CharacterId::Ironclad)
             .with_neow_start();
@@ -140,4 +144,56 @@ fn the_actions_on_the_grid_are_divinations_only() {
         .all(|a| matches!(a, RunAction::CrystalSphereDivine { .. })));
     // 97 hidden cells, two tools each.
     assert_eq!(actions.len(), (121 - 24) * 2);
+}
+
+/// `RewardsSet`'s order: gold, potion, relic, card (`RewardsSetIndex`).
+fn set_index(r: &ScreenReward) -> u8 {
+    match r {
+        ScreenReward::Gold { .. } => 1,
+        ScreenReward::Potion { .. } => 2,
+        ScreenReward::Relic { .. } => 3,
+        _ => 5,
+    }
+}
+
+/// Through the real path (the event's rolled cost, then a fixed
+/// pseudo-random walk over the grid until the game ends), the offered set is in
+/// `RewardsSetIndex` order for every seed. NOTE: this does not guard the
+/// sphere's own sort call (the run manager sorts the offered set again,
+/// stably); only a three-item set with equal keys differs, which the pre-sort
+/// order (not exposed) would be needed to pin.
+#[test]
+fn the_offered_rewards_come_out_sorted_on_the_real_path() {
+    let mut finished = 0;
+    let mut mixed = 0;
+    for n in 1..=60 {
+        let mut rm = run_seed(&n.to_string());
+        assert_eq!(
+            rm.take_action(RunAction::EventChoice { idx: 0 }),
+            ActionResult::Advanced
+        );
+        let mut state = 12345u64 + n as u64;
+        for _ in 0..40 {
+            if rm.run_state.crystal_sphere.is_none() {
+                break;
+            }
+            let actions = rm.get_available_actions();
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let a = actions[(state >> 33) as usize % actions.len()];
+            assert_eq!(rm.take_action(a), ActionResult::Advanced);
+        }
+        let Some(screen) = rm.reward_screen() else {
+            continue;
+        };
+        finished += 1;
+        let idx: Vec<u8> = screen.iter().map(set_index).collect();
+        assert!(idx.windows(2).all(|w| w[0] <= w[1]), "seed {n}: {idx:?}");
+        if idx.len() >= 3 {
+            mixed += 1;
+        }
+    }
+    assert!(finished >= 20, "{finished} runs offered rewards");
+    assert!(mixed >= 5, "{mixed} runs offered three or more");
 }

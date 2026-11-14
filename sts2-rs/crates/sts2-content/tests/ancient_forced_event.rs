@@ -97,3 +97,34 @@ fn the_roll_follows_the_seed() {
     assert!((1..12).any(|s| offers(s) != fixed));
     assert_eq!(offers(7), offers(7));
 }
+
+/// Different seeds roll different offers (a roll that ignores the run seed
+/// gives one list for all), and a few seeds' offers are pinned (the algorithm
+/// itself, `event_rng` + `roll_offers`, is pinned to the recordings by the
+/// boss/ancient offer tests; these pin that the event feeds it the run seed).
+#[test]
+fn distinct_seeds_roll_distinct_offers() {
+    use sts2_core::run_room_gen::AncientId;
+    let mut distinct = std::collections::BTreeSet::new();
+    for seed in 1..=24 {
+        let rm = run(seed);
+        let got = rm.run_state.roll_ancient_event_offers(AncientId::Orobas);
+        distinct.insert(format!("{got:?}"));
+    }
+    assert!(
+        distinct.len() >= 4,
+        "only {} distinct offer sets",
+        distinct.len()
+    );
+    let pinned = |seed| {
+        format!(
+            "{:?}",
+            run(seed)
+                .run_state
+                .roll_ancient_event_offers(AncientId::Orobas)
+        )
+    };
+    assert_eq!(pinned(1), "[SandCastle, Driftwood, TouchOfOrobas]");
+    assert_eq!(pinned(2), "[ElectricShrymp, Driftwood, TouchOfOrobas]");
+    assert_eq!(pinned(3), "[PrismaticGem, RadiantPearl, TouchOfOrobas]");
+}
