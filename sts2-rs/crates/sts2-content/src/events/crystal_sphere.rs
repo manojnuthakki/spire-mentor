@@ -116,6 +116,7 @@ fn finish(rs: &mut RunState) {
                     rs, &mut rng, rarity, 3, character,
                 );
                 offered.push(OfferedReward::Card {
+                    enchantments: cards.iter().map(|c| c.enchantments).collect(),
                     options: Some(cards.iter().map(|c| c.card_id).collect()),
                     upgraded: cards.iter().map(|c| c.upgraded).collect(),
                     no_upgrade_roll: false,
@@ -155,10 +156,15 @@ fn finish(rs: &mut RunState) {
                 OfferedReward::Card {
                     options: Some(options),
                     upgraded,
+                    enchantments,
                     ..
                 } => rs
                     .pending_rewards
-                    .push(Reward::Card(CardReward::from_resolved(options, upgraded))),
+                    .push(Reward::Card(CardReward::from_resolved_enchanted(
+                        options,
+                        upgraded,
+                        enchantments,
+                    ))),
                 _ => {}
             }
         }
@@ -179,6 +185,7 @@ fn apply_obtained_relic_to_cards(rs: &mut RunState, relic: RelicId, rest: &mut [
         let OfferedReward::Card {
             options: Some(options),
             upgraded,
+            enchantments,
             ..
         } = reward
         else {
@@ -192,8 +199,12 @@ fn apply_obtained_relic_to_cards(rs: &mut RunState, relic: RelicId, rest: &mut [
         if cards.len() != options.len() {
             continue;
         }
+        for (card, held) in cards.iter_mut().zip(enchantments.iter()) {
+            card.enchantments = *held;
+        }
         let _ = late(rs, &mut cards);
         *upgraded = cards.iter().map(|c| c.upgraded).collect();
+        *enchantments = cards.iter().map(|c| c.enchantments).collect();
     }
 }
 

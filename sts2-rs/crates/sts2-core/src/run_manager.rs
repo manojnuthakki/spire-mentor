@@ -775,6 +775,8 @@ pub enum ScreenReward {
     Card {
         options: Vec<crate::cards::CardId>,
         upgraded: Vec<bool>,
+        /// Per-option enchantments parallel to `options` (empty: none).
+        enchantments: Vec<crate::cards::CardEnchantments>,
         /// C# `CardReward` listens to `RelicObtained` until it is opened
         /// (`OnSelect`) or skipped: a relic obtained meanwhile modifies its
         /// options ([`RunManager::modify_card_rewards_for_obtained_relic`]).
@@ -874,6 +876,9 @@ pub struct RunManager {
     /// rewards, act-2+ upgrade rolls). Empty for choose-screen / bundle
     /// offerings, which carry no upgrade state.
     card_reward_upgraded: Vec<bool>,
+    /// Per-option enchantments parallel to `card_reward_options` (empty: none),
+    /// kept and cleared with `card_reward_upgraded`.
+    card_reward_enchantments: Vec<crate::cards::CardEnchantments>,
     /// When `Some`, the current `Phase::CardReward` offering is a Scroll
     /// Boxes *bundle* pick rather than a single-card reward: each inner
     /// `Vec<CardId>` is one pack, the player picks one pack index and **all**
@@ -1111,6 +1116,7 @@ impl RunManager {
             callbacks: ContentCallbacks::default(),
             card_reward_options: Vec::new(),
             card_reward_upgraded: Vec::new(),
+            card_reward_enchantments: Vec::new(),
             card_reward_bundles: None,
             boss_relic_options: Vec::new(),
             pending_boss_act_advance: false,
@@ -2877,6 +2883,7 @@ impl RunManager {
                 self.run_state.room_extra_rewards.clear();
                 self.card_reward_options.clear();
                 self.card_reward_upgraded.clear();
+                self.card_reward_enchantments.clear();
                 self.card_offer_choose_screen = false;
                 self.card_offer_can_skip = true;
                 self.phase = Phase::CardReward;
@@ -3075,6 +3082,7 @@ impl RunManager {
             screen.push(ScreenReward::Card {
                 options: std::mem::take(&mut self.card_reward_options),
                 upgraded: std::mem::take(&mut self.card_reward_upgraded),
+                enchantments: std::mem::take(&mut self.card_reward_enchantments),
                 hooked: true,
             });
         }
@@ -3147,10 +3155,12 @@ impl RunManager {
             OfferedReward::Card {
                 options: Some(options),
                 upgraded,
+                enchantments,
                 ..
             } => ScreenReward::Card {
                 options,
                 upgraded,
+                enchantments,
                 hooked: true,
             },
             OfferedReward::Card {
@@ -3162,12 +3172,14 @@ impl RunManager {
                 // odds, no pity (the same roller `drain_pending_rewards` uses).
                 let options = self.roll_noncombat_card_reward(!no_upgrade_roll)?;
                 let upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                let enchantments = std::mem::take(&mut self.run_state.card_reward_enchantments);
                 if options.is_empty() {
                     return None;
                 }
                 ScreenReward::Card {
                     options,
                     upgraded,
+                    enchantments,
                     hooked: true,
                 }
             }
@@ -3175,12 +3187,14 @@ impl RunManager {
                 let roller = self.callbacks.generate_card_reward_options?;
                 let options = roller(&mut self.run_state);
                 let upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                let enchantments = std::mem::take(&mut self.run_state.card_reward_enchantments);
                 if options.is_empty() {
                     return None;
                 }
                 ScreenReward::Card {
                     options,
                     upgraded,
+                    enchantments,
                     hooked: true,
                 }
             }
@@ -3188,12 +3202,14 @@ impl RunManager {
                 let roller = self.callbacks.generate_room_type_card_reward_options?;
                 let options = roller(&mut self.run_state, room_type);
                 let upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                let enchantments = std::mem::take(&mut self.run_state.card_reward_enchantments);
                 if options.is_empty() {
                     return None;
                 }
                 ScreenReward::Card {
                     options,
                     upgraded,
+                    enchantments,
                     hooked: true,
                 }
             }
@@ -3360,7 +3376,10 @@ impl RunManager {
                 self.advance_after_card_reward();
             }
             ScreenReward::Card {
-                options, upgraded, ..
+                options,
+                upgraded,
+                enchantments,
+                ..
             } => {
                 // Opened: C# unsubscribes it from `RelicObtained` at the end
                 // of `OnSelect`, whether a card is taken or not.
@@ -3373,6 +3392,7 @@ impl RunManager {
                 }
                 self.card_reward_options = options;
                 self.card_reward_upgraded = upgraded;
+                self.card_reward_enchantments = enchantments;
                 self.screen_card_claim = Some(idx);
             }
             ScreenReward::SpecialCard { mut card } => {
@@ -3437,6 +3457,7 @@ impl RunManager {
                 let ScreenReward::Card {
                     options,
                     upgraded,
+                    enchantments,
                     hooked: true,
                 } = &self.reward_sets[s].rewards[r]
                 else {
@@ -3450,9 +3471,19 @@ impl RunManager {
                 if cards.len() != options.len() {
                     continue;
                 }
+                // The rebuilt cards keep what earlier hooks enchanted them with.
+                for (card, held) in cards.iter_mut().zip(enchantments) {
+                    card.enchantments = *held;
+                }
                 let _ = late(&mut self.run_state, &mut cards);
-                if let ScreenReward::Card { upgraded, .. } = &mut self.reward_sets[s].rewards[r] {
+                if let ScreenReward::Card {
+                    upgraded,
+                    enchantments,
+                    ..
+                } = &mut self.reward_sets[s].rewards[r]
+                {
                     *upgraded = cards.iter().map(|c| c.upgraded).collect();
+                    *enchantments = cards.iter().map(|c| c.enchantments).collect();
                 }
             }
         }
@@ -3565,6 +3596,8 @@ impl RunManager {
             .map(|f| f(&mut self.run_state))
             .unwrap_or_default();
         self.card_reward_upgraded = std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+        self.card_reward_enchantments =
+            std::mem::take(&mut self.run_state.card_reward_enchantments);
         // A fresh post-combat offering is never a choose screen.
         self.card_offer_choose_screen = false;
         self.card_offer_can_skip = true;
@@ -3658,6 +3691,13 @@ impl RunManager {
                 // C# fires `Hook.ModifyCardBeingAddedToDeck` before the deck add
                 // (CardPileCmd.cs:502) — egg relics upgrade a matching pick at add
                 // time (run-starter-upgrade-flip A).
+                // The offered enchantments (Glitter's Glam, Wing Charm's) go
+                // with the card, as the C# card object carried them.
+                if let Some(offered) = self.card_reward_enchantments.get(i) {
+                    for &(id, amount) in offered {
+                        card.enchantments.set(id, amount);
+                    }
+                }
                 self.run_state.modify_card_being_added_to_deck(&mut card);
                 // Fire the run-side `on_card_added_to_deck` channel for the
                 // single-pick deck add — see the bundle-loop comment above
@@ -3681,6 +3721,7 @@ impl RunManager {
         // keeps it claimable (C# `EndSelectionAndDoNotCompleteReward`).
         if let Some(claim) = self.screen_card_claim.take() {
             self.card_reward_upgraded.clear();
+            self.card_reward_enchantments.clear();
             if idx.is_some() {
                 self.remove_screen_reward(claim);
             }
@@ -3763,6 +3804,7 @@ impl RunManager {
         // sts2-agent fork: SACRIFICE completes a screen's card reward.
         if let Some(claim) = screen_claim {
             self.card_reward_upgraded.clear();
+            self.card_reward_enchantments.clear();
             self.remove_screen_reward(claim);
             self.phase = Phase::CardReward;
             return ActionResult::Advanced;
@@ -3881,6 +3923,7 @@ impl RunManager {
                     bool,
                     Option<crate::runstate::RoomType>,
                     Vec<bool>,
+                    Vec<crate::cards::CardEnchantments>,
                 ),
             }
             let queued = match &self.run_state.pending_rewards[i] {
@@ -3896,6 +3939,7 @@ impl RunManager {
                         !reward.no_upgrade_roll,
                         reward.for_room,
                         reward.upgraded.clone(),
+                        reward.enchantments.clone(),
                     ))
                 }
                 Reward::Card(_) => break, // later drain rolls this one
@@ -3926,7 +3970,13 @@ impl RunManager {
                     // `CardRemovalReward.OnSelect` → `DoLocalCardRemoval` analog.
                     let _ = self.run_state.remove_cards_from_deck(count as usize);
                 }
-                Resolve::SurfaceCard(pre_resolved, roll_upgrade, for_room, upgraded) => {
+                Resolve::SurfaceCard(
+                    pre_resolved,
+                    roll_upgrade,
+                    for_room,
+                    upgraded,
+                    enchantments,
+                ) => {
                     let room_roller = self.callbacks.generate_room_type_card_reward_options;
                     if let (true, Some(room), Some(roller)) =
                         (pre_resolved.is_empty(), for_room, room_roller)
@@ -3936,6 +3986,8 @@ impl RunManager {
                         self.card_reward_options = roller(&mut self.run_state, room);
                         self.card_reward_upgraded =
                             std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                        self.card_reward_enchantments =
+                            std::mem::take(&mut self.run_state.card_reward_enchantments);
                     } else if pre_resolved.is_empty() {
                         // Non-combat (`CardCreationSource.Other`) reward: roll
                         // BASE odds, NOT the pity-updating combat roller. These
@@ -3949,11 +4001,14 @@ impl RunManager {
                             .unwrap_or_default();
                         self.card_reward_upgraded =
                             std::mem::take(&mut self.run_state.card_reward_upgraded_flags);
+                        self.card_reward_enchantments =
+                            std::mem::take(&mut self.run_state.card_reward_enchantments);
                     } else {
                         // The flags it was rolled with (Glass Eye's, its late
                         // hooks already run): empty is none upgraded.
                         self.card_reward_options = pre_resolved;
                         self.card_reward_upgraded = upgraded;
+                        self.card_reward_enchantments = enchantments;
                     }
                     opened = true;
                 }
@@ -3982,6 +4037,7 @@ impl RunManager {
         // never these representatives.
         self.card_reward_options = bundles.iter().filter_map(|b| b.first().copied()).collect();
         self.card_reward_upgraded.clear();
+        self.card_reward_enchantments.clear();
         self.card_reward_bundles = Some(bundles);
         true
     }
@@ -4004,6 +4060,7 @@ impl RunManager {
         // all-false. Replaces the prior unconditional `.clear()`, which
         // always granted unupgraded.
         self.card_reward_upgraded = select.upgraded;
+        self.card_reward_enchantments = select.enchantments;
         self.card_offer_choose_screen = true;
         self.pending_choose_screen_post_add = select.post_add;
         self.card_offer_can_skip = select.can_skip;
@@ -5842,6 +5899,7 @@ impl RunManager {
         self.shop_inventory = None;
         self.card_reward_options.clear();
         self.card_reward_upgraded.clear();
+        self.card_reward_enchantments.clear();
         self.card_reward_bundles = None;
         self.boss_relic_options.clear();
         self.pending_boss_act_advance = false;
@@ -5862,6 +5920,7 @@ impl RunManager {
         self.run_state.offered_reward_sets.clear();
         self.run_state.room_extra_rewards.clear();
         self.run_state.card_reward_upgraded_flags.clear();
+        self.run_state.card_reward_enchantments.clear();
 
         // The new room keeps the standing map position (an off-map room,
         // C#'s room stack over an unchanged `CurrentMapCoord`); entering a
@@ -6401,6 +6460,15 @@ impl RunManager {
     #[must_use]
     pub fn card_reward_upgraded_flags(&self) -> &[bool] {
         &self.card_reward_upgraded
+    }
+
+    /// The current card offering's per-option enchantments (what the late
+    /// reward hooks left: Glitter's Glam, Wing Charm's, Fresnel Lens's),
+    /// parallel to the options; empty or short means none. sts2-agent fork,
+    /// `card-reward-enchantment-dropped`.
+    #[must_use]
+    pub fn card_reward_enchantments(&self) -> &[crate::cards::CardEnchantments] {
+        &self.card_reward_enchantments
     }
 
     /// When the current `CardReward` offering is a Scroll Boxes bundle pick,
@@ -7032,6 +7100,7 @@ mod tests {
             if rs.interactive_rewards && rs.last_obtained_relic == Some(crate::RelicId::Akabeko) {
                 rs.offer_custom_rewards(
                     vec![crate::runstate::OfferedReward::Card {
+                        enchantments: Vec::new(),
                         options: None,
                         upgraded: Vec::new(),
                         no_upgrade_roll: false,
@@ -7168,6 +7237,7 @@ mod tests {
         use crate::cards::CardId;
         let options = vec![CardId::Anger, CardId::Bash];
         let mut rm = screen_rm(vec![ScreenReward::Card {
+            enchantments: Vec::new(),
             options: options.clone(),
             upgraded: vec![false, true],
             hooked: true,

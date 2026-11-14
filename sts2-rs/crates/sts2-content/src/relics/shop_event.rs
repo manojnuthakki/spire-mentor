@@ -104,6 +104,7 @@ fn offer_rolled_relic_set(
 fn offer_card_reward_set(rs: &mut RunState, n: usize, no_upgrade_roll: bool) {
     let rewards = (0..n)
         .map(|_| OfferedReward::Card {
+            enchantments: Vec::new(),
             options: None,
             upgraded: Vec::new(),
             no_upgrade_roll,
@@ -2700,7 +2701,8 @@ fn listener_glass_eye(rs: &mut RunState) -> EffectResult {
     if rs.interactive_rewards {
         let set = rewards
             .into_iter()
-            .map(|(options, upgraded)| OfferedReward::Card {
+            .map(|(options, upgraded, enchantments)| OfferedReward::Card {
+                enchantments,
                 options: Some(options),
                 upgraded,
                 no_upgrade_roll: true,
@@ -2711,9 +2713,13 @@ fn listener_glass_eye(rs: &mut RunState) -> EffectResult {
     }
     // The rolled upgrades travel with the reward: its hooks have run (Silver
     // Crucible's uses are spent), so the drain must not lose or redo them.
-    for (options, upgraded) in rewards {
+    for (options, upgraded, enchantments) in rewards {
         rs.pending_rewards
-            .push(Reward::Card(CardReward::from_resolved(options, upgraded)));
+            .push(Reward::Card(CardReward::from_resolved_enchanted(
+                options,
+                upgraded,
+                enchantments,
+            )));
     }
     EffectResult::Resolved
 }
@@ -2736,6 +2742,7 @@ fn listener_lost_coffer(rs: &mut RunState) -> EffectResult {
         rs.offer_custom_rewards(
             vec![
                 OfferedReward::Card {
+                    enchantments: Vec::new(),
                     options: None,
                     upgraded: Vec::new(),
                     no_upgrade_roll: false,
@@ -2774,7 +2781,8 @@ fn listener_kaleidoscope(rs: &mut RunState) -> EffectResult {
     if rs.interactive_rewards {
         let set = rewards
             .into_iter()
-            .map(|(options, upgraded)| OfferedReward::Card {
+            .map(|(options, upgraded, enchantments)| OfferedReward::Card {
+                enchantments,
                 options: Some(options),
                 upgraded,
                 no_upgrade_roll: false,
@@ -2783,9 +2791,13 @@ fn listener_kaleidoscope(rs: &mut RunState) -> EffectResult {
         rs.offer_custom_rewards(set, true);
         return EffectResult::Resolved;
     }
-    for (options, upgraded) in rewards {
+    for (options, upgraded, enchantments) in rewards {
         rs.pending_rewards
-            .push(Reward::Card(CardReward::from_resolved(options, upgraded)));
+            .push(Reward::Card(CardReward::from_resolved_enchanted(
+                options,
+                upgraded,
+                enchantments,
+            )));
     }
     EffectResult::Resolved
 }
@@ -7695,6 +7707,7 @@ mod tests {
                 options: Some(options),
                 upgraded,
                 no_upgrade_roll,
+                ..
             } = reward
             else {
                 panic!("a rolled card reward, got {reward:?}");

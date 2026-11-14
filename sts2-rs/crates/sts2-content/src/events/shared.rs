@@ -904,18 +904,25 @@ fn philosopher_pool(
     if state.interactive_rewards {
         let set = rewards
             .into_iter()
-            .map(|(options, upgraded)| sts2_core::OfferedReward::Card {
-                options: Some(options),
-                upgraded,
-                no_upgrade_roll: false,
-            })
+            .map(
+                |(options, upgraded, enchantments)| sts2_core::OfferedReward::Card {
+                    enchantments,
+                    options: Some(options),
+                    upgraded,
+                    no_upgrade_roll: false,
+                },
+            )
             .collect();
         state.offer_custom_rewards(set, true);
     } else {
-        for (options, upgraded) in rewards {
+        for (options, upgraded, enchantments) in rewards {
             state
                 .pending_rewards
-                .push(Reward::Card(CardReward::from_resolved(options, upgraded)));
+                .push(Reward::Card(CardReward::from_resolved_enchanted(
+                    options,
+                    upgraded,
+                    enchantments,
+                )));
         }
     }
     EventOutcome::finished("Received card rewards from a philosopher's pool.")

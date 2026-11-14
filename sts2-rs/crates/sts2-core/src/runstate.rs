@@ -35,7 +35,7 @@ use rand_xoshiro::rand_core::{RngCore, SeedableRng};
 use rand_xoshiro::Xoshiro256PlusPlus;
 
 use crate::act_selection::ActVariant;
-use crate::cards::{Card, CardId, EnchantmentId};
+use crate::cards::{Card, CardEnchantments, CardId, EnchantmentId};
 use crate::potions::CharacterId;
 use crate::relics::RelicId;
 
@@ -288,6 +288,11 @@ pub struct CardReward {
     /// (Glass Eye's), carried to the offering so no hook runs twice.
     /// sts2-agent fork.
     pub upgraded: Vec<bool>,
+    /// Each pre-resolved option's enchantments, parallel to `options` (empty:
+    /// none): what the late reward hooks (Glitter's Glam, Wing Charm, Fresnel
+    /// Lens) left on the cards, carried like `upgraded`. sts2-agent fork,
+    /// `card-reward-enchantment-dropped`.
+    pub enchantments: Vec<crate::cards::CardEnchantments>,
 }
 
 impl CardReward {
@@ -296,6 +301,7 @@ impl CardReward {
     #[must_use]
     pub fn empty() -> Self {
         Self {
+            enchantments: Vec::new(),
             options: Vec::new(),
             no_upgrade_roll: false,
             for_room: None,
@@ -308,6 +314,7 @@ impl CardReward {
     #[must_use]
     pub fn empty_no_upgrade_roll() -> Self {
         Self {
+            enchantments: Vec::new(),
             options: Vec::new(),
             no_upgrade_roll: true,
             for_room: None,
@@ -320,6 +327,7 @@ impl CardReward {
     #[must_use]
     pub fn for_room(room: RoomType) -> Self {
         Self {
+            enchantments: Vec::new(),
             options: Vec::new(),
             no_upgrade_roll: false,
             for_room: Some(room),
@@ -331,6 +339,7 @@ impl CardReward {
     #[must_use]
     pub fn from_options(options: Vec<CardId>) -> Self {
         Self {
+            enchantments: Vec::new(),
             options,
             no_upgrade_roll: false,
             for_room: None,
@@ -346,6 +355,20 @@ impl CardReward {
         Self {
             upgraded,
             ..Self::from_options(options)
+        }
+    }
+
+    /// [`Self::from_resolved`] with the options' enchantments (what the late
+    /// reward hooks left on them).
+    #[must_use]
+    pub fn from_resolved_enchanted(
+        options: Vec<CardId>,
+        upgraded: Vec<bool>,
+        enchantments: Vec<CardEnchantments>,
+    ) -> Self {
+        Self {
+            enchantments,
+            ..Self::from_resolved(options, upgraded)
         }
     }
 }
@@ -368,6 +391,9 @@ pub struct PendingCardSelect {
     /// `modify_card_reward_options_late` pass (HeftyTablet's choose screen,
     /// the shop-event 1-of-N). Must stay `options.len()`-long.
     pub upgraded: Vec<bool>,
+    /// Per-option enchantments, parallel to [`Self::options`] (empty: none).
+    /// The chosen card is granted with its offered enchantments.
+    pub enchantments: Vec<crate::cards::CardEnchantments>,
     /// Cards appended to the master deck AFTER the screen resolves, in
     /// order, *after* the chosen card (if any). Models C# `HeftyTablet`,
     /// which builds `[chosen?, Injury]` and adds them in ONE
@@ -389,6 +415,7 @@ impl PendingCardSelect {
     pub fn from_options(options: Vec<CardId>) -> Self {
         let upgraded = vec![false; options.len()];
         Self {
+            enchantments: Vec::new(),
             options,
             upgraded,
             post_add: Vec::new(),
@@ -403,6 +430,7 @@ impl PendingCardSelect {
     pub fn with_post_add(options: Vec<CardId>, post_add: Vec<Card>) -> Self {
         let upgraded = vec![false; options.len()];
         Self {
+            enchantments: Vec::new(),
             options,
             upgraded,
             post_add,
@@ -421,6 +449,7 @@ impl PendingCardSelect {
         let options = cards.iter().map(|c| c.card_id).collect();
         let upgraded = cards.iter().map(|c| c.upgraded).collect();
         Self {
+            enchantments: cards.iter().map(|c| c.enchantments).collect(),
             options,
             upgraded,
             post_add: Vec::new(),
@@ -813,6 +842,8 @@ pub enum OfferedReward {
     Card {
         options: Option<Vec<CardId>>,
         upgraded: Vec<bool>,
+        /// The options' enchantments (see [`CardReward::enchantments`]).
+        enchantments: Vec<crate::cards::CardEnchantments>,
         no_upgrade_roll: bool,
     },
     /// `CardReward(ForRoom(room))` added to a combat room (The Hunt): rolled
@@ -1152,6 +1183,12 @@ pub struct RunState {
     /// `RunManager::enter_card_reward_phase` / `surface_pending_rewards`
     /// into its offer-aligned `card_reward_upgraded` list.
     pub card_reward_upgraded_flags: Vec<bool>,
+
+    /// The enchantments the same late hooks left on the offered cards,
+    /// parallel to [`Self::card_reward_upgraded_flags`] and taken with it
+    /// (Glitter's Glam on every option, Wing Charm's on one). sts2-agent
+    /// fork, `card-reward-enchantment-dropped`.
+    pub card_reward_enchantments: Vec<crate::cards::CardEnchantments>,
 
     /// Relics the player has acquired this run. Mirrors Python
     /// `RunState.relics` (`run_state.py`). Bead `sts2-rs-zq8` (j87-b)
@@ -2077,6 +2114,7 @@ impl Default for RunState {
             pending_card_grants: Vec::new(),
             pending_bundles: Vec::new(),
             card_reward_upgraded_flags: Vec::new(),
+            card_reward_enchantments: Vec::new(),
             relics: Vec::new(),
             last_obtained_relic: None,
             last_combat_gold_proportion: 1.0,
@@ -3198,6 +3236,7 @@ impl RunState {
                         None => OfferedReward::Card {
                             options: (!c.options.is_empty()).then_some(c.options),
                             upgraded: Vec::new(),
+                            enchantments: Vec::new(),
                             no_upgrade_roll: c.no_upgrade_roll,
                         },
                     }),

@@ -1866,6 +1866,7 @@ fn trial_nondescript_guilty(state: &mut RunState) -> EventOutcome {
     trial_add_curse(state, CardId::Doubt);
     if state.interactive_rewards {
         let card = sts2_core::OfferedReward::Card {
+            enchantments: Vec::new(),
             options: None,
             upgraded: Vec::new(),
             no_upgrade_roll: true,

@@ -1049,6 +1049,14 @@ pub fn roll_infested_touch_core_card(rs: &mut RunState) -> Option<CardId> {
 /// Eye's and Sea Glass's `ForNonCombatWithUniformOdds` and Trial's
 /// `ForNonCombatWithDefaultOdds` add it: no upgrade, no upgrade `NextFloat`.
 /// The late hooks run either way.
+/// One pre-rolled card reward: the offered ids, their upgrade flags and
+/// their enchantments (what the late hooks left), all parallel.
+pub type RolledReward = (
+    Vec<CardId>,
+    Vec<bool>,
+    Vec<sts2_core::cards::CardEnchantments>,
+);
+
 #[must_use]
 pub fn roll_noncombat_card_reward_options(rs: &mut RunState, roll_upgrade: bool) -> Vec<CardId> {
     // A `CardReward` (`IsCardReward`): `CreateForReward` folds
@@ -1062,6 +1070,7 @@ pub fn roll_noncombat_card_reward_options(rs: &mut RunState, roll_upgrade: bool)
             .collect();
     let _ = sts2_core::run_effects::dispatch_modify_card_reward_options_late(rs, &mut cards);
     rs.card_reward_upgraded_flags = cards.iter().map(|c| c.upgraded).collect();
+    rs.card_reward_enchantments = cards.iter().map(|c| c.enchantments).collect();
     cards.into_iter().map(|c| c.card_id).collect()
 }
 
@@ -1078,7 +1087,7 @@ pub fn roll_noncombat_card_reward_options(rs: &mut RunState, roll_upgrade: bool)
 /// upgrades). Returns each reward's ids and upgrade flags, in C# order
 /// (sts2-agent fork, pool-placeholders).
 #[must_use]
-pub fn roll_glass_eye_card_rewards(rs: &mut RunState) -> Vec<(Vec<CardId>, Vec<bool>)> {
+pub fn roll_glass_eye_card_rewards(rs: &mut RunState) -> Vec<RolledReward> {
     const RARITIES: [CardRarity; 5] = [
         CardRarity::Common,
         CardRarity::Common,
@@ -1116,6 +1125,7 @@ pub fn roll_glass_eye_card_rewards(rs: &mut RunState) -> Vec<(Vec<CardId>, Vec<b
         out.push((
             cards.iter().map(|c| c.card_id).collect(),
             cards.iter().map(|c| c.upgraded).collect(),
+            cards.iter().map(|c| c.enchantments).collect(),
         ));
     }
     out
@@ -1137,7 +1147,7 @@ pub fn roll_glass_eye_card_rewards(rs: &mut RunState) -> Vec<(Vec<CardId>, Vec<b
 pub fn roll_colorful_philosophers_card_rewards(
     rs: &mut RunState,
     pool_character: CharacterId,
-) -> Vec<(Vec<CardId>, Vec<bool>)> {
+) -> Vec<RolledReward> {
     use sts2_core::card_rewards::{
         combat_card_upgrade_base_chance, roll_for_upgrade_with_dotnet, RewardRarity,
     };
@@ -1184,6 +1194,7 @@ pub fn roll_colorful_philosophers_card_rewards(
         out.push((
             cards.iter().map(|c| c.card_id).collect(),
             cards.iter().map(|c| c.upgraded).collect(),
+            cards.iter().map(|c| c.enchantments).collect(),
         ));
     }
     out
@@ -1232,10 +1243,7 @@ const fn character_pool_entry(character: CharacterId) -> &'static str {
 /// `sts2-rs-utgn4` (v0.107.1 Kaleidoscope; closes the PARITY13/PARITY117
 /// Neow `card_reward` whole-run residual).
 #[must_use]
-pub fn roll_kaleidoscope_card_rewards(
-    rs: &mut RunState,
-    owner: CharacterId,
-) -> Vec<(Vec<CardId>, Vec<bool>)> {
+pub fn roll_kaleidoscope_card_rewards(rs: &mut RunState, owner: CharacterId) -> Vec<RolledReward> {
     /// `Kaleidoscope.DynamicVars.Cards` — `CanonicalVars => CardsVar(2)`.
     const CARDS: usize = 2;
     /// `StableShuffle(...).Take(3)` — pools (and thus cards) per reward.
@@ -1251,7 +1259,7 @@ pub fn roll_kaleidoscope_card_rewards(
         CharacterId::Necrobinder,
         CharacterId::Defect,
     ];
-    let mut rewards: Vec<(Vec<CardId>, Vec<bool>)> = Vec::with_capacity(CARDS);
+    let mut rewards: Vec<RolledReward> = Vec::with_capacity(CARDS);
     for _ in 0..CARDS {
         // Fresh non-owner pool list each reward (C# rebuilds + reshuffles per
         // iteration of its `for i in 0..Cards` loop).
@@ -1294,6 +1302,7 @@ pub fn roll_kaleidoscope_card_rewards(
         rewards.push((
             reward_cards.iter().map(|c| c.card_id).collect(),
             reward_cards.iter().map(|c| c.upgraded).collect(),
+            reward_cards.iter().map(|c| c.enchantments).collect(),
         ));
     }
     rewards
@@ -3123,7 +3132,7 @@ mod tests {
             let mut rs = dingy_rug_state(seed);
             let mut rng = rs.rng.rewards.clone();
             let rewards = roll_glass_eye_card_rewards(&mut rs);
-            for ((ids, _), rarity) in rewards.iter().zip(rarities) {
+            for ((ids, _, _), rarity) in rewards.iter().zip(rarities) {
                 let mut want: Vec<CardId> = Vec::new();
                 for _ in 0..3 {
                     let mut c = widened(rarity);
@@ -3158,7 +3167,7 @@ mod tests {
                 let mut rng = rs.rng.rewards.clone();
                 let rewards = roll_colorful_philosophers_card_rewards(&mut rs, pool_char);
                 assert_eq!(rewards.len(), 3);
-                for ((ids, up), (rarity, rr)) in rewards.iter().zip(rarities) {
+                for ((ids, up, _), (rarity, rr)) in rewards.iter().zip(rarities) {
                     let mut want: Vec<CardId> = Vec::new();
                     let mut want_up: Vec<bool> = Vec::new();
                     for _ in 0..3 {

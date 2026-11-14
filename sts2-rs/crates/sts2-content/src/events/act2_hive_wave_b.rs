@@ -1034,6 +1034,7 @@ fn the_future_of_potions_trade(state: &mut RunState, slot: usize) -> EventOutcom
         // options upgraded.
         state.offer_custom_rewards(
             vec![sts2_core::OfferedReward::Card {
+                enchantments: Vec::new(),
                 options: Some(options),
                 upgraded: vec![true; count],
                 no_upgrade_roll: false,
@@ -1047,6 +1048,7 @@ fn the_future_of_potions_trade(state: &mut RunState, slot: usize) -> EventOutcom
     state
         .pending_card_selects
         .push(sts2_core::runstate::PendingCardSelect {
+            enchantments: Vec::new(),
             upgraded: vec![true; count],
             options,
             post_add: Vec::new(),

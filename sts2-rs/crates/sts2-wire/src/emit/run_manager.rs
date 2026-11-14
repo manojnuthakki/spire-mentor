@@ -842,6 +842,23 @@ pub fn card_reward_option_upgraded(rm: &RunManager) -> Vec<bool> {
     rm.card_reward_upgraded_flags().to_vec()
 }
 
+/// `RunManager.card_reward_option_enchantments()` — per-option first
+/// enchantment (wire name, amount) the late reward hooks left on the offered
+/// card (Glitter's Glam, Wing Charm's, Fresnel Lens's), index-aligned with
+/// [`card_reward_option_ids`]; `None` for an unenchanted option. Shorter than
+/// the ids list (or empty) means unenchanted. Same first-enchantment rule as a
+/// deck card's wire form.
+#[must_use]
+pub fn card_reward_option_enchantments(rm: &RunManager) -> Vec<Option<(String, i32)>> {
+    rm.card_reward_enchantments()
+        .iter()
+        .map(|e| {
+            e.first()
+                .map(|(id, amount)| (id.wire_name().to_owned(), *amount))
+        })
+        .collect()
+}
+
 /// `RunManager.card_reward_bundles()` — when the current `CardReward`
 /// offering is a Scroll Boxes bundle pick, the packs as
 /// `[["CARD.<UPPER_SNAKE>", …], …]`, one inner list per selectable pack,
@@ -1099,7 +1116,10 @@ pub fn reward_screen(rm: &RunManager) -> Value {
                         );
                     }
                     ScreenReward::Card {
-                        options, upgraded, ..
+                        options,
+                        upgraded,
+                        enchantments,
+                        ..
                     } => {
                         set(&mut d, "type", "card");
                         let opts: Vec<Value> = options
@@ -1113,6 +1133,12 @@ pub fn reward_screen(rm: &RunManager) -> Value {
                                     "upgraded",
                                     upgraded.get(i).copied().unwrap_or(false),
                                 );
+                                if let Some((eid, amount)) =
+                                    enchantments.get(i).and_then(|e| e.first())
+                                {
+                                    set(&mut o, "enchantment", eid.wire_name());
+                                    set(&mut o, "enchantment_amount", *amount);
+                                }
                                 Value::Object(o)
                             })
                             .collect();

@@ -557,6 +557,7 @@ fn roll_reward_hooks_into(
             Reward::Card(card) => out.hook_rewards.push(match card.for_room {
                 Some(room) => OfferedReward::RoomTypeCard(room),
                 None => OfferedReward::Card {
+                    enchantments: Vec::new(),
                     options: None,
                     upgraded: Vec::new(),
                     no_upgrade_roll: card.no_upgrade_roll,
@@ -1369,6 +1370,7 @@ pub fn generate_room_type_card_reward_options(
     // RunState side channel so `RunManager::do_card_reward_pick` builds the
     // picked card with the right upgrade state.
     rs.card_reward_upgraded_flags = cards.iter().map(|c| c.upgraded).collect();
+    rs.card_reward_enchantments = cards.iter().map(|c| c.enchantments).collect();
     cards.into_iter().map(|c| c.card_id).collect()
 }
 

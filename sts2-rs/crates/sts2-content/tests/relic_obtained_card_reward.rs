@@ -33,6 +33,7 @@ fn screen() -> RunManager {
         vec![
             OfferedReward::Relic(RelicReward::new(RelicId::FrozenEgg)),
             OfferedReward::Card {
+                enchantments: Vec::new(),
                 options: Some(vec![CardId::Inflame, CardId::Anger]),
                 upgraded: vec![false, false],
                 no_upgrade_roll: false,

@@ -87,6 +87,7 @@ fn brain_leech_rip(state: &mut RunState) -> EventOutcome {
     if state.interactive_rewards {
         state.offer_custom_rewards(
             vec![sts2_core::OfferedReward::Card {
+                enchantments: Vec::new(),
                 options: Some(options),
                 upgraded: Vec::new(),
                 no_upgrade_roll: false,

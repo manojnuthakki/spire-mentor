@@ -1529,6 +1529,14 @@ impl PyRunManager {
         emit_rm::card_reward_option_upgraded(&self.inner)
     }
 
+    /// Per-option first enchantment `(wire name, amount)` or `None`,
+    /// index-aligned with [`Self::card_reward_option_ids`]: what the late
+    /// reward hooks left on the offered cards (Glitter's Glam). Shorter than
+    /// the ids list (or empty) means unenchanted.
+    fn card_reward_option_enchantments(&self) -> Vec<Option<(String, i32)>> {
+        emit_rm::card_reward_option_enchantments(&self.inner)
+    }
+
     /// When the current `CardReward` offering is a Scroll Boxes bundle pick,
     /// returns the packs as `[["CARD.<UPPER_SNAKE>", …], …]` — one inner list
     /// per selectable pack, index-aligned with `PickCardReward{Some(i)}`.

@@ -277,7 +277,7 @@ fn kaleidoscope_spends_silver_crucible_once_per_reward() {
         sts2_core::CharacterId::Ironclad,
     );
     assert_eq!(rewards.len(), 2);
-    for (ids, upgraded) in &rewards {
+    for (ids, upgraded, _) in &rewards {
         for (id, up) in ids.iter().zip(upgraded) {
             let upgradable = sts2_content::cards::spec_index::card_pod_from_id(*id, true)
                 .is_some_and(|u| u.upgraded);
@@ -318,7 +318,7 @@ fn kaleidoscope_wing_charm_draws_once_per_eligible_card() {
     );
     let eligible = rewards
         .iter()
-        .flat_map(|(ids, _)| ids.iter())
+        .flat_map(|(ids, _, _)| ids.iter())
         .filter(|id| {
             let card = pod(**id);
             sts2_content::cards::spec_index::spec_for_card_id(**id).is_some_and(|spec| {
