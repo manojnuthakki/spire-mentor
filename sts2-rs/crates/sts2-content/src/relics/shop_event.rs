@@ -4384,11 +4384,22 @@ fn listener_glitter_card_reward(
     if !rs.owns_active_relic(RelicId::Glitter) {
         return EffectResult::NotImplemented;
     }
-    if cards.is_empty() {
-        return EffectResult::NotImplemented;
+    // C# `Glitter.TryModifyCardRewardOptionsLate` enchants the cards
+    // `Glam.CanEnchant` accepts: an already enchanted card (Wing Charm's
+    // Swift) takes no second enchantment (F8 step57 review).
+    let mut any = false;
+    for card in cards.iter_mut() {
+        let eligible =
+            crate::cards::spec_index::spec_for_card_id(card.card_id).is_some_and(|spec| {
+                crate::enchantments::can_enchant_card(&spec, card, EnchantmentId::Glam)
+            });
+        if eligible {
+            card.add_enchantment(EnchantmentId::Glam, 1);
+            any = true;
+        }
     }
-    for card in cards {
-        card.add_enchantment(EnchantmentId::Glam, 1);
+    if !any {
+        return EffectResult::NotImplemented;
     }
     EffectResult::Resolved
 }

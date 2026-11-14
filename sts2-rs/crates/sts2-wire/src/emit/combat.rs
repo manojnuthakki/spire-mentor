@@ -610,6 +610,10 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
     set(&mut d, "round", i32::from(state.round));
     set(&mut d, "side", side_to_str(state.side));
     set(&mut d, "is_elite", state.is_elite);
+    // Only when set (an optional key), so every other wire stays as it was.
+    if state.fur_coat_marked_room {
+        set(&mut d, "fur_coat_marked_room", true);
+    }
     // Wire schema uses `turn`, which mirrors `round` in this Rust port
     // (Python sim splits them; the wire field name predates the merge).
     set(&mut d, "turn", i32::from(state.round));

@@ -83,13 +83,26 @@ fn brain_leech_rip(state: &mut RunState) -> EventOutcome {
     // upgrade float (NoUpgradeRoll). Rolled here (OfferCustom populates
     // at option time); the drain surfaces the options verbatim.
     let lost = state.lose_hp(BRAIN_LEECH_RIP_DAMAGE);
-    let options = crate::cards::spec_index::roll_colorless_reward_options_no_upgrade(state, 3);
+    let option_ids = crate::cards::spec_index::roll_colorless_reward_options_no_upgrade(state, 3);
+    // `CardFactory.CreateForReward` fires the late reward hooks once on the
+    // slate it makes (`NoUpgradeRoll`, not `NoModifyHooks`), as ShareKnowledge's
+    // does: Wing Charm's Swift, Glitter's Glam, the eggs, Silver Crucible. The
+    // pre-resolved options then carry what they left (F8 step57 review).
+    let cards = state.offer_card_reward(
+        option_ids
+            .into_iter()
+            .filter_map(|id| crate::cards::spec_index::card_pod_from_id(id, false))
+            .collect(),
+    );
+    let options: Vec<_> = cards.iter().map(|c| c.card_id).collect();
+    let upgraded: Vec<bool> = cards.iter().map(|c| c.upgraded).collect();
+    let enchantments: Vec<_> = cards.iter().map(|c| c.enchantments).collect();
     if state.interactive_rewards {
         state.offer_custom_rewards(
             vec![sts2_core::OfferedReward::Card {
-                enchantments: Vec::new(),
+                enchantments,
                 options: Some(options),
-                upgraded: Vec::new(),
+                upgraded,
                 no_upgrade_roll: false,
             }],
             true,
@@ -98,7 +111,11 @@ fn brain_leech_rip(state: &mut RunState) -> EventOutcome {
     }
     state
         .pending_rewards
-        .push(Reward::Card(CardReward::from_options(options)));
+        .push(Reward::Card(CardReward::from_resolved_enchanted(
+            options,
+            upgraded,
+            enchantments,
+        )));
     EventOutcome::finished(format!("Took {lost} damage, gained a colorless card."))
 }
 
@@ -460,6 +477,62 @@ mod tests {
     use super::*;
 
     // ── BrainLeech ───────────────────────────────────────────────────
+
+    /// Rip's pre-populated colorless reward runs the late reward hooks once
+    /// (`CardFactory.CreateForReward`): Glitter's Glam on every card, and
+    /// Wing Charm's Swift on one of them in place of Glam (F8 step57 review).
+    #[test]
+    fn rip_offers_cards_with_the_late_hooks_applied() {
+        use sts2_core::cards::EnchantmentId;
+        use sts2_core::relics::RelicId;
+        sts2_content_install();
+        for (relics, interactive) in [
+            (vec![RelicId::Glitter], false),
+            (vec![RelicId::Glitter], true),
+            (vec![RelicId::WingCharm, RelicId::Glitter], false),
+        ] {
+            let mut rs = RunState::new();
+            rs.relics = relics.clone();
+            rs.interactive_rewards = interactive;
+            let _ = brain_leech_rip(&mut rs);
+            let held: Vec<sts2_core::cards::CardEnchantments> = if interactive {
+                match rs.offered_reward_sets.last().expect("set").rewards.first() {
+                    Some(sts2_core::OfferedReward::Card { enchantments, .. }) => {
+                        enchantments.clone()
+                    }
+                    other => panic!("{other:?}"),
+                }
+            } else {
+                rs.pending_rewards
+                    .iter()
+                    .find_map(|r| match r {
+                        Reward::Card(c) => Some(c.enchantments.clone()),
+                        _ => None,
+                    })
+                    .expect("a card reward")
+            };
+            assert_eq!(held.len(), 3, "{relics:?}");
+            assert!(
+                held.iter().all(|e| e.iter().count() == 1),
+                "{relics:?}: {held:?}"
+            );
+            if relics.contains(&RelicId::WingCharm) {
+                assert_eq!(
+                    held.iter()
+                        .filter(|e| e.get(EnchantmentId::Swift) == 1)
+                        .count(),
+                    1
+                );
+            } else {
+                assert!(held.iter().all(|e| e.get(EnchantmentId::Glam) == 1));
+            }
+        }
+    }
+
+    fn sts2_content_install() {
+        crate::cards::dispatch::install_default_registry();
+        crate::relics::dispatch::ensure_installed();
+    }
 
     #[test]
     fn brain_leech_spec_matches_python_pin() {

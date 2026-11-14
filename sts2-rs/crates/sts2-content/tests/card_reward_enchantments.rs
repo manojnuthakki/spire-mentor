@@ -239,3 +239,76 @@ fn a_glitter_obtained_after_the_reward_was_rolled_enchants_it() {
         1
     );
 }
+
+/// `Glam.CanEnchant` refuses an enchanted card: Glitter and Wing Charm in
+/// either order leave no option with two enchantments, and the card taken
+/// has exactly what was shown.
+#[test]
+fn glitter_and_wing_charm_never_stack_two_enchantments_on_an_option() {
+    for relics in [
+        [RelicId::Glitter, RelicId::WingCharm],
+        [RelicId::WingCharm, RelicId::Glitter],
+    ] {
+        for screen in [false, true] {
+            let mut rm = first_combat_card_reward(&relics, screen);
+            let held = rm.card_reward_enchantments().to_vec();
+            assert_eq!(held.len(), 3, "{relics:?}");
+            assert!(
+                held.iter().all(|e| e.iter().count() <= 1),
+                "{relics:?}: {held:?}"
+            );
+            for (idx, e) in held.iter().enumerate() {
+                // Every option carries exactly one: Swift on one, Glam on the others.
+                assert_eq!(e.iter().count(), 1, "{relics:?} option {idx}");
+            }
+            let shown = held[2];
+            rm.take_action(RunAction::PickCardReward { idx: Some(2) });
+            let card = rm.run_state.master_deck.last().expect("picked");
+            assert_eq!(
+                card.enchantments, shown,
+                "{relics:?}: the card is the one shown"
+            );
+        }
+    }
+}
+
+/// Glitter obtained from the same screen after Wing Charm enchanted the
+/// rolled card: the re-run hook respects the card's existing enchantment.
+#[test]
+fn a_glitter_obtained_later_leaves_a_wing_charm_card_alone() {
+    sts2_content::cards::dispatch::install_default_registry();
+    sts2_content::relics::dispatch::ensure_installed();
+    sts2_content::potions::dispatch::ensure_installed();
+    let mut rm = new_run_manager_for_character_with_ascension(3, CharacterId::Ironclad, 0);
+    initialize_run_setup(&mut rm);
+    for _ in 0..50 {
+        if rm.phase() == Phase::MapChoice {
+            break;
+        }
+        let a = rm.get_available_actions()[0];
+        rm.take_action(a);
+    }
+    rm.run_state.relics.push(RelicId::WingCharm);
+    rm.run_state.interactive_rewards = true;
+    let mut swift = sts2_core::cards::CardEnchantments::new();
+    swift.set(EnchantmentId::Swift, 1);
+    rm.run_state.offer_custom_rewards(
+        vec![
+            OfferedReward::Relic(RelicReward::new(RelicId::Glitter)),
+            OfferedReward::Card {
+                enchantments: vec![swift, sts2_core::cards::CardEnchantments::new()],
+                options: Some(vec![CardId::Anger, CardId::Inflame]),
+                upgraded: vec![false, false],
+                no_upgrade_roll: false,
+            },
+        ],
+        true,
+    );
+    rm.take_action(RunAction::ProceedRewards);
+    rm.take_action(RunAction::ClaimReward { idx: 0 });
+    rm.take_action(RunAction::ClaimReward { idx: 0 });
+    let held = rm.card_reward_enchantments();
+    assert_eq!(held[0].get(EnchantmentId::Swift), 1);
+    assert_eq!(held[0].get(EnchantmentId::Glam), 0, "no second enchantment");
+    assert_eq!(held[1].get(EnchantmentId::Glam), 1);
+}

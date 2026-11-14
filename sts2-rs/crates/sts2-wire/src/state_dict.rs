@@ -225,6 +225,9 @@ pub struct ParsedState {
     pub round: i32,
     pub side: String,
     pub is_elite: bool,
+    /// Optional `fur_coat_marked_room` (absent: false): the combat's map node
+    /// is one Fur Coat marked, so an enemy added mid-fight enters at hp 1.
+    pub fur_coat_marked_room: bool,
     pub player: ParsedPlayer,
     pub deck: ParsedDeck,
     pub encounter: Vec<ParsedEnemy>,
@@ -708,6 +711,13 @@ pub fn parse_state_dict<V: WireValue>(d: &V) -> WireResult<ParsedState> {
         return Err(schema_err("$.round", "must be >= 0"));
     }
     let is_elite = extract_bool(d, "$", "is_elite")?;
+    let fur_coat_marked_room = extract_optional(d, "fur_coat_marked_room")
+        .map(|v| {
+            v.as_bool()
+                .ok_or_else(|| schema_err("$.fur_coat_marked_room", "must be a bool"))
+        })
+        .transpose()?
+        .unwrap_or(false);
     let turn = extract_i32(d, "$", "turn")?;
     if turn < 0 {
         return Err(schema_err("$.turn", "must be >= 0"));
@@ -837,6 +847,7 @@ pub fn parse_state_dict<V: WireValue>(d: &V) -> WireResult<ParsedState> {
         round,
         side,
         is_elite,
+        fur_coat_marked_room,
         player,
         deck,
         encounter,
@@ -3027,6 +3038,7 @@ pub fn state_from_dict_impl(parsed: &ParsedState) -> WireResult<CoreCombatState>
         ),
         ascension: parsed.ascension,
         is_elite: parsed.is_elite,
+        fur_coat_marked_room: parsed.fur_coat_marked_room,
         ..CoreCombatState::default()
     };
 
