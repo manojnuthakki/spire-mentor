@@ -4505,19 +4505,14 @@ fn listener_fur_coat_after_obtained(rs: &mut RunState) -> EffectResult {
 ///    rewrite changes node types, in which case the listener
 ///    re-rolls).
 ///
-/// RNG: the Python pin derives a per-relic stream
-/// (`Rng(seed + player_id + hash("FurCoat"))`). The Rust port uses
-/// [`sts2_core::dotnet_rng::Rng::with_name`] with the same
-/// `"FurCoat"` name so the named-stream seed-mixing matches; the
-/// `player_id` term is omitted because the Rust port is
-/// single-player at this pin. Sampling: shuffle the candidate
-/// `room_points` and take the first 7 (Fisher-Yates via the dotnet
-/// Rng's `shuffle` method — same shape Python uses).
+/// RNG (step 54, from the decompile): C# `new Rng(owner, id)` seeds with the
+/// run seed + player slot (0) + the hash of the id ENTRY `"FUR_COAT"`
+/// ([`sts2_core::dotnet_rng::Rng::with_name`]; the earlier `"FurCoat"` was the
+/// Python pin's name). Sampling: the Monster/Elite points in
+/// `GetAllMapPoints()` order (column, then row) are shuffled
+/// (`UnstableShuffle`) and the first 7 taken.
 ///
-/// Combat-side 1-HP clamp is deferred to a follow-up bead — it
-/// needs a `CombatState` ↔ `ActMap` bridge that snapshots
-/// `is_marked_by(current_coord, FurCoat)` at combat init. Bead
-/// `sts2-rs-eboqq`.
+/// The combat-side 1-HP clamp is in `run_bridge::enter_combat_from_roster`.
 fn listener_fur_coat_modify_generated_map_late(
     rs: &mut RunState,
     act_map: &mut sts2_core::map::ActMap,
@@ -4555,7 +4550,11 @@ fn fur_coat_add_marked_rooms(
     if candidates.is_empty() {
         return EffectResult::NotImplemented;
     }
-    let mut rng = sts2_core::dotnet_rng::Rng::with_name(rs.rng.seed, "FurCoat");
+    // C# `GetAllMapPoints()` walks the grid column by column (rows within a
+    // column), and `new Rng(owner, id)` seeds with the run seed + slot 0 + the
+    // hash of the id ENTRY (`"FUR_COAT"`, not the class name). Step 54.
+    candidates.sort_by_key(|c| (c.col, c.row));
+    let mut rng = sts2_core::dotnet_rng::Rng::with_name(rs.rng.seed, "FUR_COAT");
     rng.shuffle(&mut candidates);
     let needed = FUR_COAT_COMBATS.saturating_sub(existing_marks);
     let to_mark: Vec<MapCoord> = candidates.into_iter().take(needed).collect();
@@ -6888,6 +6887,49 @@ mod tests {
             before,
             "re-dispatch keeps the same marks"
         );
+    }
+
+    /// Step 54: C# `AddMarkedRooms` shuffles `map.GetAllMapPoints()` (column
+    /// by column, rows within a column) filtered to Monster/Elite with
+    /// `new Rng(owner, id)` (seed + slot 0 + hash of the id entry
+    /// `"FUR_COAT"`), then takes seven. The marks must be those, whatever
+    /// order the map's points were created in.
+    #[test]
+    fn listener_fur_coat_marks_follow_the_games_candidate_order_and_stream() {
+        use sts2_core::map::{ActMap, MapCoord, MapPointType};
+        use sts2_core::runstate::RunState;
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.act_index = 3;
+        rs.rng = sts2_core::run_rng_set::RunRngSet::new(1234567);
+        rs.relics.push(RelicId::FurCoat);
+        // Points created in a scrambled order (row-major reversed).
+        let mut map = ActMap::new(15);
+        let mut coords: Vec<MapCoord> = Vec::new();
+        for row in (1..=5).rev() {
+            for col in (0..4).rev() {
+                coords.push(MapCoord::new(col, row));
+            }
+        }
+        for c in &coords {
+            let idx = map.get_or_create(c.col, c.row);
+            map.point_mut(idx).point_type =
+                if (c.col + c.row) % 4 == 0 { MapPointType::Elite } else { MapPointType::Monster };
+        }
+        rs.current_act_map = Some(map);
+        rs.last_obtained_relic = Some(RelicId::FurCoat);
+        let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
+        let mut got = rs.current_act_map.as_ref().unwrap().marked_coords_for(RelicId::FurCoat);
+        got.sort();
+        // Expected: column-major candidates, shuffled off the id-entry stream.
+        let mut cand: Vec<MapCoord> = (0..4)
+            .flat_map(|col| (1..=5).map(move |row| MapCoord::new(col, row)))
+            .collect();
+        let mut rng = sts2_core::dotnet_rng::Rng::with_name(rs.rng.seed, "FUR_COAT");
+        rng.shuffle(&mut cand);
+        let mut want: Vec<MapCoord> = cand.into_iter().take(FUR_COAT_COMBATS).collect();
+        want.sort();
+        assert_eq!(got, want);
     }
 
     /// Bead `sts2-rs-eboqq`: FurCoat's late map-mark listener picks
