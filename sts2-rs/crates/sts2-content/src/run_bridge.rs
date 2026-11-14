@@ -3348,7 +3348,11 @@ mod tests {
             rs.current_room = Some(Room::at(coord, MapPointType::Monster, RoomType::Monster));
             let combat = enter_combat_from_roster(&rs, &roster, RoomType::Monster);
             let e = combat.enemy_uids[0];
-            let c = combat.creatures.iter().find(|c| c.id == e.0).expect("enemy");
+            let c = combat
+                .creatures
+                .iter()
+                .find(|c| c.id == e.0)
+                .expect("enemy");
             (c.current_hp, c.max_hp)
         };
         assert_eq!(hp_at(&rs, marked), (1, 57), "marked room: hp 1, max kept");

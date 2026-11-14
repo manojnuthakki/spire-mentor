@@ -4541,12 +4541,22 @@ fn fur_coat_add_marked_rooms(
     if existing_marks >= FUR_COAT_COMBATS {
         return EffectResult::Resolved;
     }
+    // Live grid nodes only (C# `GetAllMapPoints` skips null slots): the
+    // point list also holds nodes the generator pruned, which the game's
+    // grid never had. Reading each coordinate back through the grid drops
+    // them; sorted (column, row), the grid's own order.
     let mut candidates: Vec<MapCoord> = act_map
         .room_points()
         .iter()
-        .filter(|p| matches!(p.point_type, MapPointType::Monster | MapPointType::Elite))
         .map(|p| MapCoord::new(p.col(), p.row()))
         .collect();
+    candidates.sort_by_key(|c| (c.col, c.row));
+    candidates.dedup();
+    candidates.retain(|c| {
+        act_map
+            .get_point(*c)
+            .is_some_and(|p| matches!(p.point_type, MapPointType::Monster | MapPointType::Elite))
+    });
     if candidates.is_empty() {
         return EffectResult::NotImplemented;
     }
@@ -6871,7 +6881,11 @@ mod tests {
         let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
         let map = rs.current_act_map.as_ref().expect("map kept");
         let marked = map.marked_coords_for(RelicId::FurCoat);
-        assert_eq!(marked.len(), FUR_COAT_COMBATS, "seven rooms marked on obtain");
+        assert_eq!(
+            marked.len(),
+            FUR_COAT_COMBATS,
+            "seven rooms marked on obtain"
+        );
         for c in &marked {
             let p = map.get_point(*c).expect("marked point exists");
             assert!(matches!(
@@ -6883,7 +6897,10 @@ mod tests {
         rs.last_obtained_relic = Some(RelicId::FurCoat);
         let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
         assert_eq!(
-            rs.current_act_map.as_ref().unwrap().marked_coords_for(RelicId::FurCoat),
+            rs.current_act_map
+                .as_ref()
+                .unwrap()
+                .marked_coords_for(RelicId::FurCoat),
             before,
             "re-dispatch keeps the same marks"
         );
@@ -6913,13 +6930,20 @@ mod tests {
         }
         for c in &coords {
             let idx = map.get_or_create(c.col, c.row);
-            map.point_mut(idx).point_type =
-                if (c.col + c.row) % 4 == 0 { MapPointType::Elite } else { MapPointType::Monster };
+            map.point_mut(idx).point_type = if (c.col + c.row) % 4 == 0 {
+                MapPointType::Elite
+            } else {
+                MapPointType::Monster
+            };
         }
         rs.current_act_map = Some(map);
         rs.last_obtained_relic = Some(RelicId::FurCoat);
         let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
-        let mut got = rs.current_act_map.as_ref().unwrap().marked_coords_for(RelicId::FurCoat);
+        let mut got = rs
+            .current_act_map
+            .as_ref()
+            .unwrap()
+            .marked_coords_for(RelicId::FurCoat);
         got.sort();
         // Expected: column-major candidates, shuffled off the id-entry stream.
         let mut cand: Vec<MapCoord> = (0..4)
@@ -6930,6 +6954,44 @@ mod tests {
         let mut want: Vec<MapCoord> = cand.into_iter().take(FUR_COAT_COMBATS).collect();
         want.sort();
         assert_eq!(got, want);
+    }
+
+    /// Step 54: C# `GetAllMapPoints()` walks the live grid, so a node the map
+    /// generator pruned (still in the engine's point list, not in its grid) is
+    /// never a Fur Coat candidate nor marked.
+    #[test]
+    fn listener_fur_coat_ignores_pruned_ghost_nodes() {
+        use sts2_core::map::{ActMap, MapPointType};
+        use sts2_core::runstate::RunState;
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.act_index = 3;
+        let mut map = ActMap::new(15);
+        let mut ghost = None;
+        for row in 1..=3 {
+            for col in 0..3 {
+                let idx = map.get_or_create(col, row);
+                map.point_mut(idx).point_type = MapPointType::Monster;
+                if (col, row) == (1, 2) {
+                    ghost = Some(idx);
+                }
+            }
+        }
+        map.remove_point(ghost.expect("ghost"));
+        rs.current_act_map = Some(map);
+        rs.relics.push(RelicId::FurCoat);
+        rs.last_obtained_relic = Some(RelicId::FurCoat);
+        let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
+        let marked = rs
+            .current_act_map
+            .as_ref()
+            .unwrap()
+            .marked_coords_for(RelicId::FurCoat);
+        assert_eq!(marked.len(), FUR_COAT_COMBATS);
+        assert!(
+            !marked.contains(&sts2_core::map::MapCoord::new(1, 2)),
+            "the pruned node is not marked"
+        );
     }
 
     /// Bead `sts2-rs-eboqq`: FurCoat's late map-mark listener picks
@@ -11361,7 +11423,9 @@ mod tests {
             is_melted: false,
         });
         // One slot is taken, so the fill is two rolls.
-        s.player.potions.push(sts2_core::potions::PotionKind::BlockPotion);
+        s.player
+            .potions
+            .push(sts2_core::potions::PotionKind::BlockPotion);
         let cap = s.player.effective_potion_slots();
         let mut expect_rng = s.run_rng.combat_potion_generation.clone();
         let expected_fills = cap - 1;
@@ -11377,13 +11441,21 @@ mod tests {
         let cpg_before = s.run_rng.combat_potion_generation.counter();
         let combat_rng_before = s.rng.clone();
         let _ = dispatch_before_combat_start(&mut s);
-        assert_eq!(&s.player.potions[1..], &expected[..], "fills come off the run stream");
+        assert_eq!(
+            &s.player.potions[1..],
+            &expected[..],
+            "fills come off the run stream"
+        );
         assert_eq!(
             s.run_rng.combat_potion_generation.counter() - cpg_before,
             2 * expected_fills as u32,
             "two draws a fill off CombatPotionGeneration"
         );
-        assert_eq!(s.rng.counter(), combat_rng_before.counter(), "combat rng untouched");
+        assert_eq!(
+            s.rng.counter(),
+            combat_rng_before.counter(),
+            "combat rng untouched"
+        );
     }
 
     /// Step 54: a fill takes the first EMPTY physical slot (C#
@@ -11412,8 +11484,16 @@ mod tests {
         let cap = s.player.effective_potion_slots();
         let _ = dispatch_before_combat_start(&mut s);
         assert_eq!(s.player.potions.len(), cap);
-        assert_eq!(s.player.potions[1], PotionKind::BlockPotion, "slot 1 keeps its potion");
-        assert_eq!(s.player.potion_slot_indices[..2], [0, 1], "the hole (slot 0) fills first");
+        assert_eq!(
+            s.player.potions[1],
+            PotionKind::BlockPotion,
+            "slot 1 keeps its potion"
+        );
+        assert_eq!(
+            s.player.potion_slot_indices[..2],
+            [0, 1],
+            "the hole (slot 0) fills first"
+        );
     }
 
     /// DelicateFrond's `before_combat_start` listener is ownership-gated:
