@@ -545,8 +545,8 @@ pub fn alchemize_procure_random_potion(state: &mut CombatState) {
             .next()
     });
     if let Some(kind) = rolled {
-        if state.player.potions.len() < state.player.effective_potion_slots() {
-            state.player.potions.push(kind);
+        // First free physical slot (C# `AddPotionInternal`), as every procure.
+        if state.player.add_potion_first_free_slot(kind) {
             // C# `TryToProcure` → `Hook.AfterPotionProcured` (sts2-agent
             // fork, belt-buckle).
             sts2_core::relic_effects::belt_buckle::after_potion_procured(state);
@@ -579,7 +579,11 @@ pub fn entropic_brew_fill_belt(state: &mut CombatState) {
         .next() else {
             break;
         };
-        state.player.potions.push(kind);
+        // First free physical slot (C# `AddPotionInternal`): the freed slot of
+        // a drunk or taken potion first, not the end of the list.
+        if !state.player.add_potion_first_free_slot(kind) {
+            break;
+        }
         // C# `TryToProcure` → `Hook.AfterPotionProcured` (sts2-agent fork,
         // belt-buckle).
         sts2_core::relic_effects::belt_buckle::after_potion_procured(state);

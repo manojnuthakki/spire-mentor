@@ -11344,6 +11344,36 @@ mod tests {
         assert_eq!(s.rng.counter(), combat_rng_before.counter(), "combat rng untouched");
     }
 
+    /// Step 54: a fill takes the first EMPTY physical slot (C#
+    /// `AddPotionInternal`: `IndexOf(null)`), so a belt with a hole in slot 0
+    /// (a potion taken by an event) is filled 0 then 2, the old potion staying
+    /// in slot 1, as Headless shows it.
+    #[test]
+    fn listener_delicate_frond_fills_the_freed_slot_first() {
+        use std::num::NonZeroU32;
+        use sts2_core::potions::{CharacterId, PotionKind};
+        use sts2_core::relic_effects::dispatch_before_combat_start;
+        use sts2_core::{Relic, RelicKind};
+
+        crate::relics::dispatch::ensure_installed();
+        let mut s = CombatState::default();
+        s.player.character = Some(CharacterId::Ironclad);
+        s.relics.push(Relic {
+            id: NonZeroU32::new(1).expect("non-zero"),
+            kind: RelicKind::DelicateFrond,
+            counter: 0,
+            is_wax: false,
+            is_melted: false,
+        });
+        s.player.potions.push(PotionKind::BlockPotion);
+        s.player.potion_slot_indices = smallvec::smallvec![1];
+        let cap = s.player.effective_potion_slots();
+        let _ = dispatch_before_combat_start(&mut s);
+        assert_eq!(s.player.potions.len(), cap);
+        assert_eq!(s.player.potions[1], PotionKind::BlockPotion, "slot 1 keeps its potion");
+        assert_eq!(s.player.potion_slot_indices[..2], [0, 1], "the hole (slot 0) fills first");
+    }
+
     /// DelicateFrond's `before_combat_start` listener is ownership-gated:
     /// when the player does NOT carry it, the belt stays empty (no phantom
     /// potions). Regression for the workbench autoplay showing 5 bogus
