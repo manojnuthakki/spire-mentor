@@ -137,13 +137,14 @@ fn finish(rs: &mut RunState) {
         use sts2_core::runstate::{CardReward, PotionReward, Reward};
         for r in offered {
             match r {
-                OfferedReward::Gold(n) | OfferedReward::GoldRolled(n) => {
-                    rs.pending_rewards.push(Reward::Gold { amount: n });
-                }
+                // Gold and relics have no drain in `pending_rewards`: they go
+                // through the paths the other events use (`gain_gold`, the
+                // `direct_event_relic_grant` gate).
+                OfferedReward::Gold(n) | OfferedReward::GoldRolled(n) => rs.gain_gold(n),
                 OfferedReward::Potion(kind) => rs
                     .pending_rewards
                     .push(Reward::Potion(PotionReward { potion_kind: kind })),
-                OfferedReward::Relic(relic) => rs.pending_rewards.push(Reward::Relic(relic)),
+                OfferedReward::Relic(relic) => rs.grant_event_relic(relic.relic_id),
                 OfferedReward::Card {
                     options: Some(options),
                     upgraded,

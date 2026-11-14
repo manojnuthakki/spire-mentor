@@ -372,17 +372,19 @@ fn sphere_card_rewards_apply_the_creation_option_hooks() {
     );
 }
 
-/// F2 (review round 1): with the default (non-interactive) rewards the
-/// revealed items are still granted: gold lands, potions and cards are
-/// pending, the same contents the interactive path offers.
+/// F2 (review rounds 1 and 2): with the default (non-interactive) rewards the
+/// revealed items are still granted, through paths that are consumed: gold
+/// lands in the purse, a relic is obtained, potions are claimed. Compared with
+/// what the interactive path offers for the same walk.
 #[test]
 fn noninteractive_sphere_still_grants_its_rewards() {
-    let inter = walk_all(60, true, |_| {});
-    let non = walk_all(60, false, |_| {});
-    let mut checked = 0;
+    let inter = walk_all(150, true, |_| {});
+    let non = walk_all(150, false, |_| {});
+    let (mut gold_runs, mut potion_runs) = (0, 0);
     for ((ri, _), (rn, gold_before)) in inter.iter().zip(&non) {
-        let screen = ri.reward_screen();
-        let Some(screen) = screen else { continue };
+        let Some(screen) = ri.reward_screen() else {
+            continue;
+        };
         let gold: i32 = screen
             .iter()
             .filter_map(|r| match r {
@@ -390,38 +392,103 @@ fn noninteractive_sphere_still_grants_its_rewards() {
                 _ => None,
             })
             .sum();
-        let potions = screen
-            .iter()
-            .filter(|r| matches!(r, ScreenReward::Potion { .. }))
-            .count();
-        if gold == 0 && potions == 0 {
-            continue;
+        if gold > 0 {
+            gold_runs += 1;
+            assert_eq!(rn.run_state.gold - gold_before, gold, "gold not granted");
         }
-        checked += 1;
-        let pending_gold: i32 = rn
-            .run_state
-            .pending_rewards
-            .iter()
-            .filter_map(|r| match r {
-                sts2_core::runstate::Reward::Gold { amount } => Some(*amount),
-                _ => None,
-            })
-            .sum();
-        let pending_potions = rn
-            .run_state
-            .pending_rewards
-            .iter()
-            .filter(|r| matches!(r, sts2_core::runstate::Reward::Potion(_)))
-            .count();
-        let granted = rn.run_state.gold - gold_before;
-        assert!(
-            pending_gold == gold || granted >= gold,
-            "gold lost: {gold} offered, {pending_gold} pending, {granted} granted"
-        );
-        assert!(
-            pending_potions == potions || rn.run_state.potions.len() >= potions.min(1),
-            "potions lost"
-        );
+        for r in screen {
+            if let ScreenReward::Potion { kind } = r {
+                potion_runs += 1;
+                assert!(
+                    rn.run_state.potions.iter().any(|p| p == kind)
+                        || rn
+                            .run_state
+                            .pending_rewards
+                            .iter()
+                            .any(|q| matches!(q, sts2_core::runstate::Reward::Potion(_))),
+                    "potion not delivered"
+                );
+            }
+        }
     }
-    assert!(checked >= 5, "{checked} runs with gold or potions");
+    assert!(
+        gold_runs >= 5 && potion_runs >= 3,
+        "{gold_runs} {potion_runs}"
+    );
+}
+
+/// F2 (review round 2): a revealed relic is obtained without the interactive
+/// screen. The walk is searched on a cloned grid until a relic is revealed,
+/// then played on a non-interactive run and an interactive one: the relic the
+/// screen offers is the relic the other run holds.
+#[test]
+fn noninteractive_sphere_obtains_a_revealed_relic() {
+    use sts2_core::crystal_sphere::{ItemKind, Tool};
+    let mut found = 0;
+    'seeds: for n in 1u32..=120 {
+        let probe_rm = {
+            let mut rm = run_seed(&n.to_string());
+            assert_eq!(
+                rm.take_action(RunAction::EventChoice { idx: 1 }),
+                ActionResult::Advanced
+            );
+            rm
+        };
+        let start = probe_rm.run_state.crystal_sphere.clone().expect("sphere");
+        let all = probe_rm.get_available_actions();
+        let mut state = 99u64 + u64::from(n);
+        for _ in 0..2000 {
+            let mut probe = start.clone();
+            let mut walk = Vec::new();
+            while !probe.is_finished() {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                let a = all[(state >> 33) as usize % all.len()];
+                let RunAction::CrystalSphereDivine { x, y, big } = a else {
+                    continue;
+                };
+                let tool = if big { Tool::Big } else { Tool::Small };
+                if probe.divine(i32::from(x), i32::from(y), tool).is_ok() {
+                    walk.push(a);
+                }
+            }
+            if !probe
+                .revealed()
+                .iter()
+                .any(|&i| probe.items()[i].kind == ItemKind::Relic)
+            {
+                continue;
+            }
+            let play = |interactive: bool| {
+                let mut rm = run_seed(&n.to_string());
+                rm.run_state.interactive_rewards = interactive;
+                assert_eq!(
+                    rm.take_action(RunAction::EventChoice { idx: 1 }),
+                    ActionResult::Advanced
+                );
+                for a in &walk {
+                    assert_eq!(rm.take_action(*a), ActionResult::Advanced);
+                }
+                rm
+            };
+            let (inter, non) = (play(true), play(false));
+            let relic = inter
+                .reward_screen()
+                .expect("rewards")
+                .iter()
+                .find_map(|r| match r {
+                    ScreenReward::Relic { relic } => Some(relic.relic_id),
+                    _ => None,
+                })
+                .expect("a relic offered");
+            assert!(
+                non.run_state.relics.contains(&relic),
+                "seed {n}: {relic:?} not obtained"
+            );
+            found += 1;
+            continue 'seeds;
+        }
+    }
+    assert!(found >= 2, "{found} relic witnesses");
 }
