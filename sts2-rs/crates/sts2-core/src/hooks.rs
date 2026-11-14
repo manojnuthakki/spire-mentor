@@ -14299,15 +14299,6 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
         vital_spark_after_card_played(state, ctx);
     }
 
-    // ── React: WitheringPresence (Aeonglass boss, monster-owned power) ──
-    // Decrement the per-card counter; every 6th player card adds a Wither to
-    // hand. C# `WitheringPresencePower.AfterCardPlayed`. Bead `…wb8lk.2`.
-    // present_kinds lane gate (perf): no live WitheringPresence ⇒ the
-    // helper's arena pair-collection is provably empty.
-    if power_kind_live(state, PowerKind::WitheringPresence) {
-        withering_presence_after_card_played(state, ctx);
-    }
-
     // ── React: MasterPlanner (Silent power) ────────────────────────────
     // C# `MasterPlannerPower.AfterCardPlayed`: when the player plays a SKILL,
     // `CardCmd.ApplyKeyword(card, Sly)` permanently adds the `Sly` keyword to
@@ -14848,6 +14839,18 @@ pub fn dispatch_after_card_played(state: &mut CombatState, ctx: &CardCtx) {
                 clone_card_to_hand(state, card_uid, amount, false);
             }
         }
+    }
+
+    // ── React: WitheringPresence (Aeonglass boss, monster-owned power) ──
+    // Decrement the per-card counter; every 6th player card adds a Wither to
+    // hand. C# `WitheringPresencePower.AfterCardPlayed`. Bead `…wb8lk.2`.
+    // Runs AFTER the player-owned Juggling clone: the host's listeners walk
+    // the player's powers before the monsters', so on a play that fires both
+    // the hand reads [.., clone, Wither] (F8 step 56, 8V6E089KN7 @1068).
+    // present_kinds lane gate (perf): no live WitheringPresence ⇒ the
+    // helper's arena pair-collection is provably empty.
+    if power_kind_live(state, PowerKind::WitheringPresence) {
+        withering_presence_after_card_played(state, ctx);
     }
 
     // Slow: every card played bumps each Slow instance's per-turn counter

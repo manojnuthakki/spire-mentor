@@ -421,6 +421,46 @@ fn infinite_blades_flashes_only_when_its_guard_holds() {
 
 // ── Juggling ────────────────────────────────────────────────────────────
 
+/// A player's Juggling clone and the Aeonglass boss's Withering Presence both
+/// answer the same card play: the host adds the clone to the hand first, then the
+/// Wither (players' listeners run ahead of the monsters', as the roster order
+/// says). F8 step 56, seed 8V6E089KN7 @1068: the hand read [.., clone, Wither] on
+/// Headless and [.., Wither, clone] on the Sim.
+#[test]
+fn juggling_clone_lands_in_the_hand_before_the_withering_presence_wither() {
+    let mut state = state_with_power(PowerKind::Juggling, 1);
+    state.player.creature_uid = Some(CreatureUid::new(999).expect("nz"));
+    let enemy = add_enemy(&mut state, 40);
+    push_enemy_power(&mut state, 2, enemy, PowerKind::WitheringPresence, 6);
+    let card = add_card(&mut state, 1, sts2_core::cards::CardType::Attack);
+    let play = |s: &mut CombatState| {
+        sts2_core::hooks::dispatch_after_card_played(
+            s,
+            &CardCtx {
+                card_uid: Some(card),
+                card_type: Some(sts2_core::cards::CardType::Attack),
+                ..CardCtx::default()
+            },
+        );
+    };
+    play(&mut state);
+    play(&mut state);
+    // The 6th card of the turn is the 3rd attack: both fire on this play.
+    for p in &mut state.powers {
+        if p.kind == PowerKind::WitheringPresence {
+            p.counter = 5;
+        }
+    }
+    play(&mut state);
+    let ids: Vec<CardId> = state
+        .player
+        .hand
+        .iter()
+        .map(|u| state.cards[u.get() as usize - 1].card_id)
+        .collect();
+    assert_eq!(ids, vec![CardId::StrikeIronclad, CardId::Wither]);
+}
+
 #[test]
 fn juggling_flashes_only_when_its_guard_holds() {
     let mut state = state_with_power(PowerKind::Juggling, 1);
