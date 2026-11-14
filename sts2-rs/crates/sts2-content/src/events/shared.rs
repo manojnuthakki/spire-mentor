@@ -1093,8 +1093,8 @@ pub const COLOSSAL_FLOWER: EventSpec = EventSpec {
 // Reached in a run through the boss-relic surface; as a forced event it presents
 // the relics the Ancient rolled (`RunState::roll_ancient_event_offers`), like the
 // other Ancients (see `ancient_generate_options`). The earlier separate port of
-// `Darv.GenerateInitialOptions` rolled other relics than the game's (Step53 gate)
-// and carried blank text keys.
+// `Darv.GenerateInitialOptions` carried blank text keys (Step53 gate); its rolls
+// matched the game's for the seeds checked, so only the keys were wrong.
 
 /// `Darv` spec. Pin: `shared.py:740`; C# `Darv.cs`.
 pub const DARV: EventSpec = EventSpec {

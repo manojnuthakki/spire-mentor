@@ -591,6 +591,12 @@ pub struct ContentCallbacks {
     /// instead of applying them. sts2-agent fork.
     pub roll_combat_gold_and_potion:
         Option<fn(rs: &mut RunState, room_type: crate::runstate::RoomType) -> RoomRewardRoll>,
+    /// Only the reward hooks' share of [`Self::roll_combat_gold_and_potion`]
+    /// (C# `Hook.ModifyRewards`, no gold roll, no potion odds): for a room
+    /// whose base rewards the game withholds but whose hooks still run (the
+    /// first final-act boss, `RewardsSet.GenerateWithoutOffering`).
+    pub roll_reward_hooks:
+        Option<fn(rs: &mut RunState, room_type: crate::runstate::RoomType) -> RoomRewardRoll>,
     /// One random potion off `rs.rng.combat_potion_generation` (C#
     /// `PotionFactory.CreateRandomPotionOutOfCombat(owner,
     /// RunState.Rng.CombatPotionGeneration)`), for Entropic Brew drunk out of
@@ -708,6 +714,7 @@ impl core::fmt::Debug for ContentCallbacks {
                 "roll_combat_gold_and_potion",
                 &self.roll_combat_gold_and_potion.is_some(),
             )
+            .field("roll_reward_hooks", &self.roll_reward_hooks.is_some())
             .field(
                 "roll_out_of_combat_potion",
                 &self.roll_out_of_combat_potion.is_some(),
@@ -2865,14 +2872,23 @@ impl RunManager {
                 self.card_offer_choose_screen = false;
                 self.card_offer_can_skip = true;
                 self.phase = Phase::CardReward;
+                // The base rewards are withheld, but `GenerateWithoutOffering`
+                // still runs `Hook.ModifyRewards` over the empty set: the
+                // hooks' rewards (Wongo's ticket, Black Star, ...) and their
+                // state changes stay.
+                let hooks = self
+                    .callbacks
+                    .roll_reward_hooks
+                    .map(|f| f(&mut self.run_state, crate::runstate::RoomType::Boss))
+                    .unwrap_or_default();
                 if self.run_state.interactive_rewards {
-                    self.reward_sets.push(RewardSet {
-                        rewards: Vec::new(),
-                        can_skip: true,
-                        custom: false,
-                    });
-                    self.screen_card_claim = None;
+                    self.open_reward_screen(Some(hooks));
                 } else {
+                    // The auto path credits hook gold only, as for any room.
+                    let gold: i32 = hooks.hook_gold.iter().sum();
+                    if gold > 0 {
+                        self.run_state.gain_gold(gold);
+                    }
                     self.advance_after_card_reward();
                 }
                 return ActionResult::Advanced;

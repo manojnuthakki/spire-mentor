@@ -95,6 +95,7 @@ pub fn ironclad_content_callbacks() -> ContentCallbacks {
         // sts2-agent fork: the opt-in rewards screen rolls the same rewards
         // without applying them; Entropic Brew out of combat rolls its fill.
         roll_combat_gold_and_potion: Some(roll_combat_gold_and_potion),
+        roll_reward_hooks: Some(roll_reward_hooks),
         roll_out_of_combat_potion: Some(roll_out_of_combat_potion),
         // Interactive deck-transform resolve (NewLeaf): roll the
         // replacement off the NICHE stream after the player's pick —
@@ -527,6 +528,25 @@ fn roll_combat_gold_and_potion(
         .into_iter()
         .next();
     }
+    roll_reward_hooks_into(rs, room_type, &mut out);
+    out
+}
+
+/// The reward hooks alone (see `ContentCallbacks::roll_reward_hooks`).
+fn roll_reward_hooks(
+    rs: &mut RunState,
+    room_type: RoomType,
+) -> sts2_core::run_manager::RoomRewardRoll {
+    let mut out = sts2_core::run_manager::RoomRewardRoll::default();
+    roll_reward_hooks_into(rs, room_type, &mut out);
+    out
+}
+
+fn roll_reward_hooks_into(
+    rs: &mut RunState,
+    room_type: RoomType,
+    out: &mut sts2_core::run_manager::RoomRewardRoll,
+) {
     // The reward hooks (C# `Hook.ModifyRewards`), their rewards rolled by the
     // screen after the room's own and its extras. Every relic reward a hook
     // adds is a `RelicReward(player)` (Black Star, Lava Rock, Wongo's ticket).
@@ -549,7 +569,6 @@ fn roll_combat_gold_and_potion(
             _ => {}
         }
     }
-    out
 }
 
 /// One random potion off the run's `CombatPotionGeneration` stream (C#
