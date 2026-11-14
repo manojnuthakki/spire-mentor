@@ -2026,7 +2026,11 @@ fn listener_delicate_frond_combat_start(state: &mut CombatState) -> EffectResult
     if !state.relics.owns(RelicKind::DelicateFrond) {
         return EffectResult::NotImplemented;
     }
-    let _ = state.fill_empty_potion_slots();
+    // C# `DelicateFrond.BeforeCombatStart` (step 54): the same loop as Entropic
+    // Brew, `CreateRandomPotionOutOfCombat(owner,
+    // RunState.Rng.CombatPotionGeneration)` until no slot is open, not the
+    // combat rng's uniform pick (`fill_empty_potion_slots`).
+    crate::potions::all::entropic_brew_fill_belt(state);
     EffectResult::Resolved
 }
 
@@ -4468,6 +4472,15 @@ fn listener_fur_coat_after_obtained(rs: &mut RunState) -> EffectResult {
     if rs.fur_coat_act_index.is_none() {
         rs.fur_coat_act_index = Some(rs.act_index);
     }
+    // C# `FurCoat.AfterObtained`: `AddMarkedRooms(RunState.Map)` at once, so a
+    // Fur Coat taken after its act's map exists (Nonupeipe at the act start, a
+    // shop, a chest) marks the CURRENT map; the late hook only sees maps
+    // generated afterwards (step 54, `fur-coat-current-map-marks`).
+    if let Some(mut act_map) = rs.current_act_map.take() {
+        let act_index = rs.act_index;
+        let _ = fur_coat_add_marked_rooms(rs, &mut act_map, act_index);
+        rs.current_act_map = Some(act_map);
+    }
     EffectResult::Resolved
 }
 
@@ -4506,6 +4519,16 @@ fn listener_fur_coat_after_obtained(rs: &mut RunState) -> EffectResult {
 /// `is_marked_by(current_coord, FurCoat)` at combat init. Bead
 /// `sts2-rs-eboqq`.
 fn listener_fur_coat_modify_generated_map_late(
+    rs: &mut RunState,
+    act_map: &mut sts2_core::map::ActMap,
+    act_index: u8,
+) -> EffectResult {
+    fur_coat_add_marked_rooms(rs, act_map, act_index)
+}
+
+/// C# `FurCoat.AddMarkedRooms(map)`, shared by `AfterObtained` (the current
+/// map) and `ModifyGeneratedMapLate` (a map just generated).
+fn fur_coat_add_marked_rooms(
     rs: &mut RunState,
     act_map: &mut sts2_core::map::ActMap,
     act_index: u8,
@@ -6817,6 +6840,53 @@ mod tests {
         assert!(
             rs.fur_coat_act_index.is_none(),
             "no FurCoat in rs.relics → no latch"
+        );
+    }
+
+    /// Step 54 (`fur-coat-current-map-marks`): C# `FurCoat.AfterObtained`
+    /// marks seven Monster/Elite rooms of the CURRENT map at once, so a Fur Coat
+    /// taken after its act's map exists (an Ancient at the act start, a shop)
+    /// marks it. Marks go only on Monster/Elite points; a second pickup in the
+    /// same act keeps them (idempotent).
+    #[test]
+    fn listener_fur_coat_after_obtained_marks_the_current_map() {
+        use sts2_core::map::{ActMap, MapPointType};
+        use sts2_core::runstate::RunState;
+        crate::relics::dispatch::ensure_installed();
+        let mut rs = RunState::new();
+        rs.act_index = 3;
+        let mut map = ActMap::new(15);
+        for row in 1..=4 {
+            for col in 0..3 {
+                let idx = map.get_or_create(col, row);
+                map.point_mut(idx).point_type = match (col + row) % 3 {
+                    0 => MapPointType::Monster,
+                    1 => MapPointType::Elite,
+                    _ => MapPointType::Shop,
+                };
+            }
+        }
+        rs.current_act_map = Some(map);
+        rs.relics.push(RelicId::FurCoat);
+        rs.last_obtained_relic = Some(RelicId::FurCoat);
+        let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
+        let map = rs.current_act_map.as_ref().expect("map kept");
+        let marked = map.marked_coords_for(RelicId::FurCoat);
+        assert_eq!(marked.len(), FUR_COAT_COMBATS, "seven rooms marked on obtain");
+        for c in &marked {
+            let p = map.get_point(*c).expect("marked point exists");
+            assert!(matches!(
+                p.point_type,
+                MapPointType::Monster | MapPointType::Elite
+            ));
+        }
+        let before = marked.clone();
+        rs.last_obtained_relic = Some(RelicId::FurCoat);
+        let _ = sts2_core::run_effects::dispatch_after_obtained(&mut rs);
+        assert_eq!(
+            rs.current_act_map.as_ref().unwrap().marked_coords_for(RelicId::FurCoat),
+            before,
+            "re-dispatch keeps the same marks"
         );
     }
 
@@ -11221,6 +11291,57 @@ mod tests {
             MAX_POTIONS,
             "DelicateFrond fills the belt to MAX_POTIONS"
         );
+    }
+
+    /// Step 54 (`delicate-frond-potion-roll-stream`): C#
+    /// `DelicateFrond.BeforeCombatStart` rolls each fill with
+    /// `PotionFactory.CreateRandomPotionOutOfCombat(owner,
+    /// RunState.Rng.CombatPotionGeneration)` (rarity float, then an item of
+    /// that rarity: two draws a potion), not a uniform pick off the combat
+    /// state's own rng. The belt must equal the same rolls off a copy of the
+    /// run stream, the stream must have advanced by two draws a fill, and the
+    /// combat rng must be untouched.
+    #[test]
+    fn listener_delicate_frond_rolls_off_combat_potion_generation_stream() {
+        use std::num::NonZeroU32;
+        use sts2_core::potions::CharacterId;
+        use sts2_core::relic_effects::dispatch_before_combat_start;
+        use sts2_core::{Relic, RelicKind};
+
+        crate::relics::dispatch::ensure_installed();
+        let mut s = CombatState::default();
+        s.player.character = Some(CharacterId::Ironclad);
+        s.relics.push(Relic {
+            id: NonZeroU32::new(1).expect("non-zero"),
+            kind: RelicKind::DelicateFrond,
+            counter: 0,
+            is_wax: false,
+            is_melted: false,
+        });
+        // One slot is taken, so the fill is two rolls.
+        s.player.potions.push(sts2_core::potions::PotionKind::BlockPotion);
+        let cap = s.player.effective_potion_slots();
+        let mut expect_rng = s.run_rng.combat_potion_generation.clone();
+        let expected_fills = cap - 1;
+        let expected: Vec<_> = (0..expected_fills)
+            .map(|_| {
+                crate::potions::all::create_random_potions_out_of_combat(
+                    &mut expect_rng,
+                    CharacterId::Ironclad,
+                    1,
+                )[0]
+            })
+            .collect();
+        let cpg_before = s.run_rng.combat_potion_generation.counter();
+        let combat_rng_before = s.rng.clone();
+        let _ = dispatch_before_combat_start(&mut s);
+        assert_eq!(&s.player.potions[1..], &expected[..], "fills come off the run stream");
+        assert_eq!(
+            s.run_rng.combat_potion_generation.counter() - cpg_before,
+            2 * expected_fills as u32,
+            "two draws a fill off CombatPotionGeneration"
+        );
+        assert_eq!(s.rng.counter(), combat_rng_before.counter(), "combat rng untouched");
     }
 
     /// DelicateFrond's `before_combat_start` listener is ownership-gated:
