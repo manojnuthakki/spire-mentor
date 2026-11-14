@@ -5968,9 +5968,16 @@ impl RunManager {
     /// registered factory builds either: an upgraded Bludgeon deals 42, not
     /// the base 32 with a flag), the engine side of the host's `set_player`
     /// deck entries such as `BLUDGEON+1` (sts2-agent fork, lane F's F8).
-    /// `false`, changing nothing, when no factory or spec knows the card.
+    /// `false`, changing nothing, when no factory or spec knows the card. An
+    /// upgrade a card cannot take (`MaxUpgradeLevel` 0) is dropped, as the host does.
     pub fn force_add_card(&mut self, card: crate::cards::CardId, upgraded: bool) -> bool {
-        let Some(card) = crate::lookup_card_factory().and_then(|f| f(card, upgraded)) else {
+        let Some(factory) = crate::lookup_card_factory() else {
+            return false;
+        };
+        // The host clamps the level against `MaxUpgradeLevel`: a curse,
+        // status or quest card (level 0) stays as it is.
+        let upgraded = upgraded && factory(card, false).is_some_and(|c| c.is_upgradable());
+        let Some(card) = factory(card, upgraded) else {
             return false;
         };
         self.run_state.master_deck.push(card);

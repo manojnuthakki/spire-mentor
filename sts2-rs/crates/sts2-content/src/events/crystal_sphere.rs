@@ -130,6 +130,30 @@ fn finish(rs: &mut RunState) {
     dotnet_small_sort(&mut offered, set_index);
     if rs.interactive_rewards {
         rs.offer_custom_rewards(offered, true);
+    } else {
+        // Auto-collect path: the same rolled contents, queued as the run's
+        // pending rewards (the flag changes how they are collected, never
+        // whether they exist).
+        use sts2_core::runstate::{CardReward, PotionReward, Reward};
+        for r in offered {
+            match r {
+                OfferedReward::Gold(n) | OfferedReward::GoldRolled(n) => {
+                    rs.pending_rewards.push(Reward::Gold { amount: n });
+                }
+                OfferedReward::Potion(kind) => rs
+                    .pending_rewards
+                    .push(Reward::Potion(PotionReward { potion_kind: kind })),
+                OfferedReward::Relic(relic) => rs.pending_rewards.push(Reward::Relic(relic)),
+                OfferedReward::Card {
+                    options: Some(options),
+                    upgraded,
+                    ..
+                } => rs
+                    .pending_rewards
+                    .push(Reward::Card(CardReward::from_resolved(options, upgraded))),
+                _ => {}
+            }
+        }
     }
 }
 

@@ -1231,7 +1231,8 @@ impl PyRunManager {
         if !self.inner.force_add_card(cid, upgraded) {
             let mut c = sts2_core::cards::Card::pod_defaults();
             c.card_id = cid;
-            c.upgraded = upgraded;
+            // The host clamps against `MaxUpgradeLevel` (curses, statuses).
+            c.upgraded = upgraded && c.is_upgradable();
             self.inner.run_state.master_deck.push(c);
         }
         Ok(())

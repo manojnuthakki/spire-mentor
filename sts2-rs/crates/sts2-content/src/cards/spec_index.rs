@@ -2476,7 +2476,7 @@ pub fn roll_card_reward_of_rarity(
     rng: &mut sts2_core::DotNetRng,
     rarity: CardRarity,
     count: usize,
-    character: CharacterId,
+    _character: CharacterId,
 ) -> Vec<sts2_core::cards::Card> {
     use sts2_core::card_rewards::{
         combat_card_upgrade_base_chance, roll_for_upgrade_with_dotnet, RewardRarity,
@@ -2489,10 +2489,13 @@ pub fn roll_card_reward_of_rarity(
     let act_index = rs.act_index.saturating_sub(1);
     let ascension_level = rs.card_rarity_odds.ascension_level;
     let upgrade_base = combat_card_upgrade_base_chance();
+    // `CardFactory.CreateForReward`'s first step: the relics' creation-option
+    // hooks (Prismatic Gem, Dingy Rug) reshape the pool the predicate filters.
+    let pool = card_reward_pool(rs, true, true);
     let mut chosen: Vec<CardId> = Vec::new();
     let mut cards = Vec::with_capacity(count);
     for _ in 0..count {
-        let mut candidates = eligible_ids_for_rarity(&[character], false, rarity);
+        let mut candidates = pool.candidates(rarity);
         candidates.retain(|id| !chosen.contains(id));
         if candidates.is_empty() {
             continue;

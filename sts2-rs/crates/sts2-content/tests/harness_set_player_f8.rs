@@ -82,6 +82,19 @@ fn an_upgraded_card_is_added_at_its_upgraded_values() {
     assert_eq!(up.base_damage, 42, "Bludgeon+ deals 42, not the base 32");
 }
 
+/// F4 (review round 1): a card with no upgrade level (curse, status) stays
+/// as it is when the scenario asks for `+1`, as the host clamps it.
+#[test]
+fn an_upgrade_the_card_cannot_take_is_dropped() {
+    let mut rm = neow_run(5);
+    for id in [CardId::Wound, CardId::Debt, CardId::Dazed] {
+        assert!(rm.force_add_card(id, true));
+        assert!(!rm.run_state.master_deck.last().unwrap().upgraded, "{id:?}");
+    }
+    assert!(rm.force_add_card(CardId::Bludgeon, true));
+    assert!(rm.run_state.master_deck.last().unwrap().upgraded);
+}
+
 #[test]
 fn hp_zero_ends_the_run() {
     let mut rm = neow_run(5);

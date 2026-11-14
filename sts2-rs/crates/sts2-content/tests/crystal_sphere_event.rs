@@ -287,3 +287,141 @@ fn two_potions_then_gold_come_out_in_the_net_networks_order() {
     }
     assert!(witnesses >= 1, "no witness found");
 }
+
+/// Walks seeds 1..=n to the end of the minigame and returns what each run
+/// offered, with `setup` applied after the room is entered.
+fn walk_all(n: u32, interactive: bool, setup: impl Fn(&mut RunManager)) -> Vec<(RunManager, i32)> {
+    let mut out = Vec::new();
+    for k in 1..=n {
+        let mut rm = run_seed(&k.to_string());
+        rm.run_state.interactive_rewards = interactive;
+        setup(&mut rm);
+        assert_eq!(
+            rm.take_action(RunAction::EventChoice { idx: 0 }),
+            ActionResult::Advanced
+        );
+        let gold_before = rm.run_state.gold;
+        let mut state = 4242u64 + u64::from(k);
+        for _ in 0..40 {
+            if rm.run_state.crystal_sphere.is_none() {
+                break;
+            }
+            let actions = rm.get_available_actions();
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            let a = actions[(state >> 33) as usize % actions.len()];
+            assert_eq!(rm.take_action(a), ActionResult::Advanced);
+        }
+        out.push((rm, gold_before));
+    }
+    out
+}
+
+fn offered_cards(rm: &RunManager) -> Vec<CardId> {
+    rm.reward_screen()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| match r {
+            ScreenReward::Card { options, .. } => Some(options.clone()),
+            _ => None,
+        })
+        .flatten()
+        .collect()
+}
+
+fn ironclad_ids() -> Vec<CardId> {
+    sts2_content::cards::spec_index::specs_for_character(CharacterId::Ironclad)
+        .iter()
+        .map(|f| f().id)
+        .collect()
+}
+
+/// F1 (review round 1): the sphere's card rewards go through the creation
+/// option hooks. Prismatic Gem widens the pool to every character, Dingy Rug
+/// adds colorless; without either the offers are Ironclad's alone.
+#[test]
+fn sphere_card_rewards_apply_the_creation_option_hooks() {
+    use sts2_core::RelicId;
+    let iron = ironclad_ids();
+    let plain: Vec<CardId> = walk_all(80, true, |_| {})
+        .iter()
+        .flat_map(|(rm, _)| offered_cards(rm))
+        .collect();
+    assert!(!plain.is_empty());
+    assert!(plain.iter().all(|c| iron.contains(c)), "control leaked");
+    let gem: Vec<CardId> = walk_all(80, true, |rm| {
+        assert!(rm.force_add_relic_bare(RelicId::PrismaticGem));
+    })
+    .iter()
+    .flat_map(|(rm, _)| offered_cards(rm))
+    .collect();
+    assert!(
+        gem.iter().any(|c| !iron.contains(c)),
+        "Prismatic Gem changed nothing"
+    );
+    let rug: Vec<CardId> = walk_all(80, true, |rm| {
+        assert!(rm.force_add_relic_bare(RelicId::DingyRug));
+    })
+    .iter()
+    .flat_map(|(rm, _)| offered_cards(rm))
+    .collect();
+    assert!(
+        rug.iter().any(|c| !iron.contains(c)),
+        "Dingy Rug changed nothing"
+    );
+}
+
+/// F2 (review round 1): with the default (non-interactive) rewards the
+/// revealed items are still granted: gold lands, potions and cards are
+/// pending, the same contents the interactive path offers.
+#[test]
+fn noninteractive_sphere_still_grants_its_rewards() {
+    let inter = walk_all(60, true, |_| {});
+    let non = walk_all(60, false, |_| {});
+    let mut checked = 0;
+    for ((ri, _), (rn, gold_before)) in inter.iter().zip(&non) {
+        let screen = ri.reward_screen();
+        let Some(screen) = screen else { continue };
+        let gold: i32 = screen
+            .iter()
+            .filter_map(|r| match r {
+                ScreenReward::Gold { amount } => Some(*amount),
+                _ => None,
+            })
+            .sum();
+        let potions = screen
+            .iter()
+            .filter(|r| matches!(r, ScreenReward::Potion { .. }))
+            .count();
+        if gold == 0 && potions == 0 {
+            continue;
+        }
+        checked += 1;
+        let pending_gold: i32 = rn
+            .run_state
+            .pending_rewards
+            .iter()
+            .filter_map(|r| match r {
+                sts2_core::runstate::Reward::Gold { amount } => Some(*amount),
+                _ => None,
+            })
+            .sum();
+        let pending_potions = rn
+            .run_state
+            .pending_rewards
+            .iter()
+            .filter(|r| matches!(r, sts2_core::runstate::Reward::Potion(_)))
+            .count();
+        let granted = rn.run_state.gold - gold_before;
+        assert!(
+            pending_gold == gold || granted >= gold,
+            "gold lost: {gold} offered, {pending_gold} pending, {granted} granted"
+        );
+        assert!(
+            pending_potions == potions || rn.run_state.potions.len() >= potions.min(1),
+            "potions lost"
+        );
+    }
+    assert!(checked >= 5, "{checked} runs with gold or potions");
+}
