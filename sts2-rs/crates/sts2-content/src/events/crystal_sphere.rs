@@ -135,7 +135,8 @@ fn finish(rs: &mut RunState) {
         // pending rewards (the flag changes how they are collected, never
         // whether they exist).
         use sts2_core::runstate::{CardReward, PotionReward, Reward};
-        for r in offered {
+        for i in 0..offered.len() {
+            let r = offered[i].clone();
             match r {
                 // Gold and relics have no drain in `pending_rewards`: they go
                 // through the paths the other events use (`gain_gold`, the
@@ -144,7 +145,13 @@ fn finish(rs: &mut RunState) {
                 OfferedReward::Potion(kind) => rs
                     .pending_rewards
                     .push(Reward::Potion(PotionReward { potion_kind: kind })),
-                OfferedReward::Relic(relic) => rs.grant_event_relic(relic.relic_id),
+                OfferedReward::Relic(relic) => {
+                    rs.grant_event_relic(relic.relic_id);
+                    // C# `CardReward.OnRelicObtained`: the card rewards rolled and not
+                    // yet taken (the ones after it: relics sort before cards) apply the
+                    // obtained relic's own late hook (the eggs upgrade their cards).
+                    apply_obtained_relic_to_cards(rs, relic.relic_id, &mut offered[i + 1..]);
+                }
                 OfferedReward::Card {
                     options: Some(options),
                     upgraded,
@@ -155,6 +162,38 @@ fn finish(rs: &mut RunState) {
                 _ => {}
             }
         }
+    }
+}
+
+/// The late card-reward hook of an obtained relic, applied to the card rewards
+/// among `rest` (the non-interactive path's mirror of the rewards screen's
+/// `modify_card_rewards_for_obtained_relic`).
+fn apply_obtained_relic_to_cards(rs: &mut RunState, relic: RelicId, rest: &mut [OfferedReward]) {
+    let Some(late) = sts2_core::run_effects::lookup_modify_card_reward_options_late(relic) else {
+        return;
+    };
+    let Some(factory) = sts2_core::lookup_card_factory() else {
+        return;
+    };
+    for reward in rest {
+        let OfferedReward::Card {
+            options: Some(options),
+            upgraded,
+            ..
+        } = reward
+        else {
+            continue;
+        };
+        let mut cards: Vec<sts2_core::cards::Card> = options
+            .iter()
+            .enumerate()
+            .filter_map(|(i, id)| factory(*id, upgraded.get(i).copied().unwrap_or(false)))
+            .collect();
+        if cards.len() != options.len() {
+            continue;
+        }
+        let _ = late(rs, &mut cards);
+        *upgraded = cards.iter().map(|c| c.upgraded).collect();
     }
 }
 

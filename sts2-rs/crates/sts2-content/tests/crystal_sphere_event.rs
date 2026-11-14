@@ -492,3 +492,90 @@ fn noninteractive_sphere_obtains_a_revealed_relic() {
     }
     assert!(found >= 2, "{found} relic witnesses");
 }
+
+/// Step53 (`sphere-noninteractive-relic-card-flags`): a relic the sphere obtains
+/// updates the upgrade flags of the card rewards it rolled, as in the game
+/// (`CardReward.OnRelicObtained`: the eggs upgrade the cards already on offer).
+/// The reproduction: Ironclad, seed "78", the Payment Plan option, Big at
+/// (4,7), (0,4), (5,9), (6,6), (2,8), (0,6). The non-interactive path (cards
+/// queued as the run's pending rewards) must leave the flags the interactive
+/// path shows once its relic is claimed.
+#[test]
+fn noninteractive_sphere_relic_updates_the_card_flags() {
+    use sts2_core::runstate::Reward;
+    let walk = [(4u8, 7u8), (0, 4), (5, 9), (6, 6), (2, 8), (0, 6)];
+    let play = |interactive: bool| {
+        let mut rm = run_seed("78");
+        rm.run_state.interactive_rewards = interactive;
+        // Molten Egg is the relic on offer in every rarity: it upgrades the attack
+        // cards the walk's card reward rolled (SwordBoomerang, BodySlam, Cinder).
+        let by_rarity = sts2_core::RelicRarity::ALL
+            .into_iter()
+            .map(|r| {
+                (
+                    r,
+                    vec![sts2_core::RelicId::MoltenEgg, sts2_core::RelicId::ToxicEgg],
+                )
+            })
+            .collect();
+        rm.run_state
+            .populate_relic_grab_bag_by_rarity(by_rarity, Vec::new(), Vec::new());
+        assert_eq!(
+            rm.take_action(RunAction::EventChoice { idx: 1 }),
+            ActionResult::Advanced
+        );
+        for (x, y) in walk {
+            if rm.run_state.crystal_sphere.is_none() {
+                break;
+            }
+            assert_eq!(divine(&mut rm, x, y, true), ActionResult::Advanced);
+        }
+        rm
+    };
+    let mut inter = play(true);
+    let non = play(false);
+    // Claim every relic on the interactive screen first (they sort before the cards).
+    while let Some(idx) = inter.reward_screen().and_then(|s| {
+        s.iter()
+            .position(|r| matches!(r, ScreenReward::Relic { .. }))
+    }) {
+        assert_eq!(
+            inter.take_action(RunAction::ClaimReward { idx }),
+            ActionResult::Advanced
+        );
+    }
+    let want: Vec<(Vec<CardId>, Vec<bool>)> = inter
+        .reward_screen()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| match r {
+            ScreenReward::Card {
+                options, upgraded, ..
+            } => Some((options.clone(), upgraded.clone())),
+            _ => None,
+        })
+        .collect();
+    // The auto-collect path surfaces the first card reward at once; the rest wait.
+    let mut got: Vec<(Vec<CardId>, Vec<bool>)> = Vec::new();
+    if !non.card_reward_options().is_empty() {
+        got.push((
+            non.card_reward_options().to_vec(),
+            non.card_reward_upgraded_flags().to_vec(),
+        ));
+    }
+    got.extend(
+        non.run_state
+            .pending_rewards
+            .iter()
+            .filter_map(|r| match r {
+                Reward::Card(c) => Some((c.options.clone(), c.upgraded.clone())),
+                _ => None,
+            }),
+    );
+    assert!(!want.is_empty(), "the walk offers card rewards");
+    assert!(
+        want.iter().any(|(_, u)| u.iter().any(|b| *b)),
+        "the walk's relic upgrades a card on offer: {want:?}"
+    );
+    assert_eq!(got, want);
+}

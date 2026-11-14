@@ -2849,21 +2849,32 @@ impl RunManager {
                     self.phase = Phase::RunOver;
                     return ActionResult::Advanced;
                 }
-                // First boss of the A10 double-boss pair: full boss combat
-                // rewards (gold + potion-odds + 3-rare card reward,
-                // `RewardsSet.cs:176-185` — same set as any boss), but NO
-                // boss-relic screen and NO act advance. After the reward
-                // chain drains, `advance_after_card_reward` falls through to
-                // `Phase::MapChoice` (both `boss_relic_options` and
-                // `pending_boss_act_advance` stay unset) and the only legal
-                // move is the second-boss node.
-                let reward_room_type = self
-                    .run_state
-                    .current_room
-                    .map_or(crate::runstate::RoomType::Boss, |r| r.room_type);
-                let roll = self.begin_room_rewards(reward_room_type);
-                self.enter_card_reward_phase();
-                self.open_reward_screen(roll);
+                // First boss of the A10 double-boss pair: NO rewards at all
+                // (gold, potion, card, extras and hook rewards alike): C#
+                // `RewardsSet.WithRewardsFromRoom` returns an empty set for a
+                // Boss room once `CurrentActIndex >= Acts.Count - 1`
+                // (`RewardsSet.cs:68`), reading nothing from the `Rewards`
+                // stream. Also NO boss-relic screen and NO act advance
+                // (`boss_relic_options` and `pending_boss_act_advance` stay
+                // unset): the screen (empty) proceeds to `Phase::MapChoice`,
+                // where the second-boss node is the only legal move.
+                // sts2-agent fork, `double-boss-first-boss-rewards`.
+                self.run_state.room_extra_rewards.clear();
+                self.card_reward_options.clear();
+                self.card_reward_upgraded.clear();
+                self.card_offer_choose_screen = false;
+                self.card_offer_can_skip = true;
+                self.phase = Phase::CardReward;
+                if self.run_state.interactive_rewards {
+                    self.reward_sets.push(RewardSet {
+                        rewards: Vec::new(),
+                        can_skip: true,
+                        custom: false,
+                    });
+                    self.screen_card_claim = None;
+                } else {
+                    self.advance_after_card_reward();
+                }
                 return ActionResult::Advanced;
             }
             // Act-1/2 boss kill: grant the combat card reward FIRST (3

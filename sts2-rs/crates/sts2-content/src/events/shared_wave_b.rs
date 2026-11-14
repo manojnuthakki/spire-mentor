@@ -38,6 +38,7 @@ use sts2_core::{
 use crate::cards::colorless::helpers::{set_mad_science_variant, TinkerTimeRider};
 use crate::cards::spec_index::card_pod_from_id;
 
+use super::shared::{ancient_generate_options, ANCIENT_OPTIONS};
 use super::{
     always_allowed, deck_has_basic_card, default_option_info_from_spec, round_tea_party_allowed,
     EventOptionSpec, EventOutcome, EventSpec,
@@ -1035,209 +1036,38 @@ pub const TABLET_OF_TRUTH: EventSpec = EventSpec {
     options: TABLET_OF_TRUTH_OPTIONS,
 };
 
-// ── Tanx ─────────────────────────────────────────────────────────────
+// ── Tanx, Tezcatara, Vakuu ───────────────────────────────────────────
 
-/// Default Tanx weapon-relic picks (`shared.py:1774-1789`). Python
-/// rolls 3 from a 9-relic pool via `rng.up_front`; pinned to first 3
-/// alphabetical until `RunState.rng` lands (sub-bead `6ynt.4.rng`).
-pub const TANX_WEAPON_1: RelicId = RelicId::Claws;
-pub const TANX_WEAPON_2: RelicId = RelicId::Crossbow;
-pub const TANX_WEAPON_3: RelicId = RelicId::IronClub;
-
-fn tanx_weapon_1(state: &mut RunState) -> EventOutcome {
-    state.offer_relic_rewards(TANX_WEAPON_1, 1);
-    EventOutcome::finished("Obtained a weapon relic from Tanx.")
-}
-
-fn tanx_weapon_2(state: &mut RunState) -> EventOutcome {
-    state.offer_relic_rewards(TANX_WEAPON_2, 1);
-    EventOutcome::finished("Obtained a weapon relic from Tanx.")
-}
-
-fn tanx_weapon_3(state: &mut RunState) -> EventOutcome {
-    state.offer_relic_rewards(TANX_WEAPON_3, 1);
-    EventOutcome::finished("Obtained a weapon relic from Tanx.")
-}
-
-const TANX_OPTIONS: &[EventOptionSpec] = &[
-    EventOptionSpec {
-        option_id: "weapon_1",
-        loc_key: "",
-        default_label: "Claws",
-        default_description: "Gain a weapon relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: tanx_weapon_1,
-    },
-    EventOptionSpec {
-        option_id: "weapon_2",
-        loc_key: "",
-        default_label: "Crossbow",
-        default_description: "Gain a weapon relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: tanx_weapon_2,
-    },
-    EventOptionSpec {
-        option_id: "weapon_3",
-        loc_key: "",
-        default_label: "Iron Club",
-        default_description: "Gain a weapon relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: tanx_weapon_3,
-    },
-];
+// A run reaches these Ancients through the boss-relic surface; the specs serve
+// the harness's forced room entry, where the host presents the relics each
+// Ancient's `OptionPool` rolled (`RunState::roll_ancient_event_offers`), under
+// the game's `<ANCIENT>.pages.INITIAL.options.<RELIC>` text keys, and a pick is
+// `RelicOption`'s direct `RelicCmd.Obtain` (see `shared::ancient_generate_options`).
+// The earlier fixed stubs (a pinned relic per slot, no text keys) are gone.
+// Lane F's Step53 pre-merge gate.
 
 pub const TANX: EventSpec = EventSpec {
     id: EventId::Tanx,
     python_name: "Tanx",
     is_allowed: always_allowed,
-    generate_options: default_option_info_from_spec,
-    options: TANX_OPTIONS,
+    generate_options: ancient_generate_options,
+    options: ANCIENT_OPTIONS,
 };
-
-// ── Tezcatara ────────────────────────────────────────────────────────
-
-/// Default Tezcatara comfort-relic picks. C# `Tezcatara.cs` rolls one relic
-/// from each of three themed pools via `base.Rng.NextItem`; the Rust port
-/// pins each pool to its first C#-array member until the per-pool RNG roll
-/// lands (the multi-pool `NextItem` sequencing is deferred). Pool 1 is the
-/// `[VeryHotCocoa, YummyCookie]` pair, with `NutritiousSoup` added ONLY when
-/// the deck holds a basic Strike (see [`tezcatara_deck_has_basic_strike`]).
-pub const TEZCATARA_COMFORT_1: RelicId = RelicId::NutritiousSoup;
-/// Pool-1 fallback when the deck has no basic Strike (`NutritiousSoup` is then
-/// absent from the C# pool, so the pool-1 representative is `VeryHotCocoa`).
-pub const TEZCATARA_COMFORT_1_NO_SOUP: RelicId = RelicId::VeryHotCocoa;
-pub const TEZCATARA_COMFORT_2: RelicId = RelicId::BiiigHug;
-pub const TEZCATARA_COMFORT_3: RelicId = RelicId::GoldenCompass;
-
-/// C# `Tezcatara.GenerateInitialOptions` (`Tezcatara.cs:200-205`): in
-/// v0.107.1 `NutritiousSoup` is no longer a static member of pool 1 — it is
-/// added back only when
-/// `Deck.Cards.Any(c => c.Tags.Contains(CardTag.Strike) && c.Rarity ==
-/// CardRarity.Basic)`. Mirrors the `amalgamator_allowed` basic-Strike idiom
-/// (Strike tag + rank-1 rarity via the registered rank fn). The `None`
-/// (registry-not-installed) arm conservatively returns `true` — matching the
-/// other deck-rarity gates in this crate.
-#[must_use]
-pub fn tezcatara_deck_has_basic_strike(state: &RunState) -> bool {
-    use sts2_core::cards::CardTag;
-    let rank = sts2_core::lookup_card_rarity_rank();
-    state
-        .master_deck
-        .iter()
-        .any(|c| c.has_tag(CardTag::Strike) && rank.map_or(true, |f| f(c.card_id) == 1))
-}
-
-/// Tezcatara option list: pool-1 label reflects whether `NutritiousSoup` is
-/// offered (deck has a basic Strike) or the pool falls back to `VeryHotCocoa`.
-fn tezcatara_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
-    let soup = tezcatara_deck_has_basic_strike(state);
-    vec![
-        EventOptionInfo {
-            option_id: "comfort_1",
-            loc_key: "",
-            vars: Vec::new(),
-            title_vars: Vec::new(),
-            label: if soup {
-                "Nutritious Soup"
-            } else {
-                "Very Hot Cocoa"
-            }
-            .to_string(),
-            description: "Gain a comfort relic.".to_string(),
-            enabled: true,
-        },
-        EventOptionInfo {
-            option_id: "comfort_2",
-            loc_key: "",
-            vars: Vec::new(),
-            title_vars: Vec::new(),
-            label: "Biiig Hug".to_string(),
-            description: "Gain a comfort relic.".to_string(),
-            enabled: true,
-        },
-        EventOptionInfo {
-            option_id: "comfort_3",
-            loc_key: "",
-            vars: Vec::new(),
-            title_vars: Vec::new(),
-            label: "Golden Compass".to_string(),
-            description: "Gain a comfort relic.".to_string(),
-            enabled: true,
-        },
-    ]
-}
-
-fn tezcatara_comfort_1(state: &mut RunState) -> EventOutcome {
-    // C# pool 1 is `[VeryHotCocoa, YummyCookie]` with `NutritiousSoup` added
-    // only when the deck holds a basic Strike (`Tezcatara.cs:201`). Gate the
-    // pool-1 representative accordingly. The NutritiousSoup RELIC combat effect
-    // (Strikes cost 0 + Eternal + 3 extra dmg) is tracked separately as bead
-    // `sts2-rs-ajjri` (depends on §8 TezcatarasEmber) — only the EVENT-side
-    // offer gate is implemented here.
-    let relic = if tezcatara_deck_has_basic_strike(state) {
-        TEZCATARA_COMFORT_1
-    } else {
-        TEZCATARA_COMFORT_1_NO_SOUP
-    };
-    state.offer_relic_rewards(relic, 1);
-    EventOutcome::finished("Obtained a relic from Tezcatara.")
-}
-
-fn tezcatara_comfort_2(state: &mut RunState) -> EventOutcome {
-    state.offer_relic_rewards(TEZCATARA_COMFORT_2, 1);
-    EventOutcome::finished("Obtained a relic from Tezcatara.")
-}
-
-fn tezcatara_comfort_3(state: &mut RunState) -> EventOutcome {
-    state.offer_relic_rewards(TEZCATARA_COMFORT_3, 1);
-    EventOutcome::finished("Obtained a relic from Tezcatara.")
-}
-
-const TEZCATARA_OPTIONS: &[EventOptionSpec] = &[
-    EventOptionSpec {
-        option_id: "comfort_1",
-        loc_key: "",
-        default_label: "Nutritious Soup",
-        default_description: "Gain a comfort relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: tezcatara_comfort_1,
-    },
-    EventOptionSpec {
-        option_id: "comfort_2",
-        loc_key: "",
-        default_label: "Biiig Hug",
-        default_description: "Gain a comfort relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: tezcatara_comfort_2,
-    },
-    EventOptionSpec {
-        option_id: "comfort_3",
-        loc_key: "",
-        default_label: "Golden Compass",
-        default_description: "Gain a comfort relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: tezcatara_comfort_3,
-    },
-];
 
 pub const TEZCATARA: EventSpec = EventSpec {
     id: EventId::Tezcatara,
     python_name: "Tezcatara",
     is_allowed: always_allowed,
-    generate_options: tezcatara_generate_options,
-    options: TEZCATARA_OPTIONS,
+    generate_options: ancient_generate_options,
+    options: ANCIENT_OPTIONS,
+};
+
+pub const VAKUU: EventSpec = EventSpec {
+    id: EventId::Vakuu,
+    python_name: "Vakuu",
+    is_allowed: always_allowed,
+    generate_options: ancient_generate_options,
+    options: ANCIENT_OPTIONS,
 };
 
 // ── TheLanternKey ────────────────────────────────────────────────────
@@ -2289,70 +2119,6 @@ pub const UNREST_SITE: EventSpec = EventSpec {
     is_allowed: unrest_site_allowed,
     generate_options: default_option_info_from_spec,
     options: UNREST_SITE_OPTIONS,
-};
-
-// ── Vakuu ────────────────────────────────────────────────────────────
-
-/// Default Vakuu relic picks (`shared.py:2291-2293`). Pinned to first
-/// alphabetical of each themed pool until `RunState.rng` lands.
-pub const VAKUU_RELIC_1: RelicId = RelicId::BloodSoakedRose;
-pub const VAKUU_RELIC_2: RelicId = RelicId::PreservedFog;
-pub const VAKUU_RELIC_3: RelicId = RelicId::ChoicesParadox;
-
-fn vakuu_relic_1(state: &mut RunState) -> EventOutcome {
-    state.offer_relic_rewards(VAKUU_RELIC_1, 1);
-    EventOutcome::finished("Obtained a relic from Vakuu.")
-}
-
-fn vakuu_relic_2(state: &mut RunState) -> EventOutcome {
-    state.offer_relic_rewards(VAKUU_RELIC_2, 1);
-    EventOutcome::finished("Obtained a relic from Vakuu.")
-}
-
-fn vakuu_relic_3(state: &mut RunState) -> EventOutcome {
-    state.offer_relic_rewards(VAKUU_RELIC_3, 1);
-    EventOutcome::finished("Obtained a relic from Vakuu.")
-}
-
-const VAKUU_OPTIONS: &[EventOptionSpec] = &[
-    EventOptionSpec {
-        option_id: "relic_1",
-        loc_key: "",
-        default_label: "Blood Soaked Rose",
-        default_description: "Gain a relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: vakuu_relic_1,
-    },
-    EventOptionSpec {
-        option_id: "relic_2",
-        loc_key: "",
-        default_label: "Preserved Fog",
-        default_description: "Gain a relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: vakuu_relic_2,
-    },
-    EventOptionSpec {
-        option_id: "relic_3",
-        loc_key: "",
-        default_label: "Choices Paradox",
-        default_description: "Gain a relic.",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: vakuu_relic_3,
-    },
-];
-
-pub const VAKUU: EventSpec = EventSpec {
-    id: EventId::Vakuu,
-    python_name: "Vakuu",
-    is_allowed: always_allowed,
-    generate_options: default_option_info_from_spec,
-    options: VAKUU_OPTIONS,
 };
 
 // ── Wellspring ───────────────────────────────────────────────────────
@@ -3432,94 +3198,6 @@ mod tests {
     }
 
     #[test]
-    fn tanx_weapon_options_queue_distinct_relics() {
-        for (idx, expected) in [(0, TANX_WEAPON_1), (1, TANX_WEAPON_2), (2, TANX_WEAPON_3)] {
-            let mut rs = fresh_state();
-            let outcome = (TANX.options[idx].handler)(&mut rs);
-            assert!(outcome.finished);
-            assert_eq!(rs.relic_rewards.len(), 1);
-            assert_eq!(rs.relic_rewards[0].relic_id, expected);
-        }
-    }
-
-    /// Seed a single basic Strike so `tezcatara_deck_has_basic_strike` is true.
-    fn seed_basic_strike(rs: &mut RunState) {
-        crate::cards::dispatch::ensure_installed();
-        rs.master_deck.push(
-            crate::cards::spec_index::card_pod_from_id(
-                sts2_core::cards::CardId::StrikeIronclad,
-                false,
-            )
-            .expect("strike exists"),
-        );
-    }
-
-    #[test]
-    fn tezcatara_three_pools_queue_distinct_relics() {
-        // With a basic Strike in the deck, pool 1 includes NutritiousSoup.
-        for (idx, expected) in [
-            (0, TEZCATARA_COMFORT_1),
-            (1, TEZCATARA_COMFORT_2),
-            (2, TEZCATARA_COMFORT_3),
-        ] {
-            let mut rs = fresh_state();
-            seed_basic_strike(&mut rs);
-            let outcome = (TEZCATARA.options[idx].handler)(&mut rs);
-            assert!(outcome.finished);
-            assert_eq!(rs.relic_rewards[0].relic_id, expected);
-        }
-    }
-
-    /// v0.107.1 (`Tezcatara.cs:201`): NutritiousSoup is offered ONLY when the
-    /// deck holds a basic Strike; otherwise pool 1 falls back to VeryHotCocoa.
-    #[test]
-    fn tezcatara_soup_gated_on_basic_strike() {
-        // No basic Strike → pool-1 representative is VeryHotCocoa, NOT soup.
-        let mut rs = fresh_state();
-        let outcome = (TEZCATARA.options[0].handler)(&mut rs);
-        assert!(outcome.finished);
-        assert_eq!(rs.relic_rewards[0].relic_id, TEZCATARA_COMFORT_1_NO_SOUP);
-
-        // With a basic Strike → soup is offered.
-        let mut rs2 = fresh_state();
-        seed_basic_strike(&mut rs2);
-        let outcome2 = (TEZCATARA.options[0].handler)(&mut rs2);
-        assert!(outcome2.finished);
-        assert_eq!(rs2.relic_rewards[0].relic_id, TEZCATARA_COMFORT_1);
-    }
-
-    /// A non-basic Strike (Common rarity, e.g. PommelStrike) carries the Strike
-    /// tag but must NOT satisfy the basic-Strike gate.
-    #[test]
-    fn tezcatara_non_basic_strike_does_not_open_soup() {
-        crate::cards::dispatch::ensure_installed();
-        let mut rs = fresh_state();
-        rs.master_deck.push(
-            crate::cards::spec_index::card_pod_from_id(
-                sts2_core::cards::CardId::PommelStrike,
-                false,
-            )
-            .expect("pommel strike exists"),
-        );
-        assert!(
-            !tezcatara_deck_has_basic_strike(&rs),
-            "Common Strike-tagged card is not a basic Strike",
-        );
-    }
-
-    /// The option-list label reflects the gate (soup vs cocoa).
-    #[test]
-    fn tezcatara_option_label_tracks_soup_gate() {
-        let mut rs = fresh_state();
-        let no_soup = (TEZCATARA.generate_options)(&rs, &TEZCATARA);
-        assert_eq!(no_soup[0].label, "Very Hot Cocoa");
-
-        seed_basic_strike(&mut rs);
-        let soup = (TEZCATARA.generate_options)(&rs, &TEZCATARA);
-        assert_eq!(soup[0].label, "Nutritious Soup");
-    }
-
-    #[test]
     fn the_lantern_key_return_gains_100_gold() {
         let mut rs = fresh_state();
         let gold_before = rs.gold;
@@ -3643,16 +3321,6 @@ mod tests {
             rs.master_deck.last().map(|c| c.card_id),
             Some(CardId::PoorSleep)
         );
-    }
-
-    #[test]
-    fn vakuu_three_pools_queue_distinct_relics() {
-        for (idx, expected) in [(0, VAKUU_RELIC_1), (1, VAKUU_RELIC_2), (2, VAKUU_RELIC_3)] {
-            let mut rs = fresh_state();
-            let outcome = (VAKUU.options[idx].handler)(&mut rs);
-            assert!(outcome.finished);
-            assert_eq!(rs.relic_rewards[0].relic_id, expected);
-        }
     }
 
     #[test]

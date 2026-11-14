@@ -1090,152 +1090,19 @@ pub const COLOSSAL_FLOWER: EventSpec = EventSpec {
 
 // ── Darv ─────────────────────────────────────────────────────────────
 
-/// `Darv`'s `Id.Entry` — names its own (non-shared) event RNG stream.
-const DARV_STREAM: &str = "DARV";
+// Reached in a run through the boss-relic surface; as a forced event it presents
+// the relics the Ancient rolled (`RunState::roll_ancient_event_offers`), like the
+// other Ancients (see `ancient_generate_options`). The earlier separate port of
+// `Darv.GenerateInitialOptions` rolled other relics than the game's (Step53 gate)
+// and carried blank text keys.
 
-/// Pick `items[Rng.NextInt(0, len)]` — C# `Rng.NextItem` (`Rng.cs:157`,
-/// `index = NextInt(0, count)`). Consumes exactly one draw even for a
-/// single-element slice (the index is forced to 0 but the counter still
-/// advances), which is load-bearing for stream alignment with C#.
-fn rng_next_item<T: Copy>(rng: &mut sts2_core::dotnet_rng::Rng, items: &[T]) -> T {
-    let idx = rng.next_int_exclusive(0, items.len() as i32) as usize;
-    items[idx]
-}
-
-/// Replay `Darv.GenerateInitialOptions` (`Darv.cs:147`) to produce the 3
-/// relic options in presentation order.
-///
-/// C# builds a source list by walking the 9 `_validRelicSets` in order,
-/// keeping each whose `filter(Owner)` passes, and drawing one relic from
-/// each via `Rng.NextItem(set.relics)`; the survivors are `UnstableShuffle`d.
-/// Then `Rng.NextBool()` decides the final 3: TRUE → first 2 shuffled relics
-/// + `DustyTome`; FALSE → first 3 shuffled relics. The draw sequence here
-/// (one `NextItem` per surviving set, then the shuffle, then the `NextBool`)
-/// must match C# exactly so the harness sees identical relics per slot.
-///
-/// Seed = `RunState.Rng.Seed + NetId(1) + hash("DARV")` ([`event_rng`]).
-fn darv_relic_options(state: &RunState) -> [RelicId; 3] {
-    // The 9 ValidRelicSets in C# declaration order. `keep` mirrors each
-    // set's `filter(Owner)`. Sets 4/7/8 are conditional; the rest are
-    // unconditional single-relic sets. C# `CurrentActIndex` is 0-based,
-    // so its `== 1` / `== 2` map to Rust `act_index == 2` / `== 3`.
-    let act = state.act_index;
-    let sets: [(bool, &[RelicId]); 9] = [
-        (true, &[RelicId::Astrolabe]),
-        (true, &[RelicId::BlackStar]),
-        (true, &[RelicId::CallingBell]),
-        (true, &[RelicId::EmptyCage]),
-        // C# `!Modifiers.Any(ClearsPlayerDeck)`; no run-modifier surface
-        // clears the deck in this driver, so the set always survives
-        // (faithful for every reachable state today).
-        (true, &[RelicId::PandorasBox]),
-        (true, &[RelicId::RunicPyramid]),
-        (true, &[RelicId::SneckoEye]),
-        (act == 2, &[RelicId::Ectoplasm, RelicId::Sozu]),
-        (
-            act == 3,
-            &[RelicId::PhilosophersStone, RelicId::VelvetChoker],
-        ),
-    ];
-
-    let mut rng = event_rng(state, DARV_STREAM);
-    let mut source: Vec<RelicId> = sets
-        .iter()
-        .filter(|(keep, _)| *keep)
-        .map(|(_, relics)| rng_next_item(&mut rng, relics))
-        .collect();
-    rng.shuffle(&mut source);
-
-    if rng.next_bool() {
-        [source[0], source[1], RelicId::DustyTome]
-    } else {
-        [source[0], source[1], source[2]]
-    }
-}
-
-/// Grant the relic Darv rolled into slot `slot` (0-based). C# `RelicOption`'s
-/// `OnChosen` is a direct `RelicCmd.Obtain` (not a deferred reward), so route
-/// through [`RunState::grant_event_relic`] like `LuminousChoir`.
-fn darv_grant(state: &mut RunState, slot: usize) -> EventOutcome {
-    let relic = darv_relic_options(state)[slot];
-    state.grant_event_relic(relic);
-    EventOutcome::finished("Obtained a relic from Darv.")
-}
-
-fn darv_relic_1(state: &mut RunState) -> EventOutcome {
-    darv_grant(state, 0)
-}
-
-fn darv_relic_2(state: &mut RunState) -> EventOutcome {
-    darv_grant(state, 1)
-}
-
-fn darv_relic_3(state: &mut RunState) -> EventOutcome {
-    darv_grant(state, 2)
-}
-
-/// Build Darv's 3 relic options from the live RNG roll. Labels carry the
-/// rolled relic id (cosmetic — the harness keys options by position/id, not
-/// label); the `relic_{1,2,3}` ids stay stable so the dispatcher resolves
-/// each slot's handler.
-fn darv_generate_options(state: &RunState, _spec: &EventSpec) -> Vec<EventOptionInfo> {
-    let relics = darv_relic_options(state);
-    ["relic_1", "relic_2", "relic_3"]
-        .iter()
-        .zip(relics.iter())
-        .map(|(id, relic)| EventOptionInfo {
-            option_id: id,
-            loc_key: "",
-            vars: Vec::new(),
-            title_vars: Vec::new(),
-            label: format!("{relic:?}"),
-            description: "Gain this relic.".to_string(),
-            enabled: true,
-        })
-        .collect()
-}
-
-const DARV_OPTIONS: &[EventOptionSpec] = &[
-    EventOptionSpec {
-        option_id: "relic_1",
-        loc_key: "",
-        default_label: "Relic 1",
-        default_description: "Gain a relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: darv_relic_1,
-    },
-    EventOptionSpec {
-        option_id: "relic_2",
-        loc_key: "",
-        default_label: "Relic 2",
-        default_description: "Gain a relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: darv_relic_2,
-    },
-    EventOptionSpec {
-        option_id: "relic_3",
-        loc_key: "",
-        default_label: "Relic 3",
-        default_description: "Gain a relic",
-        default_vars: &[],
-        vars_fn: None,
-        title_vars_fn: None,
-        handler: darv_relic_3,
-    },
-];
-
-/// `Darv` spec. Pin: `shared.py:740`; C# `Darv.cs`. Options are RNG-rolled
-/// at presentation time via [`darv_generate_options`].
+/// `Darv` spec. Pin: `shared.py:740`; C# `Darv.cs`.
 pub const DARV: EventSpec = EventSpec {
     id: EventId::Darv,
     python_name: "Darv",
     is_allowed: always_allowed,
-    generate_options: darv_generate_options,
-    options: DARV_OPTIONS,
+    generate_options: ancient_generate_options,
+    options: ANCIENT_OPTIONS,
 };
 
 // ── DenseVegetation ──────────────────────────────────────────────────
@@ -1747,6 +1614,10 @@ fn ancient_of_event(id: EventId) -> sts2_core::run_room_gen::AncientId {
         EventId::Nonupeipe => AncientId::Nonupeipe,
         EventId::Orobas => AncientId::Orobas,
         EventId::Pael => AncientId::Pael,
+        EventId::Darv => AncientId::Darv,
+        EventId::Tanx => AncientId::Tanx,
+        EventId::Tezcatara => AncientId::Tezcatara,
+        EventId::Vakuu => AncientId::Vakuu,
         other => unreachable!("{other:?} is not a forced-entry Ancient stub"),
     }
 }
@@ -1755,7 +1626,7 @@ fn ancient_event_name(id: EventId) -> &'static str {
     ancient_of_event(id).entry()
 }
 
-fn ancient_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
+pub(super) fn ancient_generate_options(state: &RunState, spec: &EventSpec) -> Vec<EventOptionInfo> {
     let offers = state.roll_ancient_event_offers(ancient_of_event(spec.id));
     ["relic_1", "relic_2", "relic_3"]
         .iter()
@@ -1792,7 +1663,7 @@ fn ancient_relic_3(state: &mut RunState) -> EventOutcome {
     ancient_grant(state, 2)
 }
 
-const ANCIENT_OPTIONS: &[EventOptionSpec] = &[
+pub(super) const ANCIENT_OPTIONS: &[EventOptionSpec] = &[
     EventOptionSpec {
         option_id: "relic_1",
         loc_key: "",
@@ -1998,76 +1869,6 @@ mod tests {
         assert!(!(GRAVE_OF_THE_FORGOTTEN.is_allowed)(&rs), "unplayable");
         rs.master_deck.clear();
         assert!(!(GRAVE_OF_THE_FORGOTTEN.is_allowed)(&rs));
-    }
-
-    // ── Darv relic-pool roll (m3n0g.1) ──────────────────────────────────
-
-    #[test]
-    fn darv_rolls_three_distinct_act1_boss_relics_deterministically() {
-        // On a fresh Act-1 run the two act-gated sets (Ectoplasm/Sozu,
-        // PhilStone/VelvetChoker) are filtered out, leaving the 7
-        // unconditional single-relic sets. The roll is a pure function of
-        // the run seed, so two reads of the same RunState agree.
-        let rs = RunState::new();
-        let a = darv_relic_options(&rs);
-        let b = darv_relic_options(&rs);
-        assert_eq!(a, b, "roll must be deterministic for a fixed seed");
-        // Every slot is drawn from the Act-1 candidate pool (+ DustyTome on
-        // the NextBool branch); no Act-2/3-only relic can appear.
-        let act1_pool = [
-            RelicId::Astrolabe,
-            RelicId::BlackStar,
-            RelicId::CallingBell,
-            RelicId::EmptyCage,
-            RelicId::PandorasBox,
-            RelicId::RunicPyramid,
-            RelicId::SneckoEye,
-            RelicId::DustyTome,
-        ];
-        for relic in a {
-            assert!(act1_pool.contains(&relic), "unexpected relic {relic:?}");
-            assert!(
-                !matches!(
-                    relic,
-                    RelicId::Ectoplasm
-                        | RelicId::Sozu
-                        | RelicId::PhilosophersStone
-                        | RelicId::VelvetChoker
-                ),
-                "act-gated relic leaked into act 1",
-            );
-        }
-    }
-
-    #[test]
-    fn darv_generate_options_presents_three_relic_slots() {
-        let rs = RunState::new();
-        let opts = darv_generate_options(&rs, &DARV);
-        assert_eq!(opts.len(), 3);
-        assert_eq!(opts[0].option_id, "relic_1");
-        assert_eq!(opts[1].option_id, "relic_2");
-        assert_eq!(opts[2].option_id, "relic_3");
-        assert!(opts.iter().all(|o| o.enabled));
-    }
-
-    #[test]
-    fn darv_each_option_grants_its_rolled_slot_relic() {
-        // The handler at slot N must obtain exactly the relic the option
-        // builder shows at slot N (the contract the effect-parity harness
-        // checks by resolving each option by index).
-        let rolled = darv_relic_options(&RunState::new());
-        for (slot, expected) in rolled.iter().enumerate() {
-            let mut rs = RunState::new();
-            rs.direct_event_relic_grant = true;
-            let before = rs.relics.len();
-            let outcome = (DARV.options[slot].handler)(&mut rs);
-            assert!(outcome.finished);
-            assert_eq!(rs.relics.len(), before + 1, "exactly one relic obtained");
-            assert!(
-                rs.relics.contains(expected),
-                "slot {slot} must grant {expected:?}",
-            );
-        }
     }
 
     // ── BattlewornDummy event→combat (bead `sts2-rs-ck9z6`, GH #166) ─────
@@ -2734,7 +2535,10 @@ mod tests {
                 let mut rs = RunState::new();
                 // The Ancient stubs roll their relic from the event the handler
                 // belongs to (`resolve` has bound it): lane F's F8.
-                if matches!(*id, EventId::Nonupeipe | EventId::Orobas | EventId::Pael) {
+                if matches!(
+                    *id,
+                    EventId::Nonupeipe | EventId::Orobas | EventId::Pael | EventId::Darv
+                ) {
                     rs.current_event = Some(*id);
                 }
                 let outcome = (opt.handler)(&mut rs);

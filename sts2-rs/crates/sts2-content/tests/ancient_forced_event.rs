@@ -21,6 +21,21 @@ fn run(seed: i32) -> RunManager {
     rm
 }
 
+/// A run as the host starts one: from the canonical string seed.
+fn run_str(seed: &str) -> RunManager {
+    sts2_content::relics::dispatch::ensure_installed();
+    sts2_content::cards::dispatch::ensure_installed();
+    let mut rm = sts2_content::run_callbacks::new_run_manager_for_character_from_string_seed(
+        seed,
+        CharacterId::Ironclad,
+    )
+    .with_neow_start();
+    let (by_rarity, fallback, boss) = default_relic_grab_bag();
+    rm.run_state
+        .populate_relic_grab_bag_by_rarity(by_rarity, fallback, boss);
+    rm
+}
+
 fn keys(rm: &RunManager) -> Vec<&'static str> {
     present(&rm.run_state)
         .expect("an event is open")
@@ -127,4 +142,77 @@ fn distinct_seeds_roll_distinct_offers() {
     assert_eq!(pinned(1), "[SandCastle, Driftwood, TouchOfOrobas]");
     assert_eq!(pinned(2), "[ElectricShrymp, Driftwood, TouchOfOrobas]");
     assert_eq!(pinned(3), "[PrismaticGem, RadiantPearl, TouchOfOrobas]");
+}
+
+/// Step53's pre-merge gate: Darv, Tanx, Tezcatara and Vakuu entered as events
+/// present the relics the game rolled under its text keys
+/// (`<ANCIENT>.pages.INITIAL.options.<RELIC>`), not fixed RELIC_n/WEAPON_n/
+/// COMFORT_n stubs or blank keys. The witnesses are the offers the real game
+/// (the Headless host, Ironclad, seeds 5, 7 and 11, hp 500, act 1, entered with
+/// `enter_room type event`) showed.
+#[test]
+fn darv_tanx_tezcatara_and_vakuu_offer_what_the_game_rolled() {
+    #[rustfmt::skip]
+    let witnesses: [(EventId, &str, [(i32, [&str; 3]); 3]); 4] = [
+        (EventId::Darv, "DARV", [
+            (5, ["BLACK_STAR", "RUNIC_PYRAMID", "CALLING_BELL"]),
+            (7, ["SNECKO_EYE", "EMPTY_CAGE", "DUSTY_TOME"]),
+            (11, ["SNECKO_EYE", "EMPTY_CAGE", "DUSTY_TOME"])]),
+        (EventId::Tanx, "TANX", [
+            (5, ["SPIKED_GAUNTLETS", "WAR_HAMMER", "IRON_CLUB"]),
+            (7, ["THROWING_AXE", "SAI", "CLAWS"]),
+            (11, ["SPIKED_GAUNTLETS", "TRI_BOOMERANG", "CROSSBOW"])]),
+        (EventId::Tezcatara, "TEZCATARA", [
+            (5, ["YUMMY_COOKIE", "BIIIG_HUG", "TOY_BOX"]),
+            (7, ["VERY_HOT_COCOA", "BIIIG_HUG", "PUMPKIN_CANDLE"]),
+            (11, ["NUTRITIOUS_SOUP", "STORYBOOK", "SEAL_OF_GOLD"])]),
+        (EventId::Vakuu, "VAKUU", [
+            (5, ["BLOOD_SOAKED_ROSE", "PRESERVED_FOG", "MUSIC_BOX"]),
+            (7, ["WHISPERING_EARRING", "DISTINGUISHED_CAPE", "CHOICES_PARADOX"]),
+            (11, ["FIDDLE", "DISTINGUISHED_CAPE", "JEWELED_MASK"])]),
+    ];
+    for (event, name, seeds) in witnesses {
+        for (seed, relics) in seeds {
+            let mut rm = run_str(&seed.to_string());
+            assert_eq!(
+                rm.force_enter_room(ForcedRoom::Event(event)),
+                ActionResult::Advanced
+            );
+            let want: Vec<String> = relics
+                .iter()
+                .map(|r| format!("{name}.pages.INITIAL.options.{r}"))
+                .collect();
+            assert_eq!(keys(&rm), want, "{name} seed {seed}");
+        }
+    }
+}
+
+/// A pick on each of the four obtains the relic its row names.
+#[test]
+fn darv_tanx_tezcatara_and_vakuu_picks_obtain_the_named_relic() {
+    for event in [
+        EventId::Darv,
+        EventId::Tanx,
+        EventId::Tezcatara,
+        EventId::Vakuu,
+    ] {
+        let mut rm = run_str("5");
+        rm.run_state.direct_event_relic_grant = true;
+        rm.force_enter_room(ForcedRoom::Event(event));
+        let want = keys(&rm)[2].rsplit('.').next().unwrap().to_string();
+        assert_ne!(
+            rm.take_action(RunAction::EventChoice { idx: 2 }),
+            ActionResult::InvalidForPhase
+        );
+        let held: Vec<&str> = rm
+            .run_state
+            .relics
+            .iter()
+            .map(|r| r.to_python_name())
+            .collect();
+        assert!(
+            held.contains(&want.as_str()),
+            "{event:?}: {want} not in {held:?}"
+        );
+    }
 }
