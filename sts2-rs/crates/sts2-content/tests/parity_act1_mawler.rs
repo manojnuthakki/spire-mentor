@@ -236,6 +236,7 @@ fn build_state(fixture_initial: &Value, seed: u64) -> CombatState {
     enemy_uids.push(enemy_uid);
 
     CombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         phase: CombatPhase::PlayerPlayPhase,
         round: 0,

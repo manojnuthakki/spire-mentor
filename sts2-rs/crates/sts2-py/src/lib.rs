@@ -282,6 +282,7 @@ fn build_encounter_state(
     }
 
     let mut state = CoreCombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,

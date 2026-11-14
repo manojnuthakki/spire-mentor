@@ -97,6 +97,7 @@ fn make_combat(
     enemy_uids: SmallVec<[CreatureUid; 8]>,
 ) -> CombatState {
     let mut state = CombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,

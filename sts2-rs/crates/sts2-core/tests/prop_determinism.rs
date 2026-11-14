@@ -146,6 +146,7 @@ fn make_combat(seed: u64, kind: MonsterKind, hp: i32) -> CombatState {
         last_added_card: None,
         is_elite: false,
         is_boss: false,
+        fur_coat_marked_room: false,
         act_index: 1,
         active_attack: None,
         attack_commands: sts2_core::attack_command::AttackCommandState::default(),

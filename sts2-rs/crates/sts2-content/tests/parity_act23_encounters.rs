@@ -321,6 +321,7 @@ fn build_state(fixture_initial: &Value, encounter: &str, seed: u64) -> CombatSta
     enemy_uids.push(enemy_uid);
 
     let mut state = CombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         phase: CombatPhase::PlayerPlayPhase,
         round: 0,

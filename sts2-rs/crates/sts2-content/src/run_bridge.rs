@@ -511,8 +511,9 @@ pub fn enter_combat_from_roster(
     // C# `FurCoat.BeforeCombatStart` (step 54): in a room the relic marked
     // (`GetMarkedCoords().Contains(CurrentMapPoint.coord)`) every hittable
     // enemy's CURRENT hp is set to 1; max hp is kept. The marks sit on the
-    // act map (`listener_fur_coat_*`). Not covered: an enemy added later in
-    // the fight (`AfterCreatureAddedToCombat` also clamps it) — queued.
+    // act map (`listener_fur_coat_*`). An enemy added later in the fight is
+    // clamped by the spawn path (`CombatState::fur_coat_marked_room`, C#
+    // `AfterCreatureAddedToCombat`; step 57).
     let fur_coat_here = rs.owns_active_relic(sts2_core::RelicId::FurCoat)
         && rs
             .current_room
@@ -520,6 +521,7 @@ pub fn enter_combat_from_roster(
             .zip(rs.current_act_map.as_ref())
             .is_some_and(|(coord, map)| map.is_marked_by(coord, sts2_core::RelicId::FurCoat));
     if fur_coat_here {
+        state.fur_coat_marked_room = true;
         for c in state
             .creatures
             .iter_mut()
@@ -3357,5 +3359,43 @@ mod tests {
         };
         assert_eq!(hp_at(&rs, marked), (1, 57), "marked room: hp 1, max kept");
         assert_eq!(hp_at(&rs, other), (57, 57), "unmarked room: full hp");
+    }
+
+    /// Step 57 (`fur-coat-midfight-summons`): C# `FurCoat.AfterCreatureAddedToCombat`
+    /// also sets hp 1 on an enemy added after the fight began; in an unmarked
+    /// room a summon keeps its rolled hp.
+    #[test]
+    fn fur_coat_marked_room_clamps_enemies_added_mid_fight() {
+        use sts2_core::map::{ActMap, MapCoord, MapPointType};
+        use sts2_core::runstate::{Room, RoomType};
+
+        let roster = [(MonsterKind::FuzzyWurmCrawler, MonsterSpawnArgs::None, 57)];
+        let mut rs = fresh_run();
+        rs.relics.push(sts2_core::RelicId::FurCoat);
+        let mut map = ActMap::new(15);
+        let marked = MapCoord::new(1, 3);
+        let other = MapCoord::new(2, 3);
+        for c in [marked, other] {
+            let idx = map.get_or_create(c.col, c.row);
+            map.point_mut(idx).point_type = MapPointType::Monster;
+        }
+        map.mark_rooms([marked], sts2_core::RelicId::FurCoat);
+        rs.current_act_map = Some(map);
+        let summon_hp = |rs: &RunState, coord: MapCoord| {
+            let mut rs = rs.clone();
+            rs.current_room = Some(Room::at(coord, MapPointType::Monster, RoomType::Monster));
+            let mut combat = enter_combat_from_roster(&rs, &roster, RoomType::Monster);
+            let uid = combat.spawn_enemy(MonsterKind::FuzzyWurmCrawler);
+            let c = combat
+                .creatures
+                .iter()
+                .find(|c| c.id == uid.0)
+                .expect("summon");
+            (c.current_hp, c.max_hp)
+        };
+        let (hp, max) = summon_hp(&rs, marked);
+        assert_eq!((hp, max > 1), (1, true), "marked room: summon at hp 1");
+        let (hp, max) = summon_hp(&rs, other);
+        assert_eq!(hp, max, "unmarked room: summon keeps its rolled hp");
     }
 }

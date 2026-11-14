@@ -125,6 +125,7 @@ fn make_combat(seed: u64, monsters: &[(MonsterKind, MonsterSpawnArgs)]) -> Comba
     };
 
     let mut state = CombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,

@@ -489,6 +489,7 @@ pub fn build_scenario_state(
         last_added_card: None,
         is_elite,
         is_boss,
+        fur_coat_marked_room: false,
         act_index: 1,
         active_attack: None,
         attack_commands: sts2_core::attack_command::AttackCommandState::default(),

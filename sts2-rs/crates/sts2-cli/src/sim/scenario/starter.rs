@@ -144,6 +144,7 @@ pub fn build_state_with_ascension(
     };
 
     let mut state = CombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,

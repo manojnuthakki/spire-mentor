@@ -4064,6 +4064,13 @@ pub struct CombatState {
     /// draw-pile-upgrade behavior (Python `uncommon.py::StoneCracker`).
     pub is_boss: bool,
 
+    /// This combat's map node is one Fur Coat marked (set by the run bridge at
+    /// combat setup). C# `FurCoat.AfterCreatureAddedToCombat` sets the hp of
+    /// every enemy added to such a combat to 1 (max kept), so
+    /// the spawn path clamps an enemy added mid-fight (a summon) when this is
+    /// set. Step 57, `fur-coat-midfight-summons`. Defaults to `false`.
+    pub fur_coat_marked_room: bool,
+
     /// Act index (1, 2, or 3) snapshotted from
     /// [`crate::runstate::RunState::act_index`] at combat setup, so
     /// combat-side hooks can act-gate without threading the run state
@@ -4205,6 +4212,7 @@ impl Default for CombatState {
             last_added_card: None,
             is_elite: false,
             is_boss: false,
+            fur_coat_marked_room: false,
             act_index: 1,
             active_attack: None,
             attack_commands: crate::attack_command::AttackCommandState::default(),
@@ -6121,6 +6129,12 @@ impl CombatState {
         let uid = CreatureUid(id);
         let at = enemy_index.min(self.enemy_uids.len());
         self.enemy_uids.insert(at, uid);
+        if self.fur_coat_marked_room {
+            // C# `FurCoat.AfterCreatureAddedToCombat` (step 57).
+            if let Some(c) = self.creatures.iter_mut().find(|c| c.id == id) {
+                c.current_hp = 1;
+            }
+        }
         // Bead `sts2-rs-3jo9`: apply the per-species static on-spawn
         // self-buffs that Python's `create_<monster>` factories
         // perform via `creature.apply_power(...)` at construction

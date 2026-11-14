@@ -113,6 +113,7 @@ fn make_nibbit_combat(seed: u64) -> CombatState {
     let mut enemy_uids: SmallVec<[CreatureUid; 8]> = SmallVec::new();
     enemy_uids.push(nibbit_uid);
     let mut state = CombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         phase: CombatPhase::Setup,
         round: 0,

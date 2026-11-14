@@ -123,6 +123,7 @@ fn build_handful(cards: &[(CardId, i32, i32, i8, TargetType)]) -> CombatState {
     enemy_uids.push(cultist_uid);
 
     CombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         phase: CombatPhase::PlayerPlayPhase,
         round: 1,

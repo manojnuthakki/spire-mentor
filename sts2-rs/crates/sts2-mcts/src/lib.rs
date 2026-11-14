@@ -6275,6 +6275,7 @@ mod tests {
             let mut enemy_uids: smallvec::SmallVec<[CreatureUid; 8]> = smallvec::SmallVec::new();
             enemy_uids.push(cultist_uid);
             let mut state = CombatState {
+                fur_coat_marked_room: false,
                 belt_value: None,
                 phase: CombatPhase::Setup,
                 round: 0,
@@ -6558,6 +6559,7 @@ mod tests {
         enemy_uids.push(cultist_uid);
 
         let mut state = CombatState {
+            fur_coat_marked_room: false,
             belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
@@ -6917,6 +6919,7 @@ mod tests {
             enemy_uids.push(cultist_uid);
 
             let mut state = CombatState {
+                fur_coat_marked_room: false,
                 belt_value: None,
                 phase: CombatPhase::Setup,
                 round: 0,
@@ -7113,6 +7116,7 @@ mod tests {
         let mut enemy_uids: smallvec::SmallVec<[CreatureUid; 8]> = smallvec::SmallVec::new();
         enemy_uids.push(cultist_uid);
         let mut state = CombatState {
+            fur_coat_marked_room: false,
             belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
@@ -7290,6 +7294,7 @@ mod tests {
         let mut enemy_uids: smallvec::SmallVec<[CreatureUid; 8]> = smallvec::SmallVec::new();
         enemy_uids.push(cultist_uid);
         let mut state = CombatState {
+            fur_coat_marked_room: false,
             belt_value: None,
             phase: CombatPhase::Setup,
             round: 0,
@@ -10179,6 +10184,7 @@ mod tests {
         enemy_uids.push(cultist_uid);
 
         CombatState {
+            fur_coat_marked_room: false,
             belt_value: None,
             phase: CombatPhase::PlayerPlayPhase,
             round: 1,

@@ -295,6 +295,7 @@ fn build_state(fixture_initial: &Value, encounter: &str, seed: u64) -> CombatSta
     enemy_uids.push(enemy_uid);
 
     CombatState {
+        fur_coat_marked_room: false,
         belt_value: None,
         // sts2-rs-gvn: `PlayerPlayPhase` so subsequent `Action::EndTurn`
         // dispatches into `combat_loop::end_turn_dispatch` (the apply()
