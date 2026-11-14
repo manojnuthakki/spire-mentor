@@ -160,8 +160,8 @@ fn set_index(r: &ScreenReward) -> u8 {
 /// pseudo-random walk over the grid until the game ends), the offered set is in
 /// `RewardsSetIndex` order for every seed. NOTE: this does not guard the
 /// sphere's own sort call (the run manager sorts the offered set again,
-/// stably); only a three-item set with equal keys differs, which the pre-sort
-/// order (not exposed) would be needed to pin.
+/// stably); `two_potions_then_gold_come_out_in_the_net_networks_order` below
+/// pins that call with a witness.
 #[test]
 fn the_offered_rewards_come_out_sorted_on_the_real_path() {
     let mut finished = 0;
@@ -196,4 +196,94 @@ fn the_offered_rewards_come_out_sorted_on_the_real_path() {
     }
     assert!(finished >= 20, "{finished} runs offered rewards");
     assert!(mixed >= 5, "{mixed} runs offered three or more");
+}
+
+/// The sphere's own sort call, through the real path with a witness found on
+/// a cloned grid: two potions revealed before a gold (keys 2, 2, 1). .NET's
+/// three-item compare-swap network turns that into gold, second potion, first
+/// potion (a stable sort would keep the potions in reveal order). The
+/// expected identities are rolled off the grid's own RNG in reveal order.
+#[test]
+fn two_potions_then_gold_come_out_in_the_net_networks_order() {
+    use sts2_core::crystal_sphere::{ItemKind, Tool};
+    use sts2_core::potions::PotionRarity;
+    let rar = |r| {
+        if r {
+            PotionRarity::Rare
+        } else {
+            PotionRarity::Common
+        }
+    };
+    let mut witnesses = 0;
+    'seeds: for n in 1..=200 {
+        let mut rm = run_seed(&n.to_string());
+        assert_eq!(
+            rm.take_action(RunAction::EventChoice { idx: 0 }),
+            ActionResult::Advanced
+        );
+        let start = rm.run_state.crystal_sphere.clone().expect("sphere");
+        let all: Vec<RunAction> = rm.get_available_actions();
+        // Search random walks on clones of the grid for the witness.
+        let mut state = 777u64 + n as u64;
+        for _ in 0..3000 {
+            let mut probe = start.clone();
+            let mut walk = Vec::new();
+            while !probe.is_finished() {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                let a = all[(state >> 33) as usize % all.len()];
+                let RunAction::CrystalSphereDivine { x, y, big } = a else {
+                    continue;
+                };
+                let tool = if big { Tool::Big } else { Tool::Small };
+                if probe.divine(i32::from(x), i32::from(y), tool).is_ok() {
+                    walk.push(a);
+                }
+            }
+            let kinds: Vec<ItemKind> = probe
+                .revealed()
+                .iter()
+                .map(|&i| probe.items()[i].kind)
+                .filter(|k| *k != ItemKind::Curse)
+                .collect();
+            let [ItemKind::Potion { rare: r1 }, ItemKind::Potion { rare: r2 }, ItemKind::Gold { .. }] =
+                kinds[..]
+            else {
+                continue;
+            };
+            let mut rng = probe.rng.clone();
+            let roll = |rng: &mut _, r| {
+                sts2_content::potions::all::roll_potion_of_rarity(
+                    rng,
+                    CharacterId::Ironclad,
+                    rar(r),
+                )
+            };
+            let (p1, p2) = (roll(&mut rng, r1), roll(&mut rng, r2));
+            let (Some(p1), Some(p2)) = (p1, p2) else {
+                continue;
+            };
+            if p1 == p2 {
+                continue;
+            }
+            for a in walk {
+                assert_eq!(rm.take_action(a), ActionResult::Advanced);
+            }
+            let screen = rm.reward_screen().expect("rewards offered");
+            assert!(matches!(screen[0], ScreenReward::Gold { .. }), "seed {n}");
+            match (&screen[1], &screen[2]) {
+                (ScreenReward::Potion { kind: a }, ScreenReward::Potion { kind: b }) => {
+                    assert_eq!((*a, *b), (p2, p1), "seed {n}: network order");
+                }
+                other => panic!("seed {n}: {other:?}"),
+            }
+            witnesses += 1;
+            if witnesses >= 3 {
+                break 'seeds;
+            }
+            continue 'seeds;
+        }
+    }
+    assert!(witnesses >= 1, "no witness found");
 }
