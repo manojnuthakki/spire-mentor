@@ -2574,6 +2574,11 @@ fn end_player_turn_phase_one_after_auto_post_play_stampede(state: &mut CombatSta
     // the power block grants in a single pass, so they must read this snapshot
     // instead of live `player.block`.
     state.combat_log.block_zero_at_turn_end = state.player.block == 0;
+    // C# `Regret.BeforeSideTurnEnd` counts `Pile.Cards.Count` here: before the
+    // orb passives (and a Gremlin Horn draw they trigger) and before the
+    // Ethereal exhaust. Phase two reads it (step 60 review F1).
+    state.combat_log.hand_size_at_side_turn_end =
+        Some(i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX));
 
     // Step 2: fire before_turn_end(PLAYER). Side is explicit here (not
     // the default) because `TurnSideCtx::default()` = Player matches
@@ -2948,13 +2953,14 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
     // Installed DLL HexPower.TryModifyKeywordsInCombat: only current Hexed
     // cards gain Ethereal. Native/independent Ethereal remains independent;
     // this one sweep resolves each card once through the existing exhaust bus.
-    // C# `Regret.BeforeSideTurnEnd` records `Pile.Cards.Count` before the
-    // Ethereal exhaust (`CombatManager` exhausts Ethereal cards afterwards), so
-    // an Ethereal card still in hand counts. Snapshot the hand size here, ahead
-    // of that exhaust (step 60: walk 6NZYN3A8RU A10 floor 49, Regret + Ascender's
-    // Bane: Headless lost 3 to Regret, the Sim 2).
-    let hand_size_at_side_turn_end: i32 =
-        i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX);
+    // C# `Regret.BeforeSideTurnEnd` counted the hand in phase one (before the orb
+    // passives and the Ethereal exhaust); read that snapshot. Phase two run on
+    // its own (tests) falls back to the hand as it stands.
+    let hand_size_at_side_turn_end: i32 = state
+        .combat_log
+        .hand_size_at_side_turn_end
+        .take()
+        .unwrap_or_else(|| i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX));
     let player_has_hex = state.player_power_amount(crate::PowerKind::Hex) > 0;
 
     // Collect-then-mutate avoids the borrow conflict between iterating
@@ -3001,8 +3007,8 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
     //   (a) Snapshot `cards_in_hand_at_turn_end` BEFORE any other
     //       discard/exhaust step touches the hand. REGRET reads this
     //       count as its unblockable HP-loss amount; the snapshot must
-    //       capture the post-ethereal-expel hand size (matches Python
-    //       `len(self.hand)` evaluated after Step 2).
+    //       capture the `BeforeSideTurnEnd` hand size (phase one, before
+    //       the orb passives and the Ethereal exhaust; step 60).
     //   (b) Collect every hand card whose `card_id` matches the
     //       turn-end-in-hand set into `turn_end_cards` in pile order.
     //   (c) For each card: move Hand → Play, execute the effect, then
@@ -4800,9 +4806,9 @@ fn perform_intent(
             // is still alive. Reflective Thorns / FlameBarrier on the
             // player can kill the dealer mid-chain (2nd hit reflects
             // lethal damage back); without this guard the remaining
-            // hits would land from a 0-HP dealer and the post-loop
-            // `effect_fn` would fire on a dead enemy. Python guards
-            // each hit on `dealer.is_alive` for the same reason.
+            // hits would land from a 0-HP dealer. Python guards each hit on
+            // `dealer.is_alive` for the same reason. The post-loop `effect_fn`
+            // still runs for a dead dealer (step 60, see below).
             let suck = attacker_suck_amount(state, enemy_uid);
             let mut sucked_hits = 0_i32;
             for _ in 0..hits {
@@ -19978,6 +19984,59 @@ mod tests {
             state.player.current_hp,
             50 - 3,
             "REGRET saw all three cards"
+        );
+    }
+
+    /// Step 60 review F1: Regret's count is the hand at `BeforeSideTurnEnd`
+    /// (phase one, before the orb passives and a Gremlin Horn draw they
+    /// trigger), so a card that arrives between the phases is not counted.
+    #[test]
+    fn turn_end_regret_counts_the_hand_from_before_the_orb_passives() {
+        let mut state = CombatState {
+            rng: crate::dotnet_rng::Rng::new(0_i32),
+            ..Default::default()
+        };
+        state.phase = CombatPhase::PlayerPlayPhase;
+        state.round = 1;
+        state.player.current_hp = 50;
+        state.player.max_hp = 50;
+        let _ = state.init_player_creature();
+        let uid_regret = CardUid::new(1).expect("non-zero");
+        let uid_bane = CardUid::new(2).expect("non-zero");
+        let uid_drawn = CardUid::new(3).expect("non-zero");
+        state.cards.push(mk_curse(uid_regret, CardId::Regret));
+        let mut bane = mk_curse(uid_bane, CardId::AscendersBane);
+        bane.set_combat_var(crate::cards::VarKey::EtherealThisCombat, 1);
+        state.cards.push(bane);
+        state.cards.push(mk_curse(uid_drawn, CardId::Normality));
+        state.player.hand.push(uid_regret);
+        state.player.hand.push(uid_bane);
+
+        // A living enemy, so phase one doesn't end the combat.
+        let enemy_id = std::num::NonZeroU32::new(900).expect("non-zero");
+        state.creatures.push(crate::Creature {
+            id: enemy_id,
+            current_hp: 30,
+            max_hp: 30,
+            block: 0,
+            powers: smallvec::SmallVec::new(),
+            species: Some(crate::MonsterKind::Nibbit),
+            intent: None,
+            intent_history: crate::IntentHistory::default(),
+            monster_id: crate::MonsterId("Nibbit"),
+            ai: None,
+        });
+        state.enemy_uids.push(crate::CreatureUid(enemy_id));
+        let one = end_player_turn_phase_one(&mut state);
+        assert!(matches!(one, StepResult::Advanced), "{one:?}");
+        // What an orb passive's Horn draw does between the two phases.
+        state.player.hand.push(uid_drawn);
+        end_player_turn_phase_two(&mut state);
+
+        assert_eq!(
+            state.player.current_hp,
+            50 - 2,
+            "REGRET counts the two cards held at BeforeSideTurnEnd, not the drawn one"
         );
     }
 
