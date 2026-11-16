@@ -2583,29 +2583,6 @@ fn end_player_turn_phase_one_after_auto_post_play_stampede(state: &mut CombatSta
     if relic_channel_live(state, PlannedChannel::BeforeTurnEnd) {
         let _ = crate::relic_effects::dispatch_before_turn_end(state, Side::Player);
     }
-    // C# `Regret.BeforeSideTurnEnd` is a card listener of the walk's third pass:
-    // it reads `Pile.Cards.Count` per instance AFTER the power/relic hooks (a
-    // Hailstorm kill's Gremlin Horn draw is counted), BEFORE the orb passives
-    // and the Ethereal exhaust, and only while the card is in hand (a Regret
-    // drawn later stays at 0). Step 60 review round 2.
-    {
-        let hand_len = i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX);
-        let counts: Vec<(crate::CardUid, i32)> = state
-            .player
-            .hand
-            .iter()
-            .copied()
-            .filter(|uid| {
-                state
-                    .cards
-                    .get(uid.0.get() as usize - 1)
-                    .is_some_and(|c| c.card_id == cards::CardId::Regret)
-            })
-            .map(|uid| (uid, hand_len))
-            .collect();
-        state.combat_log.regret_hand_counts = Some(counts);
-    }
-
     // Step 3: combat-end re-check after listener walk. C# `EndPlayerTurn`
     // runs `if (await CheckWinCondition()) return;` here — the FULL
     // all-enemies-dead / player-dead evaluation, not a flag read. A
@@ -2655,6 +2632,31 @@ fn end_player_turn_phase_one_after_auto_post_play_stampede(state: &mut CombatSta
 /// `before_turn_end` auto-play's surfaced card-select resolves — matching C#'s
 /// awaited ordering, where these steps run only once the selection completes.
 fn finish_end_player_turn_phase_one(state: &mut CombatState) -> StepResult {
+    // C# `Regret.BeforeSideTurnEnd` is a card listener of the walk's third pass:
+    // it reads `Pile.Cards.Count` per instance AFTER the power/relic hooks (a
+    // Hailstorm kill's Gremlin Horn draw is counted), BEFORE the orb passives
+    // and the Ethereal exhaust, and only while the card is in hand (a Regret
+    // drawn later stays at 0). Step 60 review rounds 2-3: taken in the shared continuation, so a power/relic hook
+    // that suspended on a selection (Horn's draw into Stratagem) has finished first, and
+    // it runs once whether the turn end ran straight through or resumed.
+    {
+        let hand_len = i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX);
+        let counts: Vec<(crate::CardUid, i32)> = state
+            .player
+            .hand
+            .iter()
+            .copied()
+            .filter(|uid| {
+                state
+                    .cards
+                    .get(uid.0.get() as usize - 1)
+                    .is_some_and(|c| c.card_id == cards::CardId::Regret)
+            })
+            .map(|uid| (uid, hand_len))
+            .collect();
+        state.combat_log.regret_hand_counts = Some(counts);
+    }
+
     // Bead `sts2-rs-qjw41` (f933s follow-up): ChainsOfBindingPower
     // `BeforeTurnEnd` — clear `Bound` from every player card. C#
     // `ChainsOfBindingPower.cs` (v0.103.2) walks
@@ -20166,6 +20168,45 @@ mod tests {
             state.player.current_hp,
             50 - 3,
             "Regret saw the card Horn drew"
+        );
+    }
+
+    /// Step 60 review round 3 (A10/R7 Stratagem): a power/relic hook that opens a
+    /// selection (Horn's draw shuffling into Stratagem) suspends the turn end; the
+    /// card the selection puts in hand is counted, because Regret's count is read
+    /// in the shared continuation after the selection resolved.
+    #[test]
+    fn turn_end_regret_counts_a_card_a_suspended_hook_adds_before_it() {
+        let mut state = regret_test_state(30);
+        let uid_regret = CardUid::new(1).expect("non-zero");
+        let uid_other = CardUid::new(2).expect("non-zero");
+        let uid_picked = CardUid::new(3).expect("non-zero");
+        state.cards.push(mk_curse(uid_regret, CardId::Regret));
+        state.cards.push(mk_curse(uid_other, CardId::Normality));
+        state.cards.push(mk_curse(uid_picked, CardId::Normality));
+        state.player.hand.push(uid_regret);
+        state.player.hand.push(uid_other);
+        // An earlier hook's selection is open when the dispatches end.
+        state.pending_choice = Some(crate::PendingChoice {
+            kind: crate::ChoiceKind::PutBack,
+            options: Vec::new(),
+            min_select: 0,
+            max_select: 0,
+            can_skip: true,
+            post_effect: None,
+            picked: SmallVec::new(),
+        });
+        let one = end_player_turn_phase_one(&mut state);
+        assert_eq!(one, StepResult::PendingChoice);
+        // The selection resolves and adds a card to the hand.
+        state.pending_choice = None;
+        state.player.hand.push(uid_picked);
+        state.pending_end_turn_resume = None;
+        let _ = resume_end_turn_after_before_turn_end(&mut state);
+        assert_eq!(
+            state.player.current_hp,
+            50 - 3,
+            "Regret counts the card the resolved selection added"
         );
     }
 
