@@ -11,7 +11,11 @@ pub(crate) fn play_anger(state: &mut CombatState, target: Option<CreatureUid>) -
     // copy is built from the played card's POD (preserves upgrade flag /
     // combat_vars) rather than the generic `anger()` spec — mirrors
     // Python's `combat.add_card_to_discard_pile(card.clone())`.
-    if let Some(template) = sts2_core::card_effects::resolving_card_inst(state).copied() {
+    if let Some(mut template) = sts2_core::card_effects::resolving_card_inst(state).copied() {
+        // The game's `CreateClone` is a new card Dampen never downgraded, so
+        // Dampen's removal must not re-upgrade it: drop the inherited mark
+        // (step 60: walk EK9RFEKVWV A7 floor 44, Anger's Sharp copy).
+        template.set_combat_var(sts2_core::cards::VarKey::DampenDowngradedMarker, 0);
         let _ = spawn_card_into_pile(state, template, PileKind::Discard);
     }
     EffectResult::Resolved

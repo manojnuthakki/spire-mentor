@@ -90,6 +90,36 @@ fn push_play_card(
     uid
 }
 
+/// Step 60 (walk EK9RFEKVWV A7 floor 44): Anger's copy is a new card (C#
+/// `CreateClone`) that Dampen never downgraded, so it must not carry the
+/// original's downgrade mark: Dampen's removal would re-upgrade it.
+#[test]
+fn anger_copy_does_not_inherit_the_dampen_downgrade_mark() {
+    let (mut state, enemy) = fresh_state_with_enemy(50);
+    let uid = push_play_card(&mut state, CardId::Anger, 6, 0);
+    state.cards[0].set_combat_var(sts2_core::cards::VarKey::DampenDowngradedMarker, 1);
+
+    let _ = super::anger::play_anger(&mut state, Some(enemy));
+
+    assert_eq!(state.cards.len(), 2, "one copy was made");
+    let copy_uid = *state
+        .player
+        .discard
+        .last()
+        .expect("the copy is in the discard pile");
+    assert_ne!(copy_uid, uid);
+    let copy = &state.cards[copy_uid.0.get() as usize - 1];
+    assert_eq!(
+        copy.combat_var(sts2_core::cards::VarKey::DampenDowngradedMarker),
+        0
+    );
+    assert_eq!(
+        state.cards[0].combat_var(sts2_core::cards::VarKey::DampenDowngradedMarker),
+        1,
+        "the played original keeps its mark"
+    );
+}
+
 /// Push a card POD into `state.cards` and add it to the TOP of the
 /// draw pile. Returns the `CardUid` (1-based).
 fn push_draw_card(

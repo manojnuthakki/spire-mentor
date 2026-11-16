@@ -2030,6 +2030,10 @@ fn clone_card_to_hand(
     // wrongly satisfied the start-of-turn sweep, pulling a 4th Bolas into hand
     // that C# leaves in the draw pile).
     template.set_combat_var(crate::cards::VarKey::ReturnIfPlayedRound, 0);
+    // Likewise a clone is a new card that Dampen never downgraded (C#
+    // `DampenPower` re-upgrades only the cards in its own dictionary): drop the
+    // inherited downgrade mark so Dampen's removal does not upgrade the copy.
+    template.set_combat_var(crate::cards::VarKey::DampenDowngradedMarker, 0);
     for _ in 0..count.max(0) {
         crate::card_effects::spawn_card_into_hand(state, template);
     }
@@ -17054,6 +17058,37 @@ mod tests {
     use super::*;
     use crate::IntentHistory;
     use std::num::NonZeroU32;
+
+    /// Step 60: a Juggling / `CloneCardToHand` clone is a new card Dampen never
+    /// downgraded (C# `DampenPower` re-upgrades only the cards in its own
+    /// dictionary), so it must not inherit the source's downgrade mark.
+    #[test]
+    fn clone_card_to_hand_drops_the_dampen_downgrade_mark() {
+        let mut state = CombatState::default();
+        let uid = CardUid::new(1).expect("non-zero");
+        let mut card = crate::cards::Card {
+            uid,
+            card_id: crate::cards::CardId::Anger,
+            ..crate::cards::Card::pod_defaults()
+        };
+        card.set_combat_var(crate::cards::VarKey::DampenDowngradedMarker, 1);
+        state.cards.push(card);
+        state.player.discard.push(uid);
+
+        clone_card_to_hand(&mut state, uid, 1, false);
+
+        assert_eq!(state.cards.len(), 2);
+        assert_eq!(
+            state.cards[0].combat_var(crate::cards::VarKey::DampenDowngradedMarker),
+            1,
+            "the source keeps its mark"
+        );
+        assert_eq!(
+            state.cards[1].combat_var(crate::cards::VarKey::DampenDowngradedMarker),
+            0,
+            "the clone starts unmarked"
+        );
+    }
 
     /// Reflective / self-damage that zeroes the player must still run the C#
     /// death-prevention ladder — FairyInABottle first, then the ShouldDieLate

@@ -6670,6 +6670,76 @@ fn unsettling_lamp_ignores_a_potions_debuff_and_keeps_its_trigger() {
     );
 }
 
+/// Step 60 (walk QMSYM92PED A10 floor 48, Aeonglass with Artifact 3): the game's
+/// `PowerCmd.Apply` fires `BeforePowerAmountChanged` before `ArtifactPower`
+/// negates the debuff, so an Artifact-blocked card debuff still captures the
+/// Unsettling Lamp's once-per-combat trigger and the card's own finish spends
+/// it. The engine checked Artifact first, so the Lamp stayed armed and doubled
+/// a later card's Weak/Vulnerable (Sim 2, Headless 1).
+#[test]
+#[serial_test::serial(global_registry)]
+fn unsettling_lamp_is_captured_by_an_artifact_blocked_debuff() {
+    use std::num::NonZeroU32;
+    ensure_installed();
+    register_before_power_amount_changed(
+        RelicId::UnsettlingLamp,
+        on_before_power_amount_changed_unsettling_lamp as BeforePowerAmountChangedFn,
+    );
+    register_modify_power_amount_given(
+        RelicId::UnsettlingLamp,
+        on_modify_power_amount_given_unsettling_lamp as ModifyPowerAmountGivenFn,
+    );
+    let mut state = CombatState::default();
+    let player_uid = CreatureUid::new(1).unwrap();
+    let enemy_uid = CreatureUid::new(2).unwrap();
+    for (uid, hp) in [(player_uid, 80_i32), (enemy_uid, 50)] {
+        state.creatures.push(crate::Creature {
+            id: uid.0,
+            current_hp: hp,
+            max_hp: hp,
+            block: 0,
+            powers: smallvec::SmallVec::new(),
+            species: None,
+            intent: None,
+            intent_history: crate::IntentHistory::default(),
+            monster_id: crate::MonsterId(""),
+            ai: None,
+        });
+    }
+    state.player.creature_uid = Some(player_uid);
+    state.relics.push(crate::Relic {
+        id: NonZeroU32::new(1).unwrap(),
+        kind: crate::RelicKind::UnsettlingLamp,
+        counter: UNSETTLING_LAMP_ARMED,
+        is_wax: false,
+        is_melted: false,
+    });
+    crate::card_effects::apply_power_to_creature(
+        &mut state,
+        enemy_uid,
+        crate::PowerKind::Artifact,
+        1,
+    );
+
+    // The card's Weak meets the Artifact (consumed, nothing applied) but the
+    // Lamp has seen it.
+    let _card = push_resolving_card(&mut state);
+    crate::card_effects::apply_power_to_enemy(&mut state, enemy_uid, crate::PowerKind::Weak, 1);
+    assert_eq!(
+        enemy_power_amount(&state, enemy_uid, crate::PowerKind::Weak),
+        0
+    );
+    assert_eq!(
+        enemy_power_amount(&state, enemy_uid, crate::PowerKind::Artifact),
+        0
+    );
+    assert_eq!(
+        unsettling_lamp_state(&state),
+        Some(UNSETTLING_LAMP_CAPTURED),
+        "an Artifact-blocked debuff still captures the Lamp"
+    );
+}
+
 /// Put a card on the play pile so power applications read as card-driven.
 ///
 /// GH #365: UnsettlingLamp is gated on C#'s `cardSource` argument, which Rust

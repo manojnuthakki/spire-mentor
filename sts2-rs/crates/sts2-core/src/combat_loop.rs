@@ -2948,6 +2948,13 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
     // Installed DLL HexPower.TryModifyKeywordsInCombat: only current Hexed
     // cards gain Ethereal. Native/independent Ethereal remains independent;
     // this one sweep resolves each card once through the existing exhaust bus.
+    // C# `Regret.BeforeSideTurnEnd` records `Pile.Cards.Count` before the
+    // Ethereal exhaust (`CombatManager` exhausts Ethereal cards afterwards), so
+    // an Ethereal card still in hand counts. Snapshot the hand size here, ahead
+    // of that exhaust (step 60: walk 6NZYN3A8RU A10 floor 49, Regret + Ascender's
+    // Bane: Headless lost 3 to Regret, the Sim 2).
+    let hand_size_at_side_turn_end: i32 =
+        i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX);
     let player_has_hex = state.player_power_amount(crate::PowerKind::Hex) > 0;
 
     // Collect-then-mutate avoids the borrow conflict between iterating
@@ -3041,7 +3048,7 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
                 .is_some_and(|card| has_turn_end_in_hand_effect(card.card_id))
         })
         .collect();
-    let cards_in_hand_at_turn_end: i32 = i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX);
+    let cards_in_hand_at_turn_end: i32 = hand_size_at_side_turn_end;
     for uid in turn_end_cards {
         // Defensive: card may have been removed from hand by a
         // listener that fired during a previous iteration's effect
@@ -4830,18 +4837,14 @@ fn perform_intent(
             // drops it if reflective Thorns killed the dealer mid-chain, the
             // same window C#'s power-removal-on-death closes).
             apply_suck_strength(state, enemy_uid, suck, sucked_hits);
-            // Re-resolve `effect_fn` against the live state: the pre-loop
-            // snapshot is stale if the dealer died mid-chain. Only fire
-            // when the dealer is still alive at chain end (Python
-            // semantics: post-attack effects don't run from a corpse).
-            let dealer_alive_at_end = state
-                .creatures
-                .iter()
-                .any(|c| c.id == enemy_uid.0 && c.current_hp > 0);
-            if dealer_alive_at_end {
-                if let Some(effect) = attack_effect_fn {
-                    effect(state, enemy_uid);
-                }
+            // Step 60: the move's later commands still run when Thorns killed
+            // the dealer mid-chain (the game's `AttackCommand` stops hitting but
+            // `PunchConstruct.FastPunch`'s Frail on the player follows it:
+            // walk VTDCR6MNRH A5 floor 43, Headless Frail 1, Sim none). Effects
+            // that act on the dealer itself are gated on it being alive by the
+            // power-apply path (`apply_power_to_creature`).
+            if let Some(effect) = attack_effect_fn {
+                effect(state, enemy_uid);
             }
         }
         // ── Non-attack intents. ─────────────────────────────────────────
@@ -19886,6 +19889,96 @@ mod tests {
         // REGRET reads snapshot=2 → 2 unblockable HP loss; BURN → 2
         // self-damage. Total: 4 HP loss.
         assert_eq!(state.player.current_hp, 50 - 4);
+    }
+
+    /// Step 60 (walk VTDCR6MNRH A5 floor 43): a multi-hit attack whose dealer
+    /// Thorns kills mid-chain still runs the move's later commands in the game
+    /// (Punch Construct's FastPunch: 2 x 5 damage, then Frail on the player).
+    /// A dead dealer's effect used to be skipped, so the Sim left out the Frail.
+    #[test]
+    fn multi_attack_effect_still_runs_when_thorns_kills_the_dealer() {
+        use crate::monster_ai::{MonsterAi, MonsterState, MoveState};
+        use smallvec::smallvec as sv;
+        use std::collections::BTreeMap;
+
+        fn marker(state: &mut CombatState, _: CreatureUid) {
+            state.player.max_energy = 9;
+        }
+        let intent = Intent::MultiAttack { damage: 5, hits: 2 };
+        let mut state = state_for_enemy_turn_exec(1, MonsterKind::ShrinkerBeetle, intent);
+        let enemy_uid = CreatureUid(NonZeroU32::new(1).expect("nz"));
+        state.creatures[0].current_hp = 1;
+        let mut states = BTreeMap::new();
+        states.insert(
+            "HIT",
+            MonsterState::Move(MoveState {
+                id: "HIT",
+                effect: marker,
+                intents: sv![intent],
+                follow_up: Some("HIT"),
+                must_perform_once: false,
+            }),
+        );
+        state.creatures[0].ai = Some(MonsterAi::new(states, "HIT"));
+        let pid = NonZeroU32::new(7301).expect("nz");
+        state.powers.push(Power {
+            id: pid,
+            kind: PowerKind::Thorns,
+            amount: 3,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state.player.powers.push(PowerUid(pid));
+        let _ = state.init_player_creature();
+
+        let r = perform_intent(&mut state, enemy_uid, Some(intent));
+
+        assert_eq!(r, StepResult::Advanced);
+        assert_eq!(state.creatures[0].current_hp, 0, "Thorns killed the dealer");
+        assert_eq!(state.player.current_hp, 45, "only the first hit landed");
+        assert_eq!(state.player.max_energy, 9, "the move's effect still ran");
+    }
+
+    /// Step 60 (walk 6NZYN3A8RU A10 floor 49): C# `Regret.BeforeSideTurnEnd`
+    /// counts the hand BEFORE the Ethereal exhaust, so an Ethereal card in
+    /// hand counts. REGRET + Ascender's Bane (Ethereal) + a Defend: 3 HP lost
+    /// (the Bane is exhausted afterwards), not 2.
+    #[test]
+    fn turn_end_regret_counts_an_ethereal_card_still_in_hand() {
+        let mut state = CombatState {
+            rng: crate::dotnet_rng::Rng::new(0_i32),
+            ..Default::default()
+        };
+        state.phase = CombatPhase::PlayerEndTurnPhaseOne;
+        state.round = 1;
+        state.player.current_hp = 50;
+        state.player.max_hp = 50;
+        let _ = state.init_player_creature();
+        let uid_regret = CardUid::new(1).expect("non-zero");
+        let uid_bane = CardUid::new(2).expect("non-zero");
+        let uid_other = CardUid::new(3).expect("non-zero");
+        state.cards.push(mk_curse(uid_regret, CardId::Regret));
+        let mut bane = mk_curse(uid_bane, CardId::AscendersBane);
+        // Ethereal as the game's Bane is (the keyword lookup needs the card registry).
+        bane.set_combat_var(crate::cards::VarKey::EtherealThisCombat, 1);
+        state.cards.push(bane);
+        state.cards.push(mk_curse(uid_other, CardId::Normality));
+        state.player.hand.push(uid_regret);
+        state.player.hand.push(uid_bane);
+        state.player.hand.push(uid_other);
+
+        end_player_turn_phase_two(&mut state);
+
+        assert!(
+            state.player.exhaust.contains(&uid_bane),
+            "the Bane is Ethereal and was exhausted"
+        );
+        assert_eq!(
+            state.player.current_hp,
+            50 - 3,
+            "REGRET saw all three cards"
+        );
     }
 
     /// Non-turn-end-in-hand cards (e.g. a Strike) are NOT discarded by

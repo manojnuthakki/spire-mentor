@@ -1574,6 +1574,21 @@ fn possess_stolen_total(state: &CombatState, owner: CreatureUid, possess_kind: P
 /// creature, it never keeps combat open. Bead `sts2-rs-jwb4a`.
 pub(crate) fn possess_strength_after_death(state: &mut CombatState, owner: CreatureUid) {
     let stolen = possess_stolen_total(state, owner, PowerKind::PossessStrength);
+    if stolen > 0 {
+        // A positive gift is a normal `PowerCmd.Apply`, so it runs the modify
+        // chain: Ruined Helmet doubles the first Strength gain of a combat
+        // (step 60: walk HPFP5NHEUG A5 floor 45, Strength 2 on Headless, -2 here).
+        // The legacy signed surface skips the chain.
+        if let Some(player_uid) = state.player.creature_uid {
+            sts2_core::card_effects::apply_power_to_creature(
+                state,
+                player_uid,
+                PowerKind::Strength,
+                stolen,
+            );
+            return;
+        }
+    }
     if stolen != 0 {
         apply_signed_power_to_player(state, PowerKind::Strength, stolen);
     }
@@ -5990,6 +6005,57 @@ mod tests {
             player_power(&combat, PowerKind::Dexterity),
             0,
             "death restores the stolen Dexterity (net 0)"
+        );
+    }
+
+    /// Step 60 (walk HPFP5NHEUG A5 floor 45): the Strength TheLost gives back
+    /// on death is a normal `PowerCmd.Apply`, so Ruined Helmet doubles it when
+    /// it is the combat's first Strength gain (Headless: -6 + 4 x 2 = 2; the
+    /// Sim: -6 + 4 = -2) and the relic's counter is spent.
+    #[test]
+    #[serial_test::serial(global_registry)]
+    fn possess_strength_after_death_gift_runs_ruined_helmet() {
+        use std::num::NonZeroU32;
+
+        use sts2_core::card_effects::apply_power_to_creature;
+        use sts2_core::MonsterKind;
+        crate::relics::dispatch::ensure_installed();
+        sts2_core::relic_effects::ensure_installed();
+        let mut combat = CombatState::default();
+        let owner = push_enemy(&mut combat, 1, MonsterKind::TheLost, 100);
+        combat.player.max_hp = 80;
+        combat.player.current_hp = 80;
+        let player_uid = combat.init_player_creature();
+        combat.relics.push(sts2_core::Relic {
+            id: NonZeroU32::new(1).expect("nz"),
+            kind: sts2_core::RelicKind::RuinedHelmet,
+            counter: 0,
+            is_wax: false,
+            is_melted: false,
+        });
+        apply_power_to_creature(&mut combat, owner, PowerKind::PossessStrength, 1);
+        let _ = player_uid;
+        apply_signed_power_to_player(&mut combat, PowerKind::Strength, -6);
+        record_possess_steal(&mut combat, owner, PowerKind::PossessStrength, 4);
+        if let Some(c) = combat.creatures.iter_mut().find(|c| c.id == owner.0) {
+            c.current_hp = 0;
+        }
+
+        possess_strength_after_death(&mut combat, owner);
+
+        assert_eq!(
+            player_power(&combat, PowerKind::Strength),
+            2,
+            "-6 + 4 doubled"
+        );
+        assert_eq!(
+            combat
+                .relics
+                .iter()
+                .find(|r| r.kind == sts2_core::RelicKind::RuinedHelmet)
+                .map(|r| r.counter),
+            Some(1),
+            "the helmet is spent"
         );
     }
 

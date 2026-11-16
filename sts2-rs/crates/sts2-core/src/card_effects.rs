@@ -982,10 +982,11 @@ fn apply_power_to_creature_inner(
     // Bead `sts2-rs-zdjjx`: Artifact negates a debuff destined for its owner
     // (and consumes a stack) before any apply work. C#-equivalent of
     // ArtifactPower folded into PowerCmd.Apply's ModifyPowerAmountReceived.
-    if try_consume_artifact_for_debuff(state, creature_idx, kind) {
-        return;
-    }
-
+    // Step 60: the before-channel fires BEFORE Artifact's negation, as in C#
+    // `PowerCmd.Apply` (`Hook.BeforePowerAmountChanged` precedes
+    // `ModifyPowerAmountReceived`, where `ArtifactPower` negates the debuff):
+    // an Artifact-blocked debuff still arms UnsettlingLamp's capture.
+    //
     // Bead `sts2-rs-47jv` + `sts2-rs-7uo4`: C#-canon channel order is
     // `before_power_amount_changed` → modify chain → mutation →
     // `after_modifying_power_amount_*`. The before-channel fires on the
@@ -1002,6 +1003,9 @@ fn apply_power_to_creature_inner(
         amount,
         PowerAmountObserverPhase::Before,
     );
+    if try_consume_artifact_for_debuff(state, creature_idx, kind) {
+        return;
+    }
     let amount = pipe_power_amount_through_modify_chain(state, None, target_uid, kind, amount);
     if amount <= 0 {
         return;
@@ -1466,10 +1470,9 @@ pub fn apply_power_to_creature_with_applier(
     // Bead `sts2-rs-zdjjx`: Artifact debuff-negation gate (see
     // `apply_power_to_creature`). Scoped to the target creature, so a
     // player-applied debuff onto an Artifact-bearing monster is consumed here.
-    if try_consume_artifact_for_debuff(state, creature_idx, kind) {
-        return;
-    }
-
+    // Step 60: Before fires ahead of Artifact's negation (C# `PowerCmd.Apply`:
+    // `BeforePowerAmountChanged` precedes `ModifyPowerAmountReceived`).
+    //
     // Bead `sts2-rs-47jv` + `sts2-rs-7uo4`: C#-canon order is
     // Before → Modify → mutation → After, with the real applier
     // threaded through ctx for listeners that gate on it.
@@ -1481,6 +1484,9 @@ pub fn apply_power_to_creature_with_applier(
         amount,
         PowerAmountObserverPhase::Before,
     );
+    if try_consume_artifact_for_debuff(state, creature_idx, kind) {
+        return;
+    }
     let amount = pipe_power_amount_through_modify_chain(state, applier, target_uid, kind, amount);
     if amount <= 0 {
         return;
