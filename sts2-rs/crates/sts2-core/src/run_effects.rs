@@ -1122,7 +1122,15 @@ pub fn dispatch_modify_card_reward_options_late(
     if is_empty_modify_card_reward_options_late() {
         return EffectResult::NotImplemented;
     }
-    let listeners = listeners_modify_card_reward_options_late();
+    let mut listeners = listeners_modify_card_reward_options_late();
+    // C# `Hook.TryModifyCardRewardOptions` walks the player's relics in the
+    // order they were obtained, each hook seeing what the earlier ones left
+    // (Glitter before Wing Charm: Glam on every card, Wing Charm has no
+    // eligible card and draws nothing). The registry's own order is
+    // arbitrary; unowned entries (they self-gate) go last. sts2-agent fork,
+    // F8 step57 review round 2.
+    let owned = run_state.relics.clone();
+    listeners.sort_by_key(|(id, _)| owned.iter().position(|r| r == id).unwrap_or(usize::MAX));
     let mut any_resolved = false;
     for (_id, f) in listeners {
         if f(run_state, cards) == EffectResult::Resolved {

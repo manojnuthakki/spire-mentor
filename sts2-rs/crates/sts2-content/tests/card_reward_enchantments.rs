@@ -240,35 +240,74 @@ fn a_glitter_obtained_after_the_reward_was_rolled_enchants_it() {
     );
 }
 
-/// `Glam.CanEnchant` refuses an enchanted card: Glitter and Wing Charm in
-/// either order leave no option with two enchantments, and the card taken
-/// has exactly what was shown.
+/// The late reward hooks run in the order the relics were obtained, each seeing
+/// what the earlier ones left (C# `Hook.TryModifyCardRewardOptions`), and
+/// `Glam.CanEnchant` refuses an enchanted card. Glitter first: Glam on every
+/// option and Wing Charm (no eligible card) draws nothing from Niche. Wing
+/// Charm first: Swift on one option, Glam on the other two, one Niche draw.
 #[test]
-fn glitter_and_wing_charm_never_stack_two_enchantments_on_an_option() {
-    for relics in [
-        [RelicId::Glitter, RelicId::WingCharm],
-        [RelicId::WingCharm, RelicId::Glitter],
-    ] {
-        for screen in [false, true] {
-            let mut rm = first_combat_card_reward(&relics, screen);
-            let held = rm.card_reward_enchantments().to_vec();
-            assert_eq!(held.len(), 3, "{relics:?}");
-            assert!(
-                held.iter().all(|e| e.iter().count() <= 1),
-                "{relics:?}: {held:?}"
-            );
-            for (idx, e) in held.iter().enumerate() {
-                // Every option carries exactly one: Swift on one, Glam on the others.
-                assert_eq!(e.iter().count(), 1, "{relics:?} option {idx}");
-            }
-            let shown = held[2];
-            rm.take_action(RunAction::PickCardReward { idx: Some(2) });
-            let card = rm.run_state.master_deck.last().expect("picked");
-            assert_eq!(
-                card.enchantments, shown,
-                "{relics:?}: the card is the one shown"
-            );
-        }
+fn the_late_hooks_follow_the_order_the_relics_were_obtained() {
+    let niche = |relics: &[RelicId], screen: bool| {
+        let rm = first_combat_card_reward(relics, screen);
+        (rm.run_state.rng.niche.counter(), rm)
+    };
+    for screen in [false, true] {
+        let (glitter_only, _) = niche(&[RelicId::Glitter], screen);
+        let (wing_only, _) = niche(&[RelicId::WingCharm], screen);
+
+        let (draws, mut rm) = niche(&[RelicId::Glitter, RelicId::WingCharm], screen);
+        let held = rm.card_reward_enchantments().to_vec();
+        assert!(
+            held.iter()
+                .all(|e| e.iter().count() == 1 && e.get(EnchantmentId::Glam) == 1),
+            "Glitter first: Glam on all, got {held:?}"
+        );
+        assert_eq!(
+            draws, glitter_only,
+            "Glitter first: Wing Charm draws nothing"
+        );
+        let shown = held[2];
+        rm.take_action(RunAction::PickCardReward { idx: Some(2) });
+        assert_eq!(
+            rm.run_state
+                .master_deck
+                .last()
+                .expect("picked")
+                .enchantments,
+            shown
+        );
+
+        let (draws, mut rm) = niche(&[RelicId::WingCharm, RelicId::Glitter], screen);
+        let held = rm.card_reward_enchantments().to_vec();
+        assert!(held.iter().all(|e| e.iter().count() == 1), "{held:?}");
+        assert_eq!(
+            held.iter()
+                .filter(|e| e.get(EnchantmentId::Swift) == 1)
+                .count(),
+            1,
+            "Wing Charm first: Swift on one"
+        );
+        assert_eq!(
+            held.iter()
+                .filter(|e| e.get(EnchantmentId::Glam) == 1)
+                .count(),
+            2,
+            "Wing Charm first: Glam on the other two"
+        );
+        assert_eq!(
+            draws, wing_only,
+            "Wing Charm first: one Niche draw, as alone"
+        );
+        let shown = held[0];
+        rm.take_action(RunAction::PickCardReward { idx: Some(0) });
+        assert_eq!(
+            rm.run_state
+                .master_deck
+                .last()
+                .expect("picked")
+                .enchantments,
+            shown
+        );
     }
 }
 
