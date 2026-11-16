@@ -3417,10 +3417,12 @@ pub struct TurnEvents {
     /// `end_player_turn_phase_one` before the dispatches; read by the relic
     /// handlers. Reset in [`Self::reset_per_turn`]. Bead `sts2-rs-xk9yo`.
     pub block_zero_at_turn_end: bool,
-    /// Hand size at C# `BeforeSideTurnEnd` (Regret's per-instance count), taken in
-    /// `end_player_turn_phase_one` before the orb passives and their Gremlin Horn
-    /// draws; consumed by phase two. `None` when phase two runs on its own.
-    pub hand_size_at_side_turn_end: Option<i32>,
+    /// Per-Regret hand count, each read when C# `Regret.BeforeSideTurnEnd` ran for
+    /// that instance (the third, Normal pass of the walk, after every power/relic
+    /// `BeforeSideTurnEnd*` hook, before the orb passives and the Ethereal
+    /// exhaust). Set in `end_player_turn_phase_one`; a Regret not in hand at that
+    /// point has no entry (its count stays 0). `None`: phase two ran on its own.
+    pub regret_hand_counts: Option<Vec<(CardUid, i32)>>,
     /// Player `Block` snapshotted at the start of the `after_turn_end`
     /// dispatch, BEFORE any late (`AfterSideTurnEndLate`) power consumes it.
     /// C# `Hook.AfterTurnEnd` runs all `AfterSideTurnEnd` (early — incl. the
@@ -3513,7 +3515,7 @@ impl TurnEvents {
         // snapshot — recomputed each turn-end in `end_player_turn_phase_one`,
         // cleared here for determinism.
         self.block_zero_at_turn_end = false;
-        self.hand_size_at_side_turn_end = None;
+        self.regret_hand_counts = None;
         // Pre-late turn-end block snapshot for Parrying Shield — recomputed
         // each turn-end before the after_turn_end dispatch, cleared here.
         self.block_before_late_turn_end = 0;

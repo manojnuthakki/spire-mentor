@@ -2574,12 +2574,6 @@ fn end_player_turn_phase_one_after_auto_post_play_stampede(state: &mut CombatSta
     // the power block grants in a single pass, so they must read this snapshot
     // instead of live `player.block`.
     state.combat_log.block_zero_at_turn_end = state.player.block == 0;
-    // C# `Regret.BeforeSideTurnEnd` counts `Pile.Cards.Count` here: before the
-    // orb passives (and a Gremlin Horn draw they trigger) and before the
-    // Ethereal exhaust. Phase two reads it (step 60 review F1).
-    state.combat_log.hand_size_at_side_turn_end =
-        Some(i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX));
-
     // Step 2: fire before_turn_end(PLAYER). Side is explicit here (not
     // the default) because `TurnSideCtx::default()` = Player matches
     // already, but we lock the intent: this is the player-side end of
@@ -2588,6 +2582,28 @@ fn end_player_turn_phase_one_after_auto_post_play_stampede(state: &mut CombatSta
     // Bead `sts2-rs-j87`: parallel relic-effects bus drain.
     if relic_channel_live(state, PlannedChannel::BeforeTurnEnd) {
         let _ = crate::relic_effects::dispatch_before_turn_end(state, Side::Player);
+    }
+    // C# `Regret.BeforeSideTurnEnd` is a card listener of the walk's third pass:
+    // it reads `Pile.Cards.Count` per instance AFTER the power/relic hooks (a
+    // Hailstorm kill's Gremlin Horn draw is counted), BEFORE the orb passives
+    // and the Ethereal exhaust, and only while the card is in hand (a Regret
+    // drawn later stays at 0). Step 60 review round 2.
+    {
+        let hand_len = i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX);
+        let counts: Vec<(crate::CardUid, i32)> = state
+            .player
+            .hand
+            .iter()
+            .copied()
+            .filter(|uid| {
+                state
+                    .cards
+                    .get(uid.0.get() as usize - 1)
+                    .is_some_and(|c| c.card_id == cards::CardId::Regret)
+            })
+            .map(|uid| (uid, hand_len))
+            .collect();
+        state.combat_log.regret_hand_counts = Some(counts);
     }
 
     // Step 3: combat-end re-check after listener walk. C# `EndPlayerTurn`
@@ -2953,14 +2969,10 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
     // Installed DLL HexPower.TryModifyKeywordsInCombat: only current Hexed
     // cards gain Ethereal. Native/independent Ethereal remains independent;
     // this one sweep resolves each card once through the existing exhaust bus.
-    // C# `Regret.BeforeSideTurnEnd` counted the hand in phase one (before the orb
-    // passives and the Ethereal exhaust); read that snapshot. Phase two run on
-    // its own (tests) falls back to the hand as it stands.
-    let hand_size_at_side_turn_end: i32 = state
-        .combat_log
-        .hand_size_at_side_turn_end
-        .take()
-        .unwrap_or_else(|| i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX));
+    // Regret's count was read per instance in phase one (see there); take the
+    // table. Phase two run on its own (tests) falls back to the live hand.
+    let regret_counts = state.combat_log.regret_hand_counts.take();
+    let live_hand_len = i32::try_from(state.player.hand.len()).unwrap_or(i32::MAX);
     let player_has_hex = state.player_power_amount(crate::PowerKind::Hex) > 0;
 
     // Collect-then-mutate avoids the borrow conflict between iterating
@@ -3004,11 +3016,10 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
     // `sts2-rl-agent@01c094d:sts2_env/core/combat.py:2338-2443`.
     //
     // Pipeline (mirrors Python `combat.py:988-1014`):
-    //   (a) Snapshot `cards_in_hand_at_turn_end` BEFORE any other
-    //       discard/exhaust step touches the hand. REGRET reads this
-    //       count as its unblockable HP-loss amount; the snapshot must
-    //       capture the `BeforeSideTurnEnd` hand size (phase one, before
-    //       the orb passives and the Ethereal exhaust; step 60).
+    //   (a) `cards_in_hand_at_turn_end` is REGRET's unblockable HP-loss amount:
+    //       the count read per instance in phase one, when its own
+    //       `BeforeSideTurnEnd` ran (after the power/relic hooks, before the
+    //       orb passives and the Ethereal exhaust; step 60 review round 2).
     //   (b) Collect every hand card whose `card_id` matches the
     //       turn-end-in-hand set into `turn_end_cards` in pile order.
     //   (c) For each card: move Hand → Play, execute the effect, then
@@ -3054,7 +3065,6 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
                 .is_some_and(|card| has_turn_end_in_hand_effect(card.card_id))
         })
         .collect();
-    let cards_in_hand_at_turn_end: i32 = hand_size_at_side_turn_end;
     for uid in turn_end_cards {
         // Defensive: card may have been removed from hand by a
         // listener that fired during a previous iteration's effect
@@ -3075,6 +3085,10 @@ pub fn end_player_turn_phase_two(state: &mut CombatState) -> StepResult {
         // The pre-loop filter already restricted to UIDs that resolve in
         // `state.cards`; the index lookup is safe.
         let card_id = state.cards[uid.0.get() as usize - 1].card_id;
+        let cards_in_hand_at_turn_end = match &regret_counts {
+            None => live_hand_len,
+            Some(v) => v.iter().find(|(u, _)| *u == uid).map_or(0, |(_, n)| *n),
+        };
         let lost = execute_turn_end_in_hand_effect(state, uid, card_id, cards_in_hand_at_turn_end);
 
         // Apply any Rupture Strength the self-damage above DEFERRED. The
@@ -20037,6 +20051,121 @@ mod tests {
             state.player.current_hp,
             50 - 2,
             "REGRET counts the two cards held at BeforeSideTurnEnd, not the drawn one"
+        );
+    }
+
+    /// A living enemy with `hp`, as phase one needs one to go on.
+    fn regret_test_state(enemy_hp: i32) -> CombatState {
+        let mut state = CombatState {
+            rng: crate::dotnet_rng::Rng::new(0_i32),
+            ..Default::default()
+        };
+        state.phase = CombatPhase::PlayerPlayPhase;
+        state.round = 1;
+        state.player.current_hp = 50;
+        state.player.max_hp = 50;
+        let _ = state.init_player_creature();
+        let enemy_id = std::num::NonZeroU32::new(900).expect("non-zero");
+        state.creatures.push(crate::Creature {
+            id: enemy_id,
+            current_hp: enemy_hp,
+            max_hp: 30,
+            block: 0,
+            powers: smallvec::SmallVec::new(),
+            species: Some(crate::MonsterKind::Nibbit),
+            intent: None,
+            intent_history: crate::IntentHistory::default(),
+            monster_id: crate::MonsterId("Nibbit"),
+            ai: None,
+        });
+        state.enemy_uids.push(crate::CreatureUid(enemy_id));
+        state
+    }
+
+    /// Step 60 review round 2 (A10/R27): a Regret that reaches the hand after its
+    /// own `BeforeSideTurnEnd` passed keeps count 0 and costs nothing.
+    #[test]
+    fn turn_end_regret_drawn_after_its_hook_costs_nothing() {
+        let mut state = regret_test_state(30);
+        let uid_regret = CardUid::new(1).expect("non-zero");
+        let uid_other = CardUid::new(2).expect("non-zero");
+        state.cards.push(mk_curse(uid_regret, CardId::Regret));
+        state.cards.push(mk_curse(uid_other, CardId::Normality));
+        state.player.hand.push(uid_other);
+        let one = end_player_turn_phase_one(&mut state);
+        assert!(matches!(one, StepResult::Advanced), "{one:?}");
+        // The orb passive's Horn draw pulls the Regret in.
+        state.player.hand.push(uid_regret);
+        end_player_turn_phase_two(&mut state);
+        assert_eq!(
+            state.player.current_hp, 50,
+            "its hook never saw the Regret in hand"
+        );
+    }
+
+    /// Step 60 review round 2 (A10/R7): Hailstorm's kill draws (Gremlin Horn)
+    /// BEFORE Regret's hook in the walk (power Normal pass, then cards), so the
+    /// drawn card is counted.
+    #[test]
+    fn turn_end_regret_counts_a_card_drawn_by_a_power_hook_before_it() {
+        use crate::orbs::{Orb, OrbSlots};
+        crate::relic_effects::ensure_installed();
+        let mut state = regret_test_state(3);
+        // A second, sturdier enemy keeps the combat going after the kill.
+        let second = std::num::NonZeroU32::new(901).expect("non-zero");
+        state.creatures.push(crate::Creature {
+            id: second,
+            current_hp: 30,
+            max_hp: 30,
+            block: 0,
+            powers: smallvec::SmallVec::new(),
+            species: Some(crate::MonsterKind::Nibbit),
+            intent: None,
+            intent_history: crate::IntentHistory::default(),
+            monster_id: crate::MonsterId("Nibbit"),
+            ai: None,
+        });
+        state.enemy_uids.push(crate::CreatureUid(second));
+        let uid_regret = CardUid::new(1).expect("non-zero");
+        let uid_bane = CardUid::new(2).expect("non-zero");
+        let uid_drawn = CardUid::new(3).expect("non-zero");
+        state.cards.push(mk_curse(uid_regret, CardId::Regret));
+        state.cards.push(mk_curse(uid_bane, CardId::Normality));
+        state.cards.push(mk_curse(uid_drawn, CardId::Normality));
+        state.player.hand.push(uid_regret);
+        state.player.hand.push(uid_bane);
+        state.player.draw.push(uid_drawn);
+        state.relics.push(crate::Relic {
+            id: std::num::NonZeroU32::new(100).expect("non-zero"),
+            kind: crate::RelicKind::GremlinHorn,
+            counter: 0,
+            is_wax: false,
+            is_melted: false,
+        });
+        let puid = crate::PowerUid::new(1).expect("non-zero");
+        state.powers.push(crate::Power {
+            id: puid.0,
+            kind: crate::PowerKind::Hailstorm,
+            amount: 5,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        });
+        state.player.powers.push(puid);
+        state.player.orbs = OrbSlots::with_default_capacity();
+        crate::orbs::channel_orb(&mut state, Orb::Frost);
+
+        let one = end_player_turn_phase_one(&mut state);
+        assert!(matches!(one, StepResult::Advanced), "{one:?}");
+        assert!(
+            state.player.hand.contains(&uid_drawn),
+            "Hailstorm killed, Horn drew"
+        );
+        end_player_turn_phase_two(&mut state);
+        assert_eq!(
+            state.player.current_hp,
+            50 - 3,
+            "Regret saw the card Horn drew"
         );
     }
 
