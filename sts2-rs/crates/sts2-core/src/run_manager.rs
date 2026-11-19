@@ -4737,8 +4737,39 @@ impl RunManager {
         let Some(&deck_idx) = self.run_state.removal_offer_order().get(idx) else {
             return ActionResult::InvalidForPhase;
         };
-        self.run_state.master_deck.remove(deck_idx);
+        let removed = self.run_state.master_deck.remove(deck_idx);
         self.run_state.pending_deck_removals -= 1;
+        if self.run_state.pending_paels_tooth_stash {
+            // Pael's Tooth: the pick is stashed, not deleted. Its place in the
+            // deck as the batch opened: the picks may come in any order, each
+            // earlier pick at or before it pushed it one position down.
+            let mut orig = deck_idx;
+            let mut earlier: Vec<usize> = self
+                .run_state
+                .paels_tooth_batch
+                .iter()
+                .map(|&(o, _)| o)
+                .collect();
+            earlier.sort_unstable();
+            for o in earlier {
+                if o <= orig {
+                    orig += 1;
+                }
+            }
+            self.run_state.paels_tooth_batch.push((orig, removed));
+            if self.run_state.pending_deck_removals == 0 {
+                // Stored as `PaelsTooth.AfterObtained` does: ordered by the card's id
+                // entry, ordinally (`OrderBy(c => c.Id.Entry, StringComparer.Ordinal)`,
+                // stable, so equal ids keep deck order); each card exactly as the
+                // deck held it. The after-combat return indexes this list.
+                self.run_state.pending_paels_tooth_stash = false;
+                let mut batch = std::mem::take(&mut self.run_state.paels_tooth_batch);
+                batch.sort_by_key(|&(o, c)| (c.card_id.to_python_name(), o));
+                self.run_state
+                    .paels_tooth_stored
+                    .extend(batch.into_iter().map(|(_, c)| c));
+            }
+        }
         if self.lords_parasol_removal && self.run_state.pending_deck_removals == 0 {
             self.finish_lords_parasol_removal();
         }

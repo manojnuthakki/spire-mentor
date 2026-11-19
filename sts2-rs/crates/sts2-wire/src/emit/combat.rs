@@ -537,7 +537,12 @@ fn same_telegraph(first: Intent, head: Intent) -> bool {
 ///
 /// A power uid with no entry in `arena` — the state failed its own
 /// `assert_invariants` before we got here.
-pub fn powers_to_value(uids: &[PowerUid], arena: &[Power], path: &str) -> Result<Value, EmitError> {
+pub fn powers_to_value(
+    uids: &[PowerUid],
+    arena: &[Power],
+    plays_started: u32,
+    path: &str,
+) -> Result<Value, EmitError> {
     let mut list = Vec::with_capacity(uids.len());
     for uid in uids {
         let pow = arena.iter().find(|p| p.id == uid.0).ok_or_else(|| {
@@ -560,6 +565,12 @@ pub fn powers_to_value(uids: &[PowerUid], arena: &[Power], path: &str) -> Result
             // here — the energy the power GRANTS — made the mirror's own wire
             // disagree with the world's on a field the diff compares.
             PowerKind::Orbit => 4 - pow.counter.rem_euclid(4),
+            // C# `SlothPower.DisplayAmount => _cardsPlayedThisTurn`
+            // (`SlothPower.cs:21`): `amount` is the cap (3), the display is the
+            // plays started this turn, which the wire reader (`state_from_wire`)
+            // reads back as the owner's counter. Emitting `amount` showed 3 where
+            // the game shows 0 and, sent back, set the counter to the cap.
+            PowerKind::Sloth => i32::try_from(plays_started).unwrap_or(i32::MAX),
             _ => pow.amount,
         };
         set(&mut d, "display_amount", display_amount);
@@ -721,7 +732,12 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
     };
     player.insert(
         "powers".to_owned(),
-        powers_to_value(&player_power_uids, &state.powers, "$.player.powers")?,
+        powers_to_value(
+            &player_power_uids,
+            &state.powers,
+            state.player.card_plays_started_this_turn,
+            "$.player.powers",
+        )?,
     );
 
     // Potions — a flat list of ids (None for empty slot). The Rust
@@ -775,7 +791,7 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
             // lists them (sts2-agent fork). Wire output only.
             osty.insert(
                 "powers".into(),
-                powers_to_value(&c.powers, &state.powers, "$.player.osty.powers")?,
+                powers_to_value(&c.powers, &state.powers, 0, "$.player.osty.powers")?,
             );
             player.insert("osty".to_owned(), Value::Object(osty));
         }
@@ -961,7 +977,7 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
         set(&mut m, "block", c.block.max(0));
         m.insert(
             "powers".to_owned(),
-            powers_to_value(&c.powers, &state.powers, "$.encounter.powers")?,
+            powers_to_value(&c.powers, &state.powers, 0, "$.encounter.powers")?,
         );
         // `intents` carries the creature's telegraph: the shown head
         // (`Creature.intent`) and, while that head is still its move's, the

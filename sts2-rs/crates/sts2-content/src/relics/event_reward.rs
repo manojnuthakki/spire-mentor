@@ -2195,6 +2195,22 @@ fn listener_paels_tooth_after_obtained(rs: &mut RunState) -> EffectResult {
     }
     let max_count = u8::try_from(take).unwrap_or(u8::MAX);
 
+    // Interactive run (the Sim, the workbench): the game asks `FromDeckForRemoval
+    // (IsUpgradable)` for exactly `max_count` cards, from every candidate (the
+    // pool the pick offers, `RunState::removal_offer_order`). Queue it as a
+    // removal batch whose picks are stashed, exact card and all. A pool that
+    // is no larger than the count has no choice in it: the auto path below.
+    if rs.interactive_card_removal {
+        rs.pending_paels_tooth_stash = true;
+        let pool = rs.removal_offer_order().len();
+        if pool > usize::from(max_count) {
+            rs.paels_tooth_batch.clear();
+            rs.pending_deck_removals += u32::from(max_count);
+            return EffectResult::Resolved;
+        }
+        rs.pending_paels_tooth_stash = false;
+    }
+
     // Bead `sts2-rs-n7tha`: try interactive deck-choice first. When
     // `candidates.len() > max_count` the agent has real discretion
     // (pick N of M, where M > N); open a `PaelsToothStash` prompt and

@@ -1568,6 +1568,19 @@ pub struct RunState {
     /// removal callers leave this unset. sts2-agent fork, A6d1.
     pub pending_basic_removal_tag: Option<crate::cards::CardTag>,
 
+    /// Pael's Tooth's stash pick is open on the removal machinery
+    /// ([`Self::pending_deck_removals`]): the offer is the removable AND
+    /// upgradable cards (`FromDeckForRemoval(filter: IsUpgradable)`,
+    /// `PaelsTooth.cs:81`) and each pick moves the exact card into
+    /// [`Self::paels_tooth_stored`] instead of deleting it. sts2-agent fork,
+    /// step 65 (Pael's Tooth).
+    pub pending_paels_tooth_stash: bool,
+
+    /// The current Tooth batch's picks as `(position in the deck when the
+    /// batch opened, card)`. The picks may come in any order; the batch is
+    /// stored in deck order when the last one lands.
+    pub paels_tooth_batch: Vec<(usize, crate::cards::Card)>,
+
     /// Cards to append to [`Self::master_deck`] AFTER the current batch of
     /// interactive [`Self::pending_deck_removals`] fully drains (i.e. when
     /// the count next hits 0). Models C# events that do
@@ -2166,6 +2179,8 @@ impl Default for RunState {
             interactive_card_removal: false,
             pending_deck_removals: 0,
             pending_basic_removal_tag: None,
+            pending_paels_tooth_stash: false,
+            paels_tooth_batch: Vec::new(),
             pending_post_removal_cards: Vec::new(),
             pending_post_removal_hp_loss: 0,
             pending_post_removal_relic_cards: Vec::new(),
@@ -3308,6 +3323,7 @@ impl RunState {
         let rank = crate::lookup_card_rarity_rank();
         let mut order: Vec<usize> = (0..self.master_deck.len())
             .filter(|&i| removable.map_or(true, |f| f(&self.master_deck[i])))
+            .filter(|&i| !self.pending_paels_tooth_stash || self.master_deck[i].is_upgradable())
             .filter(|&i| {
                 self.pending_basic_removal_tag.map_or(true, |tag| {
                     let card = &self.master_deck[i];
