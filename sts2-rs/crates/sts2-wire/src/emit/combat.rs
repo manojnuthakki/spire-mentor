@@ -726,6 +726,13 @@ pub fn combat_state_to_value(state: &CombatState) -> Result<Value, EmitError> {
                     merged.push(*uid);
                 }
             }
+            // Application order, as the game's single list: power ids are
+            // allocated `max + 1` on every apply (`apply_power_to_creature`,
+            // the per-character `apply_power_to_player`), so ascending id is
+            // the order the powers were applied across both surfaces. Without
+            // this, a legacy-surface power applied BEFORE a Creature-surface one
+            // (a monster's Frail, then a card's Strength) is emitted after it.
+            merged.sort_by_key(|u| u.0);
             merged
         }
         None => state.player.powers.iter().copied().collect(),
@@ -1499,6 +1506,55 @@ mod tests {
         let v = combat_state_to_value(&state).expect("serializes");
         assert_eq!(v["player"]["max_energy"], 4);
         assert_eq!(v["player"]["energy_regen_per_turn"], 4);
+    }
+
+    /// The player's powers are split across the Creature and the legacy
+    /// `player.powers`; the wire carries ONE list in application order
+    /// (power ids ascend with application). Frail applied (legacy) before
+    /// Strength (Creature) must stay first.
+    #[test]
+    fn player_powers_are_emitted_in_application_order_across_both_surfaces() {
+        let mut state = CombatState::default();
+        state.player.current_hp = 80;
+        state.player.max_hp = 80;
+        let mk = |id: u32, kind, amount| sts2_core::Power {
+            id: NonZeroU32::new(id).expect("non-zero"),
+            kind,
+            amount,
+            counter: 0,
+            applier: None,
+            skip_next_tick: false,
+        };
+        state.powers.push(mk(1, sts2_core::PowerKind::Frail, 2));
+        state.powers.push(mk(2, sts2_core::PowerKind::Strength, 3));
+        state.powers.push(mk(3, sts2_core::PowerKind::Dexterity, 1));
+        let cid = NonZeroU32::new(1000).expect("non-zero");
+        let mut c = sts2_core::Creature {
+            id: cid,
+            current_hp: 80,
+            max_hp: 80,
+            block: 0,
+            powers: Default::default(),
+            species: None,
+            monster_id: sts2_core::MonsterId("Player"),
+            intent: None,
+            intent_history: Default::default(),
+            ai: None,
+        };
+        // Creature surface: Strength (2), Dexterity (3); legacy surface: Frail (1).
+        c.powers.push(sts2_core::PowerUid(NonZeroU32::new(2).unwrap()));
+        c.powers.push(sts2_core::PowerUid(NonZeroU32::new(3).unwrap()));
+        state.creatures.push(c);
+        state.player.creature_uid = Some(sts2_core::CreatureUid(cid));
+        state.player.powers.push(sts2_core::PowerUid(NonZeroU32::new(1).unwrap()));
+        let v = combat_state_to_value(&state).expect("serializes");
+        let names: Vec<&str> = v["player"]["powers"]
+            .as_array()
+            .expect("array")
+            .iter()
+            .map(|p| p["name"].as_str().expect("name"))
+            .collect();
+        assert_eq!(names, ["FRAIL", "STRENGTH", "DEXTERITY"]);
     }
 
     #[test]
